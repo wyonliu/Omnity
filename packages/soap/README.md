@@ -2,7 +2,8 @@
 
 **SOAP** = **S**patial **O**mnity **A**gentic **P**rotocol — **空间智能体时代的 HTTP**：开放规范 + 本仓参考实现 + **`soap-mcp`**，让任意 Agent 宿主用统一方式理解、查询与操作真实 3D 空间。
 
-**分阶段怎么推进**：见仓库 [`docs/soap/WORK_PLAN.md`](../../docs/soap/WORK_PLAN.md)。
+**为什么做 / 五层协议栈 / 国民级路径**：[`docs/soap/PROTOCOL_VISION_AND_EXECUTION.md`](../../docs/soap/PROTOCOL_VISION_AND_EXECUTION.md)。  
+**周粒度任务**：[`docs/soap/WORK_PLAN.md`](../../docs/soap/WORK_PLAN.md)。
 
 ## 内容规划
 

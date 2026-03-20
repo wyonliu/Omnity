@@ -4,6 +4,8 @@
 
 **原则**：规范与实现解耦；**先能互操作、再堆效果**；每个阶段都有可演示产物。
 
+**战略全景**（与 OpenClaw 关系、五层协议栈、KPI、风险）：见 **[`PROTOCOL_VISION_AND_EXECUTION.md`](./PROTOCOL_VISION_AND_EXECUTION.md)**。
+
 ---
 
 ## 北极星与成功判据
