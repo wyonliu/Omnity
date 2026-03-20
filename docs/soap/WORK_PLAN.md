@@ -67,6 +67,18 @@
 
 ---
 
+## 阶段 3b — soap-view（可视化调试入口，与阶段 6 轻量衔接）
+
+| # | 任务 | 产出 |
+|---|------|------|
+| 3b.1 | 本地 HTTP + `/api/scene` `/api/roles` | ✅ `soap-view`（`omnity_soap.viewer_server`） |
+| 3b.2 | 浏览器 UI：XZ 平面图 + vis-network 关系图 + 六角色高亮 | ✅ [`packages/soap/web/viewer/`](../../packages/soap/web/viewer/)（wheel 内 `viewer_static/`） |
+| 3b.3 | 灵感与合规说明 | ✅ [`VISUALIZER_INSPIRATION.md`](./VISUALIZER_INSPIRATION.md) + `web/viewer/THIRD_PARTY.md` |
+
+**验收**：不设 `SOAP_SCENE_PATH` 时默认加载活商场样例；浏览器可选角色并看到物体高亮与关系图；`pytest` 覆盖 `viewer_roles_payload` 与静态目录存在性。
+
+---
+
 ## 阶段 4 — soap-scan（可与阶段 2–3 部分并行）
 
 | # | 任务 | 产出 |
@@ -95,7 +107,7 @@
 
 | # | 任务 | 产出 |
 |---|------|------|
-| 6.1 | `soap-render` Web 最小 viewer | Three.js / R3F 加载 splat + 叠加 SOAP 物体 AABB 或标签 |
+| 6.1 | `soap-render` Web 最小 viewer | Three.js / R3F 加载 splat + 叠加 SOAP 物体 AABB 或标签（**先行**：`soap-view` 已提供 2D+图调试入口） |
 | 6.2 | `soap-edit` | NL → 参数化编辑（可先映射到预置操作表，不接大模型） |
 
 **验收**：浏览器内「看空间 + 看到 Agent 能理解的同一套物体 ID」。

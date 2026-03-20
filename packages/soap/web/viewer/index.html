@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SOAP-View — 场景可视化</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- vis-network: MIT / Apache-2.0 dual-licensed; 见 THIRD_PARTY.md -->
+  <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1 id="sceneTitle">SOAP-View</h1>
+      <p class="sub" id="sceneMeta"></p>
+    </div>
+    <div class="controls">
+      <label>角色视角 <select id="roleSelect"><option value="">（全部显示）</option></select></label>
+      <button type="button" id="btnReload">重新加载场景</button>
+    </div>
+  </header>
+
+  <main class="grid">
+    <section class="panel map-panel">
+      <h2>平面图 <span class="hint">XZ 平面 · 米 · Y 向上</span></h2>
+      <div class="svg-wrap" id="mapWrap"></div>
+      <p class="legend">
+        <span class="lg physical"></span> physical
+        <span class="lg virtual"></span> virtual
+        <span class="lg mixed"></span> mixed
+        <span class="lg region"></span> region（虚线框）
+      </p>
+    </section>
+
+    <section class="panel role-panel" id="rolePanel">
+      <h2>角色说明</h2>
+      <p id="roleDesc" class="muted">选择上方角色以高亮该视角可见物体。</p>
+      <ul id="roleActions"></ul>
+      <pre id="roleInsight" class="insight"></pre>
+    </section>
+
+    <section class="panel graph-panel">
+      <h2>关系图 <span class="hint">物体 + 区域 · 拖拽可调</span></h2>
+      <div id="graphMount"></div>
+    </section>
+
+    <section class="panel detail-panel">
+      <h2>选中实体</h2>
+      <pre id="detailJson">点击地图矩形、圆点或关系图节点。</pre>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <a href="/THIRD_PARTY.md" target="_blank" rel="noopener">第三方与灵感来源</a>
+    · API: <code>/api/scene</code> <code>/api/roles</code>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

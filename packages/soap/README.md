@@ -10,7 +10,7 @@
 
 - [`spec/SOAP-v0.1.md`](./spec/SOAP-v0.1.md) + [`spec/schemas/`](./spec/schemas/) + [`spec/CHANGELOG.md`](./spec/CHANGELOG.md)
 - [`examples/`](./examples/) — `minimal-scene.json`、`mall-mixed-reality.json`、`sample-action-observe.json`
-- Python 包 **`omnity-soap`**：`soap-validate` CLI、[`soap-mcp`](./soap-mcp/README.md)（需 Python **≥3.10**）、[`tests/`](./tests/)
+- Python 包 **`omnity-soap`**：`soap-validate`、`soap-explore`、**`soap-view`**（[`web/viewer/`](./web/viewer/)）、[`soap-mcp`](./soap-mcp/README.md)（需 Python **≥3.10**）、[`tests/`](./tests/)
 
 ### 本地开发
 
@@ -21,7 +21,11 @@ pip install -e ".[dev]"     # 校验与测试
 pip install -e ".[mcp]"     # 另需 Python 3.10+ 以安装官方 mcp 包
 pytest tests/ -q
 soap-validate examples/mall-mixed-reality.json
+SOAP_SCENE_PATH=examples/mall-mixed-reality.json soap-view
+# 浏览器打开 http://127.0.0.1:8765/
 ```
+
+**soap-view**：平面图（XZ）+ 关系图（vis-network CDN）+ 与 `soap-explore` 一致的六角色高亮。第三方与灵感来源见 [`web/viewer/THIRD_PARTY.md`](./web/viewer/THIRD_PARTY.md)；与斯坦福小镇类演示的**文档层面对比**见 [`docs/soap/VISUALIZER_INSPIRATION.md`](../../docs/soap/VISUALIZER_INSPIRATION.md)。
 
 ## 内容规划（后续）
 

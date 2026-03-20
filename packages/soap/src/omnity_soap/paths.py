@@ -21,4 +21,13 @@ def default_scene_path() -> Path:
     p = os.environ.get("SOAP_SCENE_PATH")
     if p:
         return Path(p).expanduser().resolve()
-    return package_root() / "examples" / "minimal-scene.json"
+    # 与 soap-explore 默认一致：活商场样例便于演示；单元测试仍显式指定路径。
+    return package_root() / "examples" / "mall-mixed-reality.json"
+
+
+def viewer_static_dir() -> Path:
+    """`soap-view` 静态资源：wheel 内 `viewer_static/`，开发时 `packages/soap/web/viewer/`。"""
+    bundled = Path(__file__).resolve().parent / "viewer_static"
+    if bundled.is_dir() and (bundled / "index.html").is_file():
+        return bundled
+    return package_root() / "web" / "viewer"

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "omnity-soap"
 version = "0.1.0"
-description = "SOAP — Spatial Omnity Agentic Protocol (spec validation + soap-mcp)"
+description = "SOAP — Spatial Omnity Agentic Protocol (spec validation + soap-mcp + soap-view)"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "Apache-2.0"
@@ -22,6 +22,7 @@ dev = ["pytest>=8.0"]
 [project.scripts]
 soap-validate = "omnity_soap.cli:main"
 soap-explore = "omnity_soap.explore:main"
+soap-view = "omnity_soap.viewer_server:main"
 soap-mcp = "omnity_soap.mcp_server:main"
 
 [tool.hatch.build.targets.wheel]
@@ -29,6 +30,7 @@ packages = ["src/omnity_soap"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "spec/schemas" = "omnity_soap/schemas"
+"web/viewer" = "omnity_soap/viewer_static"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

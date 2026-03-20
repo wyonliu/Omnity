@@ -231,6 +231,24 @@ ROLES: List[Dict[str, Any]] = [
 ]
 
 
+def viewer_roles_payload(scene: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """供 `soap-view` Web UI 使用的角色视角（可 JSON 序列化）。"""
+    out: List[Dict[str, Any]] = []
+    for r in ROLES:
+        visible = r["filter"](scene)
+        out.append(
+            {
+                "key": r["key"],
+                "name": r["name"],
+                "desc": r["desc"],
+                "actions": r["actions"],
+                "insight": r["insight"],
+                "visible_object_ids": [o["id"] for o in visible],
+            }
+        )
+    return out
+
+
 # ── REPL ───────────────────────────────────────────────────────
 
 C_RESET = "\033[0m"

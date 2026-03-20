@@ -1,0 +1,47 @@
+name: SOAP package CI
+
+on:
+  push:
+    paths:
+      - "packages/soap/**"
+      - ".github/workflows/soap-ci.yml"
+  pull_request:
+    paths:
+      - "packages/soap/**"
+      - ".github/workflows/soap-ci.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/soap
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package (dev)
+        run: pip install -e ".[dev]"
+
+      - name: Validate example scenes
+        run: soap-validate examples/minimal-scene.json && soap-validate examples/mall-mixed-reality.json
+
+      - name: Pytest
+        run: pytest -q
+
+      - name: Build wheel (check viewer_static bundled)
+        run: |
+          pip install build
+          python -m build
+          python - <<'PY'
+          import zipfile
+          from pathlib import Path
+          whl = next(Path("dist").glob("omnity_soap-*.whl"))
+          z = zipfile.ZipFile(whl)
+          ok = any(n.endswith("omnity_soap/viewer_static/index.html") for n in z.namelist())
+          assert ok, "viewer_static/index.html missing from wheel: " + repr(z.namelist()[:30])
+          PY
