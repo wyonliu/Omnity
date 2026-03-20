@@ -22,7 +22,7 @@
 
 - **仓库**：[`github.com/wyonliu/Omnity`](https://github.com/wyonliu/Omnity) · `git@github.com:wyonliu/Omnity.git`
 - **作战手册**（路线图与阶段验收）：[`ometown_execution.md`](./ometown_execution.md)
-- **SOAP 愿景 + 可执行路线**（国民级协议怎么赢）：[`docs/soap/PROTOCOL_VISION_AND_EXECUTION.md`](./docs/soap/PROTOCOL_VISION_AND_EXECUTION.md)
+- **SOAP 愿景与边界（最终版 v2.0）**：[`docs/soap/PROTOCOL_VISION_AND_EXECUTION.md`](./docs/soap/PROTOCOL_VISION_AND_EXECUTION.md) — 含「能否全行业一键协同」的深度论证与 **Conformance Tier**
 - **SOAP 周粒度 backlog**：[`docs/soap/WORK_PLAN.md`](./docs/soap/WORK_PLAN.md)
 - **社区**：[GitHub Discussions](https://github.com/wyonliu/Omnity/discussions)（RFC / Q&A / AMA）
 
