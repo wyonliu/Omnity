@@ -30,7 +30,12 @@ packages = ["src/omnity_soap"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "spec/schemas" = "omnity_soap/schemas"
-"web/viewer" = "omnity_soap/viewer_static"
+"web/viewer/dist" = "omnity_soap/viewer_static"
+
+# 保证从 sdist 构建 wheel 时仍能解析上述 force-include 源路径
+[tool.hatch.build.targets.sdist.force-include]
+"spec/schemas" = "spec/schemas"
+"web/viewer/dist" = "web/viewer/dist"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

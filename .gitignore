@@ -6,7 +6,7 @@ venv/
 .env
 .env.*
 *.egg-info/
-dist/
+/dist/
 build/
 .mypy_cache/
 .pytest_cache/

@@ -73,7 +73,7 @@
 |---|------|------|
 | 3b.1 | 本地 HTTP + `/api/scene` `/api/roles` | ✅ `soap-view`（`omnity_soap.viewer_server`） |
 | 3b.2 | 浏览器 UI：XZ 平面图 + vis-network 关系图 + 六角色高亮 | ✅ [`packages/soap/web/viewer/`](../../packages/soap/web/viewer/)（wheel 内 `viewer_static/`） |
-| 3b.3 | 灵感与合规说明 | ✅ [`VISUALIZER_INSPIRATION.md`](./VISUALIZER_INSPIRATION.md) + `web/viewer/THIRD_PARTY.md` |
+| 3b.3 | 灵感与合规说明 | ✅ [`VISUALIZER_INSPIRATION.md`](./VISUALIZER_INSPIRATION.md) + `web/viewer/public/THIRD_PARTY.md` |
 
 **验收**：不设 `SOAP_SCENE_PATH` 时默认加载活商场样例；浏览器可选角色并看到物体高亮与关系图；`pytest` 覆盖 `viewer_roles_payload` 与静态目录存在性。
 

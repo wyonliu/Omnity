@@ -20,6 +20,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: packages/soap/web/viewer/package-lock.json
+
+      - name: Build SOAP-View (Vite)
+        working-directory: packages/soap/web/viewer
+        run: npm ci && npm run build
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"

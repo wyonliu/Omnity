@@ -26,8 +26,8 @@ def default_scene_path() -> Path:
 
 
 def viewer_static_dir() -> Path:
-    """`soap-view` 静态资源：wheel 内 `viewer_static/`，开发时 `packages/soap/web/viewer/`。"""
+    """`soap-view` 静态资源：wheel 内 `viewer_static/`（Vite `dist/` 的拷贝），开发时优先用 `web/viewer/dist/`。"""
     bundled = Path(__file__).resolve().parent / "viewer_static"
     if bundled.is_dir() and (bundled / "index.html").is_file():
         return bundled
-    return package_root() / "web" / "viewer"
+    return package_root() / "web" / "viewer" / "dist"

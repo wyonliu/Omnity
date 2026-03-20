@@ -1,7 +1,11 @@
 /**
- * SOAP-View 前端：平面图（SVG）+ vis-network 关系图。
- * 不依赖构建工具；与 soap-explore 六角色高亮逻辑一致（数据来自 /api/roles）。
+ * SOAP-View — Vite 入口
+ * UI：Bootstrap 5（MIT）· 图：vis-network（MIT & Apache-2.0）
  */
+import "bootstrap/dist/css/bootstrap.min.css";
+import "vis-network/styles/vis-network.min.css";
+import { Network } from "vis-network";
+import "./style.css";
 
 const REALITY_COLORS = {
   physical: "#eab308",
@@ -170,8 +174,7 @@ function renderMap() {
   for (const it of items) {
     const o = it.o;
     const col = REALITY_COLORS[o.reality] || REALITY_COLORS.default;
-    const dim =
-      roleVisibleIds && !roleVisibleIds.has(o.id) ? " dim" : "";
+    const dim = roleVisibleIds && !roleVisibleIds.has(o.id) ? " dim" : "";
     const sel = selectedId === o.id ? " selected" : "";
 
     if (it.kind === "aabb") {
@@ -197,7 +200,7 @@ function renderMap() {
       circle.setAttribute("cy", cy);
       circle.setAttribute("r", 7);
       circle.setAttribute("fill", col);
-      circle.setAttribute("stroke", "#0c0f14");
+      circle.setAttribute("stroke", "#0d1117");
       circle.dataset.id = o.id;
       circle.addEventListener("click", () => selectObject(o.id));
       svg.appendChild(circle);
@@ -255,7 +258,7 @@ function buildGraphData() {
       label: o.id,
       group: o.reality || "default",
       color: col,
-      font: { color: "#e8edf5", size: 13 },
+      font: { color: "#e6edf3", size: 13 },
       title: `${o.type}\n${o.uri}`,
     });
   }
@@ -274,10 +277,7 @@ function buildGraphData() {
 function renderGraph() {
   const mount = document.getElementById("graphMount");
   mount.innerHTML = "";
-  if (!scene || typeof vis === "undefined") {
-    mount.textContent = "vis-network 未能加载（检查网络或 CDN）。";
-    return;
-  }
+  if (!scene) return;
   const { nodes, edges } = buildGraphData();
   const data = { nodes, edges };
   const options = {
@@ -287,9 +287,9 @@ function renderGraph() {
       stabilization: { iterations: 120 },
     },
     nodes: { shape: "box", margin: 10, borderWidth: 1 },
-    edges: { font: { size: 10, color: "#8b9cb3" }, smooth: { type: "cubicBezier" } },
+    edges: { font: { size: 10, color: "#8b949e" }, smooth: { type: "cubicBezier" } },
   };
-  network = new vis.Network(mount, data, options);
+  network = new Network(mount, data, options);
   network.on("click", (p) => {
     if (p.nodes.length) {
       const nid = p.nodes[0];
@@ -313,7 +313,7 @@ function fillRoleSelect() {
   for (const r of rolesPayload) {
     const opt = document.createElement("option");
     opt.value = r.key;
-    opt.textContent = `${r.name}`;
+    opt.textContent = r.name;
     sel.appendChild(opt);
   }
 }
@@ -325,7 +325,7 @@ function applyRole(key) {
   ul.innerHTML = "";
   if (!key) {
     roleVisibleIds = null;
-    desc.textContent = "选择上方角色以高亮该视角可见物体。";
+    desc.textContent = "选择导航栏中的角色以高亮可见物体。";
     ins.textContent = "";
     renderMap();
     return;
@@ -344,10 +344,7 @@ function applyRole(key) {
 }
 
 async function loadAll() {
-  const [scRes, roRes] = await Promise.all([
-    fetch("/api/scene"),
-    fetch("/api/roles"),
-  ]);
+  const [scRes, roRes] = await Promise.all([fetch("/api/scene"), fetch("/api/roles")]);
   const sc = await scRes.json();
   const ro = await roRes.json();
   if (sc.error) throw new Error(sc.detail || sc.error);

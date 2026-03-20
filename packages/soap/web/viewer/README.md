@@ -1,27 +1,34 @@
-# SOAP-View（浏览器可视化）
+# SOAP-View 前端（Vite）
 
-由 `soap-view` 命令在本地启动 HTTP 服务后，在浏览器中查看 **SOAP 场景 JSON**：
+共识技术栈：**Vite** + **Bootstrap 5** + **vis-network**（均通过 npm 安装，许可证见 `public/THIRD_PARTY.md`）。
 
-- **平面图**：物体 AABB 在 **XZ 平面**上的投影；无几何的物体通过 `twin_anchor_uri` / `anchor_physical_uri` 锚定到已有 AABB 中心，其余排在右侧「扩展列」。
-- **关系图**：区域 `contains` 物体 + `relations` 边（依赖 [vis-network](https://github.com/visjs/vis-network) CDN）。
-- **角色视角**：与 `soap-explore` 相同的六种角色，用于高亮「该角色能看见的物体」。
+## 构建
 
-## 启动
+```bash
+cd packages/soap/web/viewer
+npm ci
+npm run build
+```
+
+产物在 **`dist/`**。Python 侧 `soap-view` 默认从 `web/viewer/dist/`（或已安装的 `omnity_soap/viewer_static/`）提供静态文件。
+
+## 开发联调（热更新）
+
+终端 1：
 
 ```bash
 cd packages/soap
-source .venv/bin/activate   # 或你的 venv
-pip install -e .
-export SOAP_SCENE_PATH=examples/mall-mixed-reality.json   # 可选；默认即此文件（在未设置 SOAP_SCENE_PATH 时 explore 已改为 mall）
-soap-view
-# 打开 http://127.0.0.1:8765/
+SOAP_SCENE_PATH=examples/mall-mixed-reality.json soap-view
 ```
 
-默认绑定 `127.0.0.1:8765`。更换端口：`soap-view --port 9000`。
+终端 2：
 
-## API
+```bash
+cd packages/soap/web/viewer
+npm ci
+npm run dev
+```
 
-- `GET /api/scene` → `{ "meta": { "scene_path": "..." }, "scene": { ... } }`
-- `GET /api/roles` → `{ "roles": [ ... ], "scene_path": "..." }`
+浏览器打开 Vite 提示的地址（默认 `http://127.0.0.1:5173`）；`/api/*` 由 Vite 代理到 `http://127.0.0.1:8765`（见 `vite.config.js`）。
 
-第三方说明见 [THIRD_PARTY.md](./THIRD_PARTY.md)。
+发版或跑 `pytest` 前请执行一次 **`npm run build`**，保证 `dist/` 与 lockfile 一致；CI 会强制执行。

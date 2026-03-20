@@ -1,0 +1,18 @@
+{
+  "name": "soap-view-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite"
+  },
+  "dependencies": {
+    "@popperjs/core": "^2.11.8",
+    "bootstrap": "^5.3.3",
+    "vis-data": "^7.1.9",
+    "vis-network": "^9.1.9"
+  },
+  "devDependencies": {
+    "vite": "^5.4.11"
+  }
+}

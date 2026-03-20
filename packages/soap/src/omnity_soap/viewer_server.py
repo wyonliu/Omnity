@@ -7,11 +7,11 @@ import mimetypes
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
 from omnity_soap.explore import load_scene, viewer_roles_payload
-from omnity_soap.paths import default_scene_path, viewer_static_dir
+from omnity_soap.paths import default_scene_path, viewer_static_dir, package_root
 
 
 def _scene_path() -> Path:
@@ -20,6 +20,23 @@ def _scene_path() -> Path:
 
 def _load_scene_dict(path: Path) -> Dict[str, Any]:
     return load_scene(path)
+
+
+def _safe_file_under_root(root: Path, rel: str) -> Optional[Path]:
+    """解析 root 下的相对路径；禁止越界与路径遍历。存在且为文件则返回。"""
+    if not rel or rel == "/":
+        rel = "index.html"
+    rel = rel.replace("\\", "/").lstrip("/")
+    for part in rel.split("/"):
+        if part == "..":
+            return None
+    root = root.resolve()
+    candidate = (root / rel).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return None
+    return candidate if candidate.is_file() else None
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -39,17 +56,6 @@ class _Handler(BaseHTTPRequestHandler):
     def _send_json(self, obj: Any, code: int = 200) -> None:
         data = json.dumps(obj, ensure_ascii=False, indent=2).encode("utf-8")
         self._send(code, data, "application/json; charset=utf-8")
-
-    def _safe_static_path(self, name: str) -> Path | None:
-        if not name or "/" in name or "\\" in name or name.startswith("."):
-            return None
-        root = viewer_static_dir()
-        p = (root / name).resolve()
-        try:
-            p.relative_to(root.resolve())
-        except ValueError:
-            return None
-        return p if p.is_file() else None
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
@@ -81,21 +87,14 @@ class _Handler(BaseHTTPRequestHandler):
             self._send_json({"roles": viewer_roles_payload(scene), "scene_path": str(p)})
             return
 
-        if path in ("/", "/index.html"):
-            p = _safe_static_path("index.html")
-            if p is None:
-                self._send(404, b"missing index.html", "text/plain; charset=utf-8")
-                return
-            self._send(200, p.read_bytes(), "text/html; charset=utf-8")
-            return
-
-        name = path.lstrip("/")
-        p = _safe_static_path(name)
-        if p is None:
+        static_root = viewer_static_dir()
+        rel = "index.html" if path in ("/", "/index.html") else path.lstrip("/")
+        file_path = _safe_file_under_root(static_root, rel)
+        if file_path is None:
             self._send(404, b"not found", "text/plain; charset=utf-8")
             return
-        ctype, _ = mimetypes.guess_type(str(p))
-        self._send(200, p.read_bytes(), ctype or "application/octet-stream")
+        ctype, _ = mimetypes.guess_type(str(file_path))
+        self._send(200, file_path.read_bytes(), ctype or "application/octet-stream")
 
 
 def main() -> None:
@@ -110,7 +109,14 @@ def main() -> None:
         sys.exit(1)
     static = viewer_static_dir()
     if not (static / "index.html").is_file():
-        print(f"静态资源目录缺少 index.html: {static}", file=sys.stderr)
+        dist = package_root() / "web" / "viewer" / "dist"
+        print(
+            f"未找到前端构建产物: {static}/index.html\n"
+            f"请在仓库内执行:\n"
+            f"  cd {package_root() / 'web' / 'viewer'} && npm ci && npm run build\n"
+            f"（期望生成 {dist}/index.html）",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     httpd = ThreadingHTTPServer((args.host, args.port), _Handler)

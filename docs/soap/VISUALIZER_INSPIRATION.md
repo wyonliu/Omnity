@@ -21,7 +21,7 @@ SOAP-View（`soap-view`）是 **v0.1 的调试与演示界面**：把同一份 S
 | **Simular / Agent-S** | 计算机 GUI 自动化智能体 | 侧重桌面而非商场空间语义 |
 | **simulacra** 等复现 | Generative Agents 论文实现 | 可阅读其 MIT 代码与结构，**拷贝需带许可证** |
 
-当前 SOAP-View 的 **图布局库** 选用 **vis-network**（CDN，MIT / Apache-2.0 双许可），归属见 [`packages/soap/web/viewer/THIRD_PARTY.md`](../../packages/soap/web/viewer/THIRD_PARTY.md)。
+当前 SOAP-View 的 **UI** 选用 **Bootstrap 5**（MIT），**图布局** 选用 **vis-network**（npm，MIT / Apache-2.0 双许可），**构建** 为 **Vite**（MIT）；归属见 [`packages/soap/web/viewer/public/THIRD_PARTY.md`](../../packages/soap/web/viewer/public/THIRD_PARTY.md)。
 
 ## 推荐的引用方式（开源项目）
 

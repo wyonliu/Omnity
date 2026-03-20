@@ -19,13 +19,14 @@ cd packages/soap
 python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"     # 校验与测试
 pip install -e ".[mcp]"     # 另需 Python 3.10+ 以安装官方 mcp 包
+(cd web/viewer && npm ci && npm run build)   # soap-view 前端（首次或改 UI 后）
 pytest tests/ -q
 soap-validate examples/mall-mixed-reality.json
-SOAP_SCENE_PATH=examples/mall-mixed-reality.json soap-view
+soap-view
 # 浏览器打开 http://127.0.0.1:8765/
 ```
 
-**soap-view**：平面图（XZ）+ 关系图（vis-network CDN）+ 与 `soap-explore` 一致的六角色高亮。第三方与灵感来源见 [`web/viewer/THIRD_PARTY.md`](./web/viewer/THIRD_PARTY.md)；与斯坦福小镇类演示的**文档层面对比**见 [`docs/soap/VISUALIZER_INSPIRATION.md`](../../docs/soap/VISUALIZER_INSPIRATION.md)。
+**soap-view**：平面图（XZ）+ 关系图（**vis-network**，npm 打包）+ **Bootstrap 5** 布局；与 `soap-explore` 一致的六角色高亮。构建：`cd web/viewer && npm ci && npm run build`。第三方许可证见 [`web/viewer/public/THIRD_PARTY.md`](./web/viewer/public/THIRD_PARTY.md)；与斯坦福小镇类演示的**文档层面对比**见 [`docs/soap/VISUALIZER_INSPIRATION.md`](../../docs/soap/VISUALIZER_INSPIRATION.md)。
 
 ## 内容规划（后续）
 
