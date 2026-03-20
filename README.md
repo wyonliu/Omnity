@@ -1,11 +1,28 @@
 # Omnity
 
-**Omnity** = Omni + Unity — 万物智联。个人开源的 **空间智能体（Spatial AI Agent）** 栈：从开放协议与工具链，到多层脑 Agent OS、个体养成、多智能体社会与经济，再到 **OmeTown** 虚实共生体验。
+个人开源的 **空间智能体（Spatial AI Agent）** 栈：从开放协议与工具链，到多层脑 Agent OS、个体养成、多智能体社会与经济，再到 **OmeTown** 虚实共生体验。
 
 > 与雇主及任何公司业务 **无隶属关系**；本仓库代码与文档默认不包含特定企业场景或机密材料。
 
+## 为何是「Omnity」
+
+**Omni**（全域 / 万千）+ **-ity**：与英语里一批表示「状态、场域、共同体」的词同构——既是造词，也是对终局的注脚。
+
+- 人类：**human**ity  
+- 附近：**vicin**ity  
+- 无限：**infin**ity  
+- 社区：**commun**ity  
+- 机遇：**opportun**ity  
+
+同时也叠合 **City**（城市）、**Unity**（连接）、**Humanity**（人文）：**万千空间与智能体，在同一套可互操作叙事里连接成一体**——不是单一 App，而是一层让「空间 × Agent × 人」共存的 **Omnity**。
+
+文化脚注（个人向，与任何雇主无关）：**千空（Senku）** 隐喻「在物理世界的丛林里，用极客方式重建连接」；开源 Omnity 是把同一套理想，落在 **协议、代码与社区** 上。
+
+**一句话**：Omnity = **万物智联** 的工程与开源表达；最底层那块「让 Agent 能进真实 3D 世界」的砖，就是 **SOAP**（空间智能体时代的 HTTP）。
+
 - **仓库**：[`github.com/wyonliu/Omnity`](https://github.com/wyonliu/Omnity) · `git@github.com:wyonliu/Omnity.git`
 - **作战手册**（路线图与阶段验收）：[`ometown_execution.md`](./ometown_execution.md)
+- **SOAP 执行计划**（当前战役）：[`docs/soap/WORK_PLAN.md`](./docs/soap/WORK_PLAN.md)
 - **社区**：[GitHub Discussions](https://github.com/wyonliu/Omnity/discussions)（RFC / Q&A / AMA）
 
 ## Monorepo 布局
@@ -35,8 +52,8 @@
 
 ## English (short)
 
-Omnity is an open-source stack for **AI agents in real 3D space**: **SOAP** (spec + tools + `soap-mcp`), **Mindos** (layered brain OS), **Ome** (personal agent), **Maxim** (multi-agent society + economy), and **OmeTown** (integrated experience).  
-**License:** Apache-2.0. **Community:** GitHub Discussions.
+**Omnity** — *Omni* + *-ity*, echoing *humanity, vicinity, community, opportunity*: an open stack for **AI agents in real 3D space**. **SOAP** is the **HTTP for spatial agents** (spec + tools + `soap-mcp`); then **Mindos**, **Ome**, **Maxim**, **OmeTown**.  
+**License:** Apache-2.0. **Community:** GitHub Discussions. **SOAP plan:** [`docs/soap/WORK_PLAN.md`](./docs/soap/WORK_PLAN.md).
 
 ---
 

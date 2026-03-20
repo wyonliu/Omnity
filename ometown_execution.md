@@ -17,7 +17,7 @@
 
 ## Omnity 仓库策略：Monorepo + 五工作区
 
-统一品牌 **Omnity**（Omni + Unity = 万物智联），**主仓** [`wyonliu/Omnity`](https://github.com/wyonliu/Omnity)（monorepo / workspace / 分包发布，降低多仓治理成本）。
+统一品牌 **Omnity**：**Omni（万千）+ -ity** —— 与 *humanity / vicinity / community / opportunity* 同构，并叠合 *City / Unity / Humanity* 的意象（详见根目录 [`README.md`](./README.md)「为何是 Omnity」）。**主仓** [`wyonliu/Omnity`](https://github.com/wyonliu/Omnity)（monorepo / workspace / 分包发布）。
 
 | 工作区路径 | 职责 |
 |------------|------|
@@ -123,6 +123,8 @@ SOAP v0.1（目标：空间 AI 的事实标准）
 - 发布 `soap-mcp` 到 MCP 官方工具市场——目前空间类 MCP 接近零，蓝海
 - 写英文博客："SOAP: The HTTP for Spatial AI"
 - 在 Claude/ChatGPT 的 MCP 生态中成为空间类默认工具之一
+
+**分步执行清单（随战役更新）**：[`docs/soap/WORK_PLAN.md`](./docs/soap/WORK_PLAN.md)
 
 **语言**：Python（核心）+ TypeScript（渲染/MCP）
 **目标star**：2000+
