@@ -22,9 +22,9 @@
 
 | # | 任务 | 产出 |
 |---|------|------|
-| 0.1 | 撰写 `packages/soap/spec/SOAP-v0.1.md` | 正文：愿景、术语、坐标系、Object Schema、区域语义、Agent 行为接口、多 Agent 锁与广播 |
-| 0.2 | 建立 `packages/soap/spec/schemas/` | 至少：`scene.json` / `object-instance.json` / `spatial-region.json` / `agent-action.json`（可先最小必填字段） |
-| 0.3 | `packages/soap/spec/CHANGELOG.md` + 版本规则 | SemVer 规范版本；与 `SOAP-v0.1` 文档锚定 |
+| 0.1 | 撰写 `packages/soap/spec/SOAP-v0.1.md` | ✅ 首版已合入 |
+| 0.2 | 建立 `packages/soap/spec/schemas/` | ✅ `*.schema.json` 四件 + `$id` 交叉引用 |
+| 0.3 | `packages/soap/spec/CHANGELOG.md` + 版本规则 | ✅ 已建 |
 
 **验收**：另一开发者仅凭 spec 能手写一份「合法最小场景 JSON」。
 
@@ -34,9 +34,9 @@
 
 | # | 任务 | 产出 |
 |---|------|------|
-| 1.1 | `packages/soap/examples/minimal-scene.json` | 最小合法场景 |
-| 1.2 | `packages/soap/examples/room-with-furniture.json` | 带类型继承的略真实样例（床/椅/桌） |
-| 1.3 | 校验入口 | 小脚本或 `uv run`：`validate <file.json>` 对 Schema 校验（Python `jsonschema` 即可） |
+| 1.1 | `packages/soap/examples/minimal-scene.json` | ✅ |
+| 1.2 | `packages/soap/examples/mall-mixed-reality.json` | ✅（活商场切片；原「room-with-furniture」可后续补） |
+| 1.3 | 校验入口 | ✅ `soap-validate`（`pip install -e packages/soap`） |
 
 **验收**：CI 或本地一键校验 examples 全绿。
 
@@ -46,9 +46,9 @@
 
 | # | 任务 | 产出 |
 |---|------|------|
-| 2.1 | `packages/soap/src/soap_runtime/`（或同名模块） | 加载场景 JSON → 内存图：空间、物体、区域索引 |
-| 2.2 | 查询 API | `get_object(id)`、`list_objects(filter)`、`regions_at(point)` 等只读接口 |
-| 2.3 | 单元测试 | 覆盖样例与边界（缺字段、非法 id） |
+| 2.1 | `omnity_soap.runtime.SOAPRuntime` | ✅ 加载 + 校验 |
+| 2.2 | 查询 API | ✅ `get_object` / `list_objects` / `list_regions` / `summary` |
+| 2.3 | 单元测试 | ✅ `tests/test_validate.py` |
 
 **验收**：不启动 MCP，纯 Python 测试能跑通「加载 + 查询」。
 
@@ -58,10 +58,10 @@
 
 | # | 任务 | 产出 |
 |---|------|------|
-| 3.1 | MCP Server 骨架 | `packages/soap/soap-mcp/`：stdio 或 sse 任选其一先跑通 |
-| 3.2 | 首批 Tools | 建议：`soap_get_scene_summary`、`soap_list_objects`、`soap_get_object`、`soap_list_regions` |
-| 3.3 | 可选 Stub | `soap_simulate_action` 返回「若执行 move_to 是否合法」而不改场景（先 deterministic） |
-| 3.4 | 文档 | 根或 `soap-mcp/README.md`：Cursor / Claude Code 配置片段 + 示例对话 |
+| 3.1 | MCP Server | ✅ `omnity_soap.mcp_server` + `soap-mcp` 入口（stdio / FastMCP） |
+| 3.2 | 首批 Tools | ✅ summary / list_objects / get_object / list_regions |
+| 3.3 | Stub | ✅ `soap_simulate_navigate`（结构校验，无规划器） |
+| 3.4 | 文档 | ✅ [`packages/soap/soap-mcp/README.md`](../../packages/soap/soap-mcp/README.md) |
 
 **验收**：宿主内自然语言能问到「房间里有哪些家具、床在哪」等基于 JSON 场景的事实。
 

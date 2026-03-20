@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omnity.dev/soap/0.1/schemas/object-instance.schema.json",
+  "title": "SOAP ObjectInstance",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["id", "uri", "type", "reality"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "uri": { "type": "string", "pattern": "^soap://[^/]+/.+" },
+    "type": { "type": "string", "minLength": 1 },
+    "reality": { "type": "string", "enum": ["physical", "virtual", "mixed"] },
+    "affordances": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "bounds": {
+      "type": "object",
+      "required": ["type", "min", "max"],
+      "properties": {
+        "type": { "const": "aabb" },
+        "min": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": { "type": "number" }
+        },
+        "max": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": { "type": "number" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "state": { "type": "object", "additionalProperties": true },
+    "bindings": { "type": "object", "additionalProperties": true },
+    "meta": { "type": "object", "additionalProperties": true }
+  }
+}

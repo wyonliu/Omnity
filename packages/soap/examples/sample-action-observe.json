@@ -1,0 +1,9 @@
+{
+  "soap_version": "0.1.0",
+  "verb": "OBSERVE",
+  "target_uri": "soap://mall_01/store_102/entrance",
+  "agent_id": "ai_glasses_user_c",
+  "parameters": {
+    "modality": ["semantics", "signage"]
+  }
+}

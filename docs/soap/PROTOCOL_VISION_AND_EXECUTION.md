@@ -1,7 +1,8 @@
 # SOAP：空间智能体协议 — **最终版**（愿景、边界与可执行路线）
 
 **版本**：v2.0（最终版） · 随 `spec/` 语义版本迭代同步修订正文脚注  
-**执行 backlog**：[`WORK_PLAN.md`](./WORK_PLAN.md)
+**执行 backlog**：[`WORK_PLAN.md`](./WORK_PLAN.md)  
+**思想实验（成立判据）**：[`THOUGHT_EXPERIMENT_THE_LIVING_MALL.md`](./THOUGHT_EXPERIMENT_THE_LIVING_MALL.md)
 
 > **统一对外品牌**：**SOAP**（Spatial Omnity Agentic Protocol）。历史上的 SCP/SDTP/SATP 等讨论，在工程上收敛为下文 **L1–L5 分层**，不另立子品牌。
 

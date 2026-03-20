@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omnity.dev/soap/0.1/schemas/spatial-region.schema.json",
+  "title": "SOAP SpatialRegion",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["id", "uri", "name"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "uri": { "type": "string", "pattern": "^soap://[^/]+/.+" },
+    "name": { "type": "string", "minLength": 1 },
+    "purpose_tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "contained_object_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "parent_region_id": { "type": "string" },
+    "meta": { "type": "object", "additionalProperties": true }
+  }
+}

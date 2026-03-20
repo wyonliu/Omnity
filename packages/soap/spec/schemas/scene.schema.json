@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omnity.dev/soap/0.1/schemas/scene.schema.json",
+  "title": "SOAPScene",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["soap_version", "space_id", "coordinate_frame", "objects", "regions"],
+  "properties": {
+    "soap_version": { "type": "string", "pattern": "^0\\.1\\." },
+    "space_id": { "type": "string", "minLength": 1 },
+    "title": { "type": "string" },
+    "coordinate_frame": {
+      "type": "object",
+      "required": ["type", "up_axis", "unit", "origin_description"],
+      "properties": {
+        "type": { "type": "string" },
+        "up_axis": { "type": "string", "enum": ["X", "Y", "Z"] },
+        "unit": { "type": "string" },
+        "origin_description": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "objects": {
+      "type": "array",
+      "items": { "$ref": "https://omnity.dev/soap/0.1/schemas/object-instance.schema.json" }
+    },
+    "regions": {
+      "type": "array",
+      "items": { "$ref": "https://omnity.dev/soap/0.1/schemas/spatial-region.schema.json" }
+    },
+    "relations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["from_id", "to_id", "relation"],
+        "properties": {
+          "from_id": { "type": "string" },
+          "to_id": { "type": "string" },
+          "relation": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "profile": { "type": "string" },
+          "uri": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "meta": { "type": "object", "additionalProperties": true }
+  }
+}

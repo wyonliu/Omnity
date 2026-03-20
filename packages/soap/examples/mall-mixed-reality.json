@@ -1,0 +1,107 @@
+{
+  "soap_version": "0.1.0",
+  "space_id": "mall_01",
+  "title": "Living Mall — thought experiment slice",
+  "coordinate_frame": {
+    "type": "right-handed",
+    "up_axis": "Y",
+    "unit": "meter",
+    "origin_description": "Main entrance ground floor, atrium center = origin"
+  },
+  "objects": [
+    {
+      "id": "pillar_03",
+      "uri": "soap://mall_01/atrium/pillar_03",
+      "type": "structure.column",
+      "reality": "physical",
+      "affordances": ["anchor_ar", "circulation_obstacle"],
+      "bounds": {
+        "type": "aabb",
+        "min": [12.0, 0.0, 8.0],
+        "max": [12.4, 4.5, 8.4]
+      }
+    },
+    {
+      "id": "npc_merchant_lin",
+      "uri": "soap://mall_01/virtual/npc_merchant_lin",
+      "type": "npc.avatar",
+      "reality": "virtual",
+      "affordances": ["speak", "trade", "gesture"],
+      "bindings": {
+        "twin_anchor_uri": "soap://mall_01/store_102/entrance",
+        "world_model_entity": "wm://mall_twin/npcs/lin"
+      },
+      "state": {
+        "mood": "welcoming"
+      }
+    },
+    {
+      "id": "robot_unit_d",
+      "uri": "soap://mall_01/service_lane/robot_unit_d",
+      "type": "robot.unit.delivery",
+      "reality": "physical",
+      "affordances": ["navigate", "carry", "dock"],
+      "bindings": {
+        "fleet_id": "mall_fleet/d-07"
+      }
+    },
+    {
+      "id": "store_102_front",
+      "uri": "soap://mall_01/store_102/entrance",
+      "type": "retail.storefront",
+      "reality": "mixed",
+      "affordances": ["scan_qr", "enter_digital_twin"],
+      "bindings": {
+        "digital_twin_url": "https://example.invalid/twin/store_102"
+      }
+    }
+  ],
+  "regions": [
+    {
+      "id": "atrium",
+      "uri": "soap://mall_01/atrium",
+      "name": "Central atrium",
+      "purpose_tags": ["circulation", "event", "ar_overlay", "mr_game"],
+      "contained_object_ids": ["pillar_03", "npc_merchant_lin"]
+    },
+    {
+      "id": "store_102",
+      "uri": "soap://mall_01/store_102",
+      "name": "Store 102",
+      "purpose_tags": ["retail", "digital_twin_entry"],
+      "parent_region_id": "atrium",
+      "contained_object_ids": ["store_102_front"]
+    },
+    {
+      "id": "service_lane",
+      "uri": "soap://mall_01/service_lane",
+      "name": "Back-of-house service corridor",
+      "purpose_tags": ["robot_lane", "staff_only"],
+      "contained_object_ids": ["robot_unit_d"]
+    }
+  ],
+  "relations": [
+    {
+      "from_id": "npc_merchant_lin",
+      "to_id": "store_102_front",
+      "relation": "spawn_aligned_with"
+    },
+    {
+      "from_id": "pillar_03",
+      "to_id": "atrium",
+      "relation": "part_of"
+    }
+  ],
+  "assets": [
+    {
+      "id": "atrium_splat",
+      "profile": "gaussian_splat",
+      "uri": "file://datasets/mall_01/atrium/point_cloud.splat"
+    }
+  ],
+  "meta": {
+    "thought_experiment": "THOUGHT_EXPERIMENT_THE_LIVING_MALL",
+    "conformance_tier_target": "T1",
+    "notes": "MR game layer + phone scan + AI glasses + embodied bot + 1:1 twin NPC share these URIs."
+  }
+}

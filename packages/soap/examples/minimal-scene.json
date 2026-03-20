@@ -1,0 +1,38 @@
+{
+  "soap_version": "0.1.0",
+  "space_id": "demo_room_01",
+  "title": "Minimal valid SOAP scene",
+  "coordinate_frame": {
+    "type": "right-handed",
+    "up_axis": "Y",
+    "unit": "meter",
+    "origin_description": "South-west floor corner, floor = Y=0"
+  },
+  "objects": [
+    {
+      "id": "table_main",
+      "uri": "soap://demo_room_01/living/table_main",
+      "type": "furniture.table.coffee",
+      "reality": "physical",
+      "affordances": ["place_object", "surface"],
+      "bounds": {
+        "type": "aabb",
+        "min": [1.0, 0.0, 2.0],
+        "max": [2.2, 0.45, 3.0]
+      }
+    }
+  ],
+  "regions": [
+    {
+      "id": "living",
+      "uri": "soap://demo_room_01/living",
+      "name": "Living area",
+      "purpose_tags": ["rest", "social"],
+      "contained_object_ids": ["table_main"]
+    }
+  ],
+  "relations": [],
+  "meta": {
+    "conformance_tier_target": "T1"
+  }
+}

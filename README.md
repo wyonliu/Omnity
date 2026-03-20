@@ -23,7 +23,9 @@
 - **仓库**：[`github.com/wyonliu/Omnity`](https://github.com/wyonliu/Omnity) · `git@github.com:wyonliu/Omnity.git`
 - **作战手册**（路线图与阶段验收）：[`ometown_execution.md`](./ometown_execution.md)
 - **SOAP 愿景与边界（最终版 v2.0）**：[`docs/soap/PROTOCOL_VISION_AND_EXECUTION.md`](./docs/soap/PROTOCOL_VISION_AND_EXECUTION.md) — 含「能否全行业一键协同」的深度论证与 **Conformance Tier**
+- **活商场思想实验**：[`docs/soap/THOUGHT_EXPERIMENT_THE_LIVING_MALL.md`](./docs/soap/THOUGHT_EXPERIMENT_THE_LIVING_MALL.md)
 - **SOAP 周粒度 backlog**：[`docs/soap/WORK_PLAN.md`](./docs/soap/WORK_PLAN.md)
+- **SOAP v0.1 规范与代码**：[`packages/soap/`](./packages/soap/) · `soap-validate` · `soap-mcp`
 - **社区**：[GitHub Discussions](https://github.com/wyonliu/Omnity/discussions)（RFC / Q&A / AMA）
 
 ## Monorepo 布局

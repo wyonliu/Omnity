@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omnity.dev/soap/0.1/schemas/agent-action.schema.json",
+  "title": "SOAP AgentAction",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["soap_version", "verb", "target_uri", "agent_id"],
+  "properties": {
+    "soap_version": { "type": "string", "pattern": "^0\\.1\\." },
+    "verb": {
+      "type": "string",
+      "enum": ["OBSERVE", "NAVIGATE", "MANIPULATE", "REARRANGE"]
+    },
+    "target_uri": { "type": "string", "pattern": "^soap://[^/]+/.+" },
+    "agent_id": { "type": "string", "minLength": 1 },
+    "parameters": { "type": "object", "additionalProperties": true },
+    "meta": { "type": "object", "additionalProperties": true }
+  }
+}
