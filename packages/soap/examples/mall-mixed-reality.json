@@ -1,12 +1,12 @@
 {
   "soap_version": "0.1.0",
   "space_id": "mall_01",
-  "title": "Living Mall — thought experiment slice",
+  "title": "Living Mall — 六角色思想实验完整场景",
   "coordinate_frame": {
     "type": "right-handed",
     "up_axis": "Y",
     "unit": "meter",
-    "origin_description": "Main entrance ground floor, atrium center = origin"
+    "origin_description": "正门地面层中庭中心 = 原点"
   },
   "objects": [
     {
@@ -15,93 +15,224 @@
       "type": "structure.column",
       "reality": "physical",
       "affordances": ["anchor_ar", "circulation_obstacle"],
-      "bounds": {
-        "type": "aabb",
-        "min": [12.0, 0.0, 8.0],
-        "max": [12.4, 4.5, 8.4]
-      }
+      "bounds": { "type": "aabb", "min": [12.0, 0.0, 8.0], "max": [12.4, 4.5, 8.4] }
     },
     {
-      "id": "npc_merchant_lin",
-      "uri": "soap://mall_01/virtual/npc_merchant_lin",
-      "type": "npc.avatar",
-      "reality": "virtual",
-      "affordances": ["speak", "trade", "gesture"],
-      "bindings": {
-        "twin_anchor_uri": "soap://mall_01/store_102/entrance",
-        "world_model_entity": "wm://mall_twin/npcs/lin"
-      },
-      "state": {
-        "mood": "welcoming"
-      }
-    },
-    {
-      "id": "robot_unit_d",
-      "uri": "soap://mall_01/service_lane/robot_unit_d",
-      "type": "robot.unit.delivery",
+      "id": "pillar_07",
+      "uri": "soap://mall_01/atrium/pillar_07",
+      "type": "structure.column",
       "reality": "physical",
-      "affordances": ["navigate", "carry", "dock"],
+      "affordances": ["anchor_ar", "circulation_obstacle"],
+      "bounds": { "type": "aabb", "min": [20.0, 0.0, 8.0], "max": [20.4, 4.5, 8.4] }
+    },
+    {
+      "id": "fountain_center",
+      "uri": "soap://mall_01/atrium/fountain_center",
+      "type": "decor.fountain",
+      "reality": "physical",
+      "affordances": ["visual_landmark", "circulation_obstacle"],
+      "bounds": { "type": "aabb", "min": [-1.5, 0.0, -1.5], "max": [1.5, 2.0, 1.5] }
+    },
+    {
+      "id": "game_portal_alpha",
+      "uri": "soap://mall_01/atrium/game_portal_alpha",
+      "type": "mr_game.portal",
+      "reality": "virtual",
+      "affordances": ["enter_game", "display_ar"],
       "bindings": {
-        "fleet_id": "mall_fleet/d-07"
-      }
+        "game_id": "parallel_worlds_s3",
+        "anchor_physical_uri": "soap://mall_01/atrium/pillar_03"
+      },
+      "state": { "active": true, "quest": "collect_crystal_shard" }
+    },
+    {
+      "id": "game_monster_01",
+      "uri": "soap://mall_01/atrium/game_monster_01",
+      "type": "mr_game.creature",
+      "reality": "virtual",
+      "affordances": ["attack_target", "drop_loot", "display_ar"],
+      "bounds": { "type": "aabb", "min": [13.0, 0.0, 9.0], "max": [14.0, 1.8, 10.0] },
+      "bindings": {
+        "game_id": "parallel_worlds_s3",
+        "anchor_physical_uri": "soap://mall_01/atrium/pillar_03"
+      },
+      "state": { "hp": 120, "level": 5 }
     },
     {
       "id": "store_102_front",
       "uri": "soap://mall_01/store_102/entrance",
       "type": "retail.storefront",
       "reality": "mixed",
-      "affordances": ["scan_qr", "enter_digital_twin"],
+      "affordances": ["scan_qr", "enter_digital_twin", "view_promotions"],
+      "bindings": { "digital_twin_url": "https://example.invalid/twin/store_102" },
+      "state": { "open": true, "current_promo": "满300减50" }
+    },
+    {
+      "id": "store_102_shelf_a",
+      "uri": "soap://mall_01/store_102/shelf_a",
+      "type": "retail.shelf",
+      "reality": "physical",
+      "affordances": ["browse", "pick_item"],
+      "bounds": { "type": "aabb", "min": [25.0, 0.0, 5.0], "max": [27.0, 2.0, 5.5] }
+    },
+    {
+      "id": "store_102_ai_clerk",
+      "uri": "soap://mall_01/store_102/ai_clerk",
+      "type": "npc.store_clerk",
+      "reality": "virtual",
+      "affordances": ["speak", "recommend", "answer_question", "gesture"],
       "bindings": {
-        "digital_twin_url": "https://example.invalid/twin/store_102"
-      }
+        "twin_anchor_uri": "soap://mall_01/store_102/entrance",
+        "persona_model": "clerk_persona_v2"
+      },
+      "state": { "mood": "helpful", "language": ["zh", "en"] }
+    },
+    {
+      "id": "npc_merchant_lin",
+      "uri": "soap://mall_01/virtual/npc_merchant_lin",
+      "type": "npc.avatar",
+      "reality": "virtual",
+      "affordances": ["speak", "trade", "gesture", "walk"],
+      "bindings": {
+        "twin_anchor_uri": "soap://mall_01/store_102/entrance",
+        "world_model_entity": "wm://mall_twin/npcs/lin"
+      },
+      "state": { "mood": "welcoming", "current_task": "greeting_visitors" }
+    },
+    {
+      "id": "npc_barista_chen",
+      "uri": "soap://mall_01/virtual/npc_barista_chen",
+      "type": "npc.avatar",
+      "reality": "virtual",
+      "affordances": ["speak", "make_coffee", "gesture", "walk"],
+      "bindings": {
+        "twin_anchor_uri": "soap://mall_01/cafe_201/counter",
+        "world_model_entity": "wm://mall_twin/npcs/chen"
+      },
+      "state": { "mood": "busy", "current_task": "serving_latte" }
+    },
+    {
+      "id": "robot_unit_d",
+      "uri": "soap://mall_01/service_lane/robot_unit_d",
+      "type": "robot.unit.delivery",
+      "reality": "physical",
+      "affordances": ["navigate", "carry", "dock", "avoid_obstacle"],
+      "bindings": { "fleet_id": "mall_fleet/d-07", "control_api": "robot://fleet/d-07/cmd" },
+      "state": { "battery": 78, "payload": "package_1042", "status": "delivering" }
+    },
+    {
+      "id": "robot_cleaner_e",
+      "uri": "soap://mall_01/atrium/robot_cleaner_e",
+      "type": "robot.unit.cleaning",
+      "reality": "physical",
+      "affordances": ["navigate", "clean_floor", "dock", "avoid_obstacle"],
+      "bindings": { "fleet_id": "mall_fleet/e-03" },
+      "state": { "battery": 52, "status": "cleaning", "zone": "atrium" }
+    },
+    {
+      "id": "nav_sign_f1_01",
+      "uri": "soap://mall_01/atrium/nav_sign_f1_01",
+      "type": "facility.navigation_sign",
+      "reality": "physical",
+      "affordances": ["read_text", "visual_landmark"],
+      "state": { "content": "← 洗手间 | 扶梯↑ | 出口→" }
+    },
+    {
+      "id": "escalator_f1_up",
+      "uri": "soap://mall_01/atrium/escalator_f1_up",
+      "type": "facility.escalator",
+      "reality": "physical",
+      "affordances": ["navigate_through", "floor_transition"],
+      "state": { "direction": "up", "operational": true }
+    },
+    {
+      "id": "cafe_201_counter",
+      "uri": "soap://mall_01/cafe_201/counter",
+      "type": "retail.counter",
+      "reality": "physical",
+      "affordances": ["order", "pay", "pickup"],
+      "bounds": { "type": "aabb", "min": [30.0, 0.0, 12.0], "max": [33.0, 1.1, 13.0] }
+    },
+    {
+      "id": "bench_atrium_07",
+      "uri": "soap://mall_01/atrium/bench_07",
+      "type": "furniture.bench",
+      "reality": "physical",
+      "affordances": ["sit", "rest"],
+      "bounds": { "type": "aabb", "min": [15.0, 0.0, 3.0], "max": [17.0, 0.5, 3.6] }
+    },
+    {
+      "id": "smart_screen_01",
+      "uri": "soap://mall_01/atrium/smart_screen_01",
+      "type": "iot.display_screen",
+      "reality": "physical",
+      "affordances": ["display_content", "interact_touch"],
+      "bindings": { "iot_device_id": "screen://mall_01/atrium/led_01" },
+      "state": { "showing": "welcome_ad", "brightness": 80 }
     }
   ],
   "regions": [
     {
       "id": "atrium",
       "uri": "soap://mall_01/atrium",
-      "name": "Central atrium",
-      "purpose_tags": ["circulation", "event", "ar_overlay", "mr_game"],
-      "contained_object_ids": ["pillar_03", "npc_merchant_lin"]
+      "name": "中庭",
+      "purpose_tags": ["circulation", "event", "ar_overlay", "mr_game", "robot_allowed"],
+      "contained_object_ids": [
+        "pillar_03", "pillar_07", "fountain_center",
+        "game_portal_alpha", "game_monster_01",
+        "npc_merchant_lin", "robot_cleaner_e",
+        "nav_sign_f1_01", "escalator_f1_up",
+        "bench_atrium_07", "smart_screen_01"
+      ]
     },
     {
       "id": "store_102",
       "uri": "soap://mall_01/store_102",
-      "name": "Store 102",
+      "name": "102号店铺",
       "purpose_tags": ["retail", "digital_twin_entry"],
       "parent_region_id": "atrium",
-      "contained_object_ids": ["store_102_front"]
+      "contained_object_ids": ["store_102_front", "store_102_shelf_a", "store_102_ai_clerk"]
+    },
+    {
+      "id": "cafe_201",
+      "uri": "soap://mall_01/cafe_201",
+      "name": "二楼咖啡店",
+      "purpose_tags": ["food_beverage", "social", "digital_twin_entry"],
+      "contained_object_ids": ["cafe_201_counter", "npc_barista_chen"]
     },
     {
       "id": "service_lane",
       "uri": "soap://mall_01/service_lane",
-      "name": "Back-of-house service corridor",
+      "name": "后场服务通道",
       "purpose_tags": ["robot_lane", "staff_only"],
       "contained_object_ids": ["robot_unit_d"]
+    },
+    {
+      "id": "virtual_twin",
+      "uri": "soap://mall_01/virtual",
+      "name": "线上1:1虚拟商场",
+      "purpose_tags": ["virtual_world", "npc_habitat", "online_accessible"],
+      "contained_object_ids": ["npc_merchant_lin", "npc_barista_chen"]
     }
   ],
   "relations": [
-    {
-      "from_id": "npc_merchant_lin",
-      "to_id": "store_102_front",
-      "relation": "spawn_aligned_with"
-    },
-    {
-      "from_id": "pillar_03",
-      "to_id": "atrium",
-      "relation": "part_of"
-    }
+    { "from_id": "npc_merchant_lin", "to_id": "store_102_front", "relation": "spawn_aligned_with" },
+    { "from_id": "npc_barista_chen", "to_id": "cafe_201_counter", "relation": "spawn_aligned_with" },
+    { "from_id": "store_102_ai_clerk", "to_id": "store_102_front", "relation": "stationed_at" },
+    { "from_id": "game_portal_alpha", "to_id": "pillar_03", "relation": "anchored_to" },
+    { "from_id": "game_monster_01", "to_id": "pillar_03", "relation": "near" },
+    { "from_id": "robot_unit_d", "to_id": "service_lane", "relation": "assigned_to" },
+    { "from_id": "robot_cleaner_e", "to_id": "atrium", "relation": "assigned_to" },
+    { "from_id": "escalator_f1_up", "to_id": "cafe_201", "relation": "connects_to" },
+    { "from_id": "pillar_03", "to_id": "atrium", "relation": "part_of" },
+    { "from_id": "smart_screen_01", "to_id": "atrium", "relation": "part_of" }
   ],
   "assets": [
-    {
-      "id": "atrium_splat",
-      "profile": "gaussian_splat",
-      "uri": "file://datasets/mall_01/atrium/point_cloud.splat"
-    }
+    { "id": "atrium_splat", "profile": "gaussian_splat", "uri": "file://datasets/mall_01/atrium/point_cloud.splat" },
+    { "id": "store_102_splat", "profile": "gaussian_splat", "uri": "file://datasets/mall_01/store_102/point_cloud.splat" }
   ],
   "meta": {
     "thought_experiment": "THOUGHT_EXPERIMENT_THE_LIVING_MALL",
-    "conformance_tier_target": "T1",
-    "notes": "MR game layer + phone scan + AI glasses + embodied bot + 1:1 twin NPC share these URIs."
+    "conformance_tier_target": "T1"
   }
 }

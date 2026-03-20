@@ -21,6 +21,7 @@ dev = ["pytest>=8.0"]
 
 [project.scripts]
 soap-validate = "omnity_soap.cli:main"
+soap-explore = "omnity_soap.explore:main"
 soap-mcp = "omnity_soap.mcp_server:main"
 
 [tool.hatch.build.targets.wheel]
