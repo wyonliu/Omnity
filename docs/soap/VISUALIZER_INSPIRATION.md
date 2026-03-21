@@ -21,7 +21,7 @@ SOAP-View（`soap-view`）是 **v0.1 的调试与演示界面**：把同一份 S
 | **Simular / Agent-S** | 计算机 GUI 自动化智能体 | 侧重桌面而非商场空间语义 |
 | **simulacra** 等复现 | Generative Agents 论文实现 | 可阅读其 MIT 代码与结构，**拷贝需带许可证** |
 
-当前 SOAP-View 的 **壳层布局** 选用 **Bootstrap 5**（MIT），**像素俯视地图** 选用 **Phaser 3**（MIT，`pixelArt: true`，键盘漫游 — 与 [GenerativeAgentsCN](https://github.com/x-glacier/GenerativeAgentsCN) 回放范式同构，**不复制**其素材），**关系图** 为 **vis-network**（MIT / Apache-2.0），**构建** 为 **Vite**（MIT）；归属见 [`packages/soap/web/viewer/public/THIRD_PARTY.md`](../../packages/soap/web/viewer/public/THIRD_PARTY.md)。
+当前 SOAP-View 的 **壳层** 与 [GenerativeAgentsCN](https://github.com/x-glacier/GenerativeAgentsCN) 回放页 **同源**：**Bootstrap 3.4 + jQuery（CDN）**、白底、`#game-container`、**随仓分发的 `style.css`**（上游 Apache-2.0，见 `public/vendor/generative-agents-cn/`）。**Phaser 3**（MIT）画俯视地图；**vis-network** 画关系图；**Vite**（MIT）打包。归属见 [`packages/soap/web/viewer/public/THIRD_PARTY.md`](../../packages/soap/web/viewer/public/THIRD_PARTY.md)。
 
 **第三方 Agent / MR 共见** 的路线与边界见 [`THIRD_PARTY_AGENTS_AND_MR.md`](./THIRD_PARTY_AGENTS_AND_MR.md)。
 

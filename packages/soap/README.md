@@ -19,14 +19,14 @@ cd packages/soap
 python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"     # 校验与测试
 pip install -e ".[mcp]"     # 另需 Python 3.10+ 以安装官方 mcp 包
-(cd web/viewer && npm ci && npm run build)   # soap-view 前端（首次或改 UI 后）
+(cd web/viewer && npm ci && npm run build)   # soap-view（壳层对齐 GenerativeAgentsCN + Phaser + vis-network）
 pytest tests/ -q
 soap-validate examples/mall-mixed-reality.json
 soap-view
 # 浏览器打开 http://127.0.0.1:8765/
 ```
 
-**soap-view**：**Phaser 3** 像素风 XZ 地图（`pixelArt`、↑↓←→ / WASD 漫游）+ **vis-network** 关系图 + **Bootstrap 5** 栅格与复古壳层；与 `soap-explore` 六角色高亮一致。范式上对齐 [GenerativeAgentsCN](https://github.com/x-glacier/GenerativeAgentsCN) 式回放，**不复制**对方 tilemap/精灵。构建：`cd web/viewer && npm ci && npm run build`。许可证见 [`web/viewer/public/THIRD_PARTY.md`](./web/viewer/public/THIRD_PARTY.md)；灵感与边界见 [`docs/soap/VISUALIZER_INSPIRATION.md`](../../docs/soap/VISUALIZER_INSPIRATION.md)；**第三方 Agent / MR** 见 [`docs/soap/THIRD_PARTY_AGENTS_AND_MR.md`](../../docs/soap/THIRD_PARTY_AGENTS_AND_MR.md)。
+**soap-view**：**UI 与 [GenerativeAgentsCN](https://github.com/x-glacier/GenerativeAgentsCN) 回放页同源**（Bootstrap **3.4** + jQuery CDN、白底、`#game-container`、[`vendor/generative-agents-cn/style.css`](./web/viewer/public/vendor/generative-agents-cn/style.css) Apache-2.0）+ **Phaser 3** 像素 XZ 图 + **vis-network**；与 `soap-explore` 六角色高亮一致。**未**打包对方 village 素材。构建：`cd web/viewer && npm ci && npm run build`。见 [`web/viewer/public/THIRD_PARTY.md`](./web/viewer/public/THIRD_PARTY.md)、[`docs/soap/VISUALIZER_INSPIRATION.md`](../../docs/soap/VISUALIZER_INSPIRATION.md)、[`docs/soap/THIRD_PARTY_AGENTS_AND_MR.md`](../../docs/soap/THIRD_PARTY_AGENTS_AND_MR.md)。
 
 ## 内容规划（后续）
 

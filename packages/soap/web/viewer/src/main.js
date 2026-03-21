@@ -1,8 +1,8 @@
 /**
  * SOAP-View — Vite 入口
- * UI：Bootstrap 5 · 像素地图：Phaser 3 · 关系图：vis-network
+ * UI 壳层：GenerativeAgentsCN 同源 Bootstrap 3 + jQuery + game-container（Apache-2.0 见 public/vendor/generative-agents-cn/）
+ * 地图：Phaser 3 · 关系图：vis-network
  */
-import "bootstrap/dist/css/bootstrap.min.css";
 import "vis-network/styles/vis-network.min.css";
 import { Network } from "vis-network";
 import { computeMapPayload, REALITY_COLORS } from "./soap-layout.js";
@@ -18,12 +18,11 @@ let network = null;
 let pixelApi = null;
 
 function ensurePixelMount() {
-  const wrap = document.getElementById("mapWrap");
-  if (!document.getElementById("phaserMount")) {
-    wrap.innerHTML = `
-      <div id="phaserMount" class="soap-phaser-root"></div>
-      <p class="soap-pixel-hint">↑↓←→ 或 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 漫游 · 点击色块查看 JSON</p>`;
-    pixelApi = mountPixelMall("phaserMount", {
+  const el = document.getElementById("game-container");
+  if (!el) return;
+  if (!pixelApi) {
+    el.innerHTML = "";
+    pixelApi = mountPixelMall("game-container", {
       onSelect: (id) => selectObject(id),
     });
   }
@@ -33,10 +32,61 @@ function renderMap() {
   if (!scene || !scene.objects) return;
   ensurePixelMount();
   const base = computeMapPayload(scene);
-  pixelApi.refresh({
+  pixelApi?.refresh({
     ...base,
     roleVisibleIds,
     selectedId,
+  });
+}
+
+function escapeHtml(s) {
+  const d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+/** 条带高亮颜色与 GenerativeAgentsCN 回放选中一致 */
+const STRIP_HIGHLIGHT = "#ABFF84";
+
+function renderEntityStrip() {
+  const inner = document.getElementById("entityStripInner");
+  if (!inner || !scene?.objects) return;
+  inner.innerHTML = "";
+  for (const o of scene.objects) {
+    const col = REALITY_COLORS[o.reality] || REALITY_COLORS.default;
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "text-align: center; margin: 0.5em;";
+    const a = document.createElement("a");
+    a.href = "javascript:void(0);";
+    a.dataset.objId = o.id;
+    a.innerHTML = `<div class="entity-thumb-wrap" style="padding:0;border-radius:10px;display:inline-block;">
+        <div class="entity-thumb" data-bg="${col}" style="width:32px;height:32px;margin:0 auto;background:${col};border-radius:4px;border:1px solid #333;"></div>
+        <br><span class="entity-id" style="font-size:12px">${escapeHtml(o.id)}</span>
+      </div>`;
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      selectObject(o.id);
+    });
+    wrap.appendChild(a);
+    inner.appendChild(wrap);
+  }
+  updateStripHighlight(selectedId);
+}
+
+function updateStripHighlight(id) {
+  document.querySelectorAll("#entityStripInner a").forEach((a) => {
+    const thumb = a.querySelector(".entity-thumb");
+    const wrap = a.querySelector(".entity-thumb-wrap");
+    const oid = a.dataset.objId;
+    const bg = thumb?.getAttribute("data-bg") || "#ccc";
+    if (oid === id) {
+      wrap.style.backgroundColor = STRIP_HIGHLIGHT;
+      wrap.style.fontWeight = "900";
+    } else {
+      wrap.style.backgroundColor = "white";
+      wrap.style.fontWeight = "500";
+      thumb.style.background = bg;
+    }
   });
 }
 
@@ -50,8 +100,8 @@ function buildGraphData() {
       id: `region:${r.id}`,
       label: `📍 ${r.name || r.id}`,
       group: "region",
-      color: { background: "#6c3483", border: "#d7bde2" },
-      font: { color: "#f5eef8", size: 13 },
+      color: { background: "#e8daef", border: "#7d3c98" },
+      font: { color: "#1a1a1a", size: 13 },
       title: r.uri,
     });
     for (const oid of r.contained_object_ids || []) {
@@ -60,7 +110,7 @@ function buildGraphData() {
         from: `region:${r.id}`,
         to: `obj:${oid}`,
         label: "contains",
-        color: { color: "#a569bd", opacity: 0.65 },
+        color: { color: "#884ea0", opacity: 0.7 },
         dashes: true,
       });
     }
@@ -73,10 +123,10 @@ function buildGraphData() {
       group: o.reality || "default",
       color: {
         background: col,
-        border: "#2c1a4a",
-        highlight: { background: "#f39c12", border: "#fff" },
+        border: "#333",
+        highlight: { background: STRIP_HIGHLIGHT, border: "#000" },
       },
-      font: { color: "#1a0a1f", size: 12, face: "monospace" },
+      font: { color: "#111", size: 11, face: "monospace" },
       title: `${o.type}\n${o.uri}`,
     });
   }
@@ -86,7 +136,7 @@ function buildGraphData() {
       to: `obj:${rel.to_id}`,
       label: rel.relation,
       arrows: "to",
-      color: { color: "#5dade2" },
+      color: { color: "#2874a6" },
     });
   }
   return { nodes, edges };
@@ -101,17 +151,17 @@ function renderGraph() {
   const options = {
     physics: {
       enabled: true,
-      barnesHut: { gravitationalConstant: -2800, springLength: 130 },
+      barnesHut: { gravitationalConstant: -2600, springLength: 130 },
       stabilization: { iterations: 140 },
     },
     nodes: {
       shape: "box",
-      margin: 12,
+      margin: 10,
       borderWidth: 2,
-      shadow: true,
+      shadow: false,
     },
     edges: {
-      font: { size: 11, color: "#c39bd3", strokeWidth: 0 },
+      font: { size: 10, color: "#555", strokeWidth: 0 },
       smooth: { type: "cubicBezier" },
     },
     layout: { improvedLayout: true },
@@ -128,9 +178,13 @@ function renderGraph() {
 function selectObject(id) {
   selectedId = id;
   const o = (scene.objects || []).find((x) => x.id === id);
-  document.getElementById("detailJson").textContent = o
-    ? JSON.stringify(o, null, 2)
-    : id;
+  const init = document.getElementById("detailInit");
+  const panel = document.getElementById("detailPanel");
+  const pre = document.getElementById("detailJson");
+  if (init) init.style.display = "none";
+  if (panel) panel.style.display = "block";
+  if (pre) pre.textContent = o ? JSON.stringify(o, null, 2) : id;
+  updateStripHighlight(id);
   renderMap();
 }
 
@@ -152,7 +206,7 @@ function applyRole(key) {
   ul.innerHTML = "";
   if (!key) {
     roleVisibleIds = null;
-    desc.textContent = "选择角色以高亮其在 SOAP 中「可见」的实体。";
+    desc.textContent = "选择「角色视角」以高亮其在 SOAP 中可见的实体。";
     ins.textContent = "";
     renderMap();
     return;
@@ -171,6 +225,12 @@ function applyRole(key) {
 }
 
 async function loadAll() {
+  selectedId = null;
+  const init = document.getElementById("detailInit");
+  const panel = document.getElementById("detailPanel");
+  if (init) init.style.display = "block";
+  if (panel) panel.style.display = "none";
+
   const [scRes, roRes] = await Promise.all([fetch("/api/scene"), fetch("/api/roles")]);
   const sc = await scRes.json();
   const ro = await roRes.json();
@@ -179,9 +239,12 @@ async function loadAll() {
   scene = sc.scene;
   metaPath = (sc.meta && sc.meta.scene_path) || "";
   rolesPayload = ro.roles || [];
-  document.getElementById("sceneTitle").textContent = scene.title || "SOAP-View";
-  document.getElementById("sceneMeta").textContent = `${scene.space_id || ""} · ${metaPath}`;
+  const titleEl = document.getElementById("sceneTitle");
+  if (titleEl) titleEl.textContent = scene.title || "SOAP-View";
+  const metaEl = document.getElementById("sceneMeta");
+  if (metaEl) metaEl.textContent = `${scene.space_id || ""} · ${metaPath}`;
   fillRoleSelect();
+  renderEntityStrip();
   const rs = document.getElementById("roleSelect").value;
   if (rs) applyRole(rs);
   else {
@@ -197,10 +260,12 @@ document.getElementById("roleSelect").addEventListener("change", (e) => {
 
 document.getElementById("btnReload").addEventListener("click", () => {
   loadAll().catch((err) => {
-    document.getElementById("sceneMeta").textContent = `加载失败: ${err.message}`;
+    const m = document.getElementById("sceneMeta");
+    if (m) m.textContent = `加载失败: ${err.message}`;
   });
 });
 
 loadAll().catch((err) => {
-  document.getElementById("sceneMeta").textContent = `加载失败: ${err.message}`;
+  const m = document.getElementById("sceneMeta");
+  if (m) m.textContent = `加载失败: ${err.message}`;
 });

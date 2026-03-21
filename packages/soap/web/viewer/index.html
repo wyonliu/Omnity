@@ -1,108 +1,114 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-bs-theme="dark">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SOAP-View · Omnity</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- 与 GenerativeAgentsCN base.html 一致：Bootstrap 3.4 + theme（CDN） -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap"
       rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap@3.4.1/dist/css/bootstrap.min.css"
+      integrity="sha384-HSMxcRTRxnN+Bdg0JdbxYKrThecOKuH5zCYotlSAcp1+c8xmyTe9GYg1l9a69psu"
+      crossorigin="anonymous"
     />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap@3.4.1/dist/css/bootstrap-theme.min.css"
+      integrity="sha384-6pzBo3FDv/PJ8r2KRkGHifhEocL+1X2rVCTTkUfGk7/0pbek5mMa1upzvWbrUbOZ"
+      crossorigin="anonymous"
+    />
+    <link rel="stylesheet" href="/vendor/generative-agents-cn/style.css" />
   </head>
-  <body class="soap-body">
-    <header class="soap-hero border-bottom border-warning border-opacity-25">
-      <div class="container-fluid py-3 px-3 px-lg-4">
-        <div class="d-flex flex-wrap align-items-end justify-content-between gap-3">
-          <div>
-            <p class="soap-kicker mb-1">Omnity · SOAP</p>
-            <h1 class="soap-title mb-0" id="sceneTitle">SOAP-View</h1>
-            <p class="soap-tagline mb-0 mt-2">空间语义 · 像素读图 · 与 Generative Agents 式回放同构（Phaser / pixelArt）</p>
-          </div>
-          <div class="d-flex flex-wrap align-items-center gap-2 soap-toolbar">
-            <span class="soap-meta text-break" id="sceneMeta"></span>
-            <select class="form-select form-select-sm soap-select" id="roleSelect" aria-label="角色视角">
-              <option value="">◇ 全景（全部实体）</option>
-            </select>
-            <button type="button" class="btn btn-sm soap-btn-reload" id="btnReload">↻ 重载场景</button>
-          </div>
-        </div>
-      </div>
-    </header>
 
-    <main class="container-fluid py-4 soap-main">
-      <div class="row g-4">
-        <div class="col-xl-7">
-          <section class="soap-card h-100">
-            <div class="soap-card-head d-flex flex-wrap justify-content-between align-items-center gap-2">
-              <span class="soap-card-title">像素平面图</span>
-              <span class="soap-card-sub">XZ · 米 · Phaser 3</span>
-            </div>
-            <div class="soap-card-body p-0">
-              <div class="soap-map-wrap" id="mapWrap"></div>
-            </div>
-            <div class="soap-card-foot small">
-              <span class="soap-legend-dot physical"></span> physical
-              <span class="soap-legend-dot virtual"></span> virtual
-              <span class="soap-legend-dot mixed"></span> mixed
-              <span class="soap-legend-dash"></span> region
-            </div>
-          </section>
-        </div>
-        <div class="col-xl-5">
-          <section class="soap-card h-100">
-            <div class="soap-card-head">
-              <span class="soap-card-title">角色视角</span>
-              <span class="soap-card-sub">对齐 soap-explore</span>
-            </div>
-            <div class="soap-card-body">
-              <p id="roleDesc" class="soap-role-desc mb-2">选择角色以高亮可见实体。</p>
-              <ul id="roleActions" class="soap-action-list mb-0"></ul>
-              <pre id="roleInsight" class="soap-insight mt-3 mb-0"></pre>
-            </div>
-          </section>
-        </div>
-        <div class="col-12">
-          <section class="soap-card">
-            <div class="soap-card-head d-flex flex-wrap justify-content-between align-items-center gap-2">
-              <span class="soap-card-title">关系宇宙</span>
-              <span class="soap-card-sub"
-                ><a href="https://github.com/visjs/vis-network" target="_blank" rel="noopener">vis-network</a></span
-              >
-            </div>
-            <div class="soap-card-body p-0">
-              <div id="graphMount" class="soap-graph-mount"></div>
-            </div>
-          </section>
-        </div>
-        <div class="col-12">
-          <section class="soap-card">
-            <div class="soap-card-head">
-              <span class="soap-card-title">选中实体 JSON</span>
-            </div>
-            <div class="soap-card-body">
-              <pre id="detailJson" class="soap-detail mb-0">点击地图或图节点…</pre>
-            </div>
-          </section>
+  <body class="top-navigation" style="background-color: white">
+    <div class="container-fluid" style="padding: 1em 1.5em">
+      <div class="page-header" style="margin-top: 0">
+        <h2 id="sceneTitle">SOAP-View</h2>
+        <p class="text-muted" id="sceneMeta" style="margin-bottom: 0.5em"></p>
+        <div class="form-inline">
+          <label style="margin-right: 0.5em">角色视角</label>
+          <select id="roleSelect" class="form-control" style="min-width: 18em; margin-right: 1em">
+            <option value="">（全景 · 全部实体）</option>
+          </select>
+          <button type="button" id="btnReload" class="btn btn-primary">重新加载场景</button>
         </div>
       </div>
 
-      <footer class="text-center soap-footer mt-5 pb-4 small">
-        <a href="/THIRD_PARTY.md" target="_blank" rel="noopener">第三方与许可证</a>
-        ·
-        <a
-          href="https://github.com/x-glacier/GenerativeAgentsCN"
-          target="_blank"
-          rel="noopener"
-          >GenerativeAgentsCN</a
+      <!-- Phaser 父节点：与 GenerativeAgentsCN index.html 一致 -->
+      <div id="game-container" style="text-align: center; margin-bottom: 1em"></div>
+      <p class="text-center text-muted small" style="margin-bottom: 1em">
+        ↑↓←→ 或 WASD 平移镜头 · 点击画布中的色块或下方条带中的实体
+      </p>
+
+      <!-- 实体条带：对齐对方「头像 + 姓名」条，此处用色块代替 portrait.png -->
+      <div class="row">
+        <div
+          class="col-md-12"
+          style="border: solid; padding: 1em; padding-left: 2em; padding-right: 2em; border-radius: 5px"
         >
-        式像素漫游范式（素材均为自绘网格，非 fork）
-        · API <code>/api/scene</code> <code>/api/roles</code>
-        · <code>npm run dev</code> 联调
-      </footer>
-    </main>
+          <p class="small text-muted" style="margin-top: 0">场景实体（点击高亮，样式对齐 GenerativeAgentsCN 回放条）</p>
+          <div class="row" style="display: flex; flex-wrap: wrap; margin: -0.5em" id="entityStripInner"></div>
+        </div>
+      </div>
 
+      <div
+        class="media"
+        id="detailInit"
+        style="background-color: #eeeeee; padding: 1em; padding-left: 2em; padding-right: 2em; border-radius: 5px; margin-top: 1em"
+      >
+        <em>点击实体可查看 SOAP JSON 详情。</em>
+      </div>
+
+      <div
+        class="media"
+        id="detailPanel"
+        style="
+          background-color: #eeeeee;
+          padding: 0.5em 2em 1em;
+          border-radius: 5px;
+          margin-top: 1em;
+          display: none;
+        "
+      >
+        <div class="media-body" style="padding-top: 0.5em">
+          <pre
+            id="detailJson"
+            style="font-size: 12px; max-height: 22rem; overflow: auto; background: #fff; padding: 1em; border-radius: 4px"
+          ></pre>
+        </div>
+      </div>
+
+      <div class="panel panel-default" style="margin-top: 1.5em">
+        <div class="panel-heading"><strong>角色说明</strong>（与 soap-explore 一致）</div>
+        <div class="panel-body">
+          <p id="roleDesc" class="text-muted">选择上方「角色视角」以高亮可见实体。</p>
+          <ul id="roleActions"></ul>
+          <pre id="roleInsight" style="white-space: pre-wrap; background: #f9f9f9; padding: 0.75em; border-radius: 4px"></pre>
+        </div>
+      </div>
+
+      <div class="panel panel-default">
+        <div class="panel-heading"><strong>关系图</strong> · vis-network</div>
+        <div class="panel-body" style="padding: 0">
+          <div id="graphMount" class="soap-graph-mount"></div>
+        </div>
+      </div>
+
+      <hr />
+      <p class="text-center text-muted small">
+        <a href="/THIRD_PARTY.md" target="_blank" rel="noopener">第三方与许可证</a>
+        · UI 布局与 <code>style.css</code> 来自
+        <a href="https://github.com/x-glacier/GenerativeAgentsCN" target="_blank" rel="noopener">GenerativeAgentsCN</a>
+        （Apache-2.0） · API <code>/api/scene</code> <code>/api/roles</code>
+      </p>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" crossorigin="anonymous"></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@3.4.1/dist/js/bootstrap.min.js"
+      integrity="sha384-aJ21OjlMXNL5UyIl/XNwTMqvzeRMZH2w8c5cRVpzpU8Y5bApTppSuUkhZXN0VxHd"
+      crossorigin="anonymous"
+    ></script>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
