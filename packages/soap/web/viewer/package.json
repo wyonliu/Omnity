@@ -9,6 +9,7 @@
   "dependencies": {
     "@popperjs/core": "^2.11.8",
     "bootstrap": "^5.3.3",
+    "phaser": "^3.88.2",
     "vis-data": "^7.1.9",
     "vis-network": "^9.1.9"
   },

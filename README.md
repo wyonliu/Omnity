@@ -26,7 +26,8 @@
 - **活商场思想实验**：[`docs/soap/THOUGHT_EXPERIMENT_THE_LIVING_MALL.md`](./docs/soap/THOUGHT_EXPERIMENT_THE_LIVING_MALL.md)
 - **SOAP 周粒度 backlog**：[`docs/soap/WORK_PLAN.md`](./docs/soap/WORK_PLAN.md)
 - **SOAP v0.1 规范与代码**：[`packages/soap/`](./packages/soap/) · `soap-validate` · `soap-explore` · **`soap-view`**（浏览器可视化） · `soap-mcp`
-- **可视化灵感与合规引用**：[`docs/soap/VISUALIZER_INSPIRATION.md`](./docs/soap/VISUALIZER_INSPIRATION.md)
+- **可视化灵感与合规引用**：[`docs/soap/VISUALIZER_INSPIRATION.md`](./docs/soap/VISUALIZER_INSPIRATION.md)  
+- **第三方 Agent / OpenClaw / MR**：[`docs/soap/THIRD_PARTY_AGENTS_AND_MR.md`](./docs/soap/THIRD_PARTY_AGENTS_AND_MR.md)
 - **社区**：[GitHub Discussions](https://github.com/wyonliu/Omnity/discussions)（RFC / Q&A / AMA）
 
 ## Monorepo 布局

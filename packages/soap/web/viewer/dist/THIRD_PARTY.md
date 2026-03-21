@@ -11,12 +11,14 @@ Omnity 主仓库为 **Apache-2.0**。本前端通过 **npm** 声明依赖，由 
 | [@popperjs/core](https://github.com/popperjs/popper-core) | Bootstrap 工具提示等定位依赖 | **MIT** |
 | [vis-network](https://github.com/visjs/vis-network) | 关系图 | **MIT** 与 **Apache-2.0** 双许可 |
 | [vis-data](https://github.com/visjs/vis-data) | vis-network 数据结构 | **MIT** 与 **Apache-2.0** 双许可 |
+| [phaser](https://github.com/phaserjs/phaser) | 像素风 2D 地图（`pixelArt`、键盘漫游） | **MIT** |
 
 构建命令：`npm ci && npm run build`（在 `packages/soap/web/viewer/`）。
 
 ## 设计灵感（非代码拷贝）
 
-与 **Generative Agents / Smallville** 等「空间 + 多智能体」演示的**信息架构**类比见仓库内 **`docs/soap/VISUALIZER_INSPIRATION.md`**。**未嵌入** Phaser 等上游前端源码。
+- 俯视像素地图 + 键盘漫游的**交互范式**，与 Stanford **Generative Agents** 及社区复现 **[GenerativeAgentsCN](https://github.com/x-glacier/GenerativeAgentsCN)**（Apache-2.0）相近；本 viewer **程序生成**棋盘格与色块，**不使用**对方 tilemap / 精灵素材。  
+- 与 **Generative Agents / Smallville** 的**信息架构**类比另见仓库内 **`docs/soap/VISUALIZER_INSPIRATION.md`**。
 
 ## 引用其它开源项目时的注意点
 

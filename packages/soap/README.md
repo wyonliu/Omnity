@@ -26,7 +26,7 @@ soap-view
 # 浏览器打开 http://127.0.0.1:8765/
 ```
 
-**soap-view**：平面图（XZ）+ 关系图（**vis-network**，npm 打包）+ **Bootstrap 5** 布局；与 `soap-explore` 一致的六角色高亮。构建：`cd web/viewer && npm ci && npm run build`。第三方许可证见 [`web/viewer/public/THIRD_PARTY.md`](./web/viewer/public/THIRD_PARTY.md)；与斯坦福小镇类演示的**文档层面对比**见 [`docs/soap/VISUALIZER_INSPIRATION.md`](../../docs/soap/VISUALIZER_INSPIRATION.md)。
+**soap-view**：**Phaser 3** 像素风 XZ 地图（`pixelArt`、↑↓←→ / WASD 漫游）+ **vis-network** 关系图 + **Bootstrap 5** 栅格与复古壳层；与 `soap-explore` 六角色高亮一致。范式上对齐 [GenerativeAgentsCN](https://github.com/x-glacier/GenerativeAgentsCN) 式回放，**不复制**对方 tilemap/精灵。构建：`cd web/viewer && npm ci && npm run build`。许可证见 [`web/viewer/public/THIRD_PARTY.md`](./web/viewer/public/THIRD_PARTY.md)；灵感与边界见 [`docs/soap/VISUALIZER_INSPIRATION.md`](../../docs/soap/VISUALIZER_INSPIRATION.md)；**第三方 Agent / MR** 见 [`docs/soap/THIRD_PARTY_AGENTS_AND_MR.md`](../../docs/soap/THIRD_PARTY_AGENTS_AND_MR.md)。
 
 ## 内容规划（后续）
 
