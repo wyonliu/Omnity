@@ -119,13 +119,15 @@ def cmd_forget(args: argparse.Namespace) -> None:
 
 
 def cmd_memories(args: argparse.Namespace) -> None:
-    """Memory management: list, export, import, stats."""
+    """Memory management: list, export, import, stats, consolidate."""
     if args.export:
         _do_export(args)
     elif args.import_file:
         _do_import(args)
     elif args.stats:
         _do_stats(args)
+    elif args.consolidate:
+        _do_consolidate(args)
     else:
         _do_list(args)
 
@@ -233,6 +235,18 @@ def _do_stats(args: argparse.Namespace) -> None:
             print(f"    {src}: {cnt}")
 
 
+def _do_consolidate(args: argparse.Namespace) -> None:
+    client = _get_client(args.path)
+    if client:
+        result = client.consolidate()
+    else:
+        m = _get_mindos(args.path)
+        result = m.consolidate()
+
+    print(f"Consolidated: merged {result.get('merged', 0)} similar memories, "
+          f"kept {result.get('kept', 0)}, total after: {result.get('total_after', '?')}")
+
+
 def cmd_serve(args: argparse.Namespace) -> None:
     if args.mcp:
         from mindos.mcp_server import run_mcp_server
@@ -296,6 +310,7 @@ def main() -> None:
     p_mem.add_argument("--output", "-o", default="", help="Export output file")
     p_mem.add_argument("--import-file", default="", help="Import memories from JSON file")
     p_mem.add_argument("--stats", action="store_true", help="Show memory statistics")
+    p_mem.add_argument("--consolidate", action="store_true", help="Merge similar memories")
 
     # serve
     p_serve = sub.add_parser("serve", help="Start Mindos server", parents=[path_parent])

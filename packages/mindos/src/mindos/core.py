@@ -155,6 +155,10 @@ class Mindos:
         """L3: Deep reasoning with identity context."""
         return self.layers.reason(query)
 
+    def consolidate(self) -> dict[str, Any]:
+        """Merge similar memories to reduce redundancy."""
+        return self.store.consolidate()
+
     def status(self) -> dict[str, Any]:
         """Full status across all layers."""
         s = self.layers.status()

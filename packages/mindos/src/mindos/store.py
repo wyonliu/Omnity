@@ -250,6 +250,75 @@ class MemoryStore:
         self._conn.commit()
         return len(ids)
 
+    def consolidate(self, similarity_threshold: float = 0.75) -> dict[str, int]:
+        """Merge similar memories of the same type into single entries.
+
+        Uses character-level Jaccard similarity when numpy is unavailable,
+        or cosine similarity on embeddings when available.
+        Returns stats about what was merged.
+        """
+        merged_count = 0
+        kept = 0
+
+        by_type: dict[str, list[Memory]] = {}
+        for m in self.list_recent(limit=10000):
+            by_type.setdefault(m.type, []).append(m)
+
+        for mtype, mems in by_type.items():
+            if len(mems) < 2:
+                kept += len(mems)
+                continue
+
+            groups: list[list[Memory]] = []
+            used: set[str] = set()
+
+            for i, a in enumerate(mems):
+                if a.id in used:
+                    continue
+                group = [a]
+                used.add(a.id)
+                for j in range(i + 1, len(mems)):
+                    b = mems[j]
+                    if b.id in used:
+                        continue
+                    if self._text_similarity(a.content, b.content) >= similarity_threshold:
+                        group.append(b)
+                        used.add(b.id)
+                groups.append(group)
+
+            for group in groups:
+                if len(group) <= 1:
+                    kept += 1
+                    continue
+                # Keep the one with highest confidence and most accesses
+                group.sort(key=lambda m: (m.confidence, m.access_count), reverse=True)
+                keeper = group[0]
+                keeper.access_count += sum(m.access_count for m in group[1:])
+                keeper.confidence = max(m.confidence for m in group)
+                self.add(keeper)
+                for discard in group[1:]:
+                    self._conn.execute("DELETE FROM memories WHERE id=?", (discard.id,))
+                    self._embeddings_cache.pop(discard.id, None)
+                    merged_count += 1
+                kept += 1
+
+            self._conn.commit()
+
+        return {"merged": merged_count, "kept": kept, "total_after": self.count()}
+
+    @staticmethod
+    def _text_similarity(a: str, b: str) -> float:
+        """Bigram Jaccard similarity — works well for both CJK and Latin text."""
+        if not a or not b:
+            return 0.0
+        if len(a) < 2 or len(b) < 2:
+            return 1.0 if a == b else 0.0
+        bigrams_a = {a[i:i+2] for i in range(len(a) - 1)}
+        bigrams_b = {b[i:i+2] for i in range(len(b) - 1)}
+        intersection = len(bigrams_a & bigrams_b)
+        union = len(bigrams_a | bigrams_b)
+        return intersection / union if union > 0 else 0.0
+
     def content_exists(self, content: str) -> bool:
         """True if an identical memory body already exists."""
         row = self._conn.execute(

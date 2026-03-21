@@ -252,6 +252,24 @@ def test_lockfile():
     print("  PASSED")
 
 
+def test_consolidate():
+    """Similar memories should be merged."""
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="C")
+        from mindos.store import Memory
+        # Add near-identical memories
+        m.store.add(Memory(id="", type="fact", content="我住在上海浦东新区"))
+        m.store.add(Memory(id="", type="fact", content="我住在上海浦东新区附近"))
+        m.store.add(Memory(id="", type="fact", content="我喜欢咖啡"))
+        assert m.store.count() == 3
+
+        result = m.consolidate()
+        # "上海浦东新区" and "上海浦东新区附近" are similar enough to merge
+        assert result["merged"] >= 1
+        assert m.store.count() < 3
+    print("  PASSED")
+
+
 if __name__ == "__main__":
     tests = [
         ("full_lifecycle", test_full_lifecycle),
@@ -265,6 +283,7 @@ if __name__ == "__main__":
         ("server_client", test_server_client),
         ("memory_export_import", test_memory_export_import),
         ("lockfile", test_lockfile),
+        ("consolidate", test_consolidate),
     ]
     failed = 0
     for name, fn in tests:

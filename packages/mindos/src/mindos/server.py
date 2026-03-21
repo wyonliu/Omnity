@@ -275,6 +275,11 @@ class MindosHandler(BaseHTTPRequestHandler):
             self._json(imported)
             return
 
+        if path == "/api/memories/consolidate":
+            result = _mindos.consolidate()
+            self._json(result)
+            return
+
         self.send_error(404)
 
 

@@ -104,5 +104,8 @@ class MindosClient:
     def stats(self) -> dict[str, Any]:
         return self._request("GET", "/api/memories/stats")
 
+    def consolidate(self) -> dict[str, Any]:
+        return self._request("POST", "/api/memories/consolidate", {})
+
     def config(self) -> dict[str, Any]:
         return self._request("GET", "/api/config")
