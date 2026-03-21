@@ -1,0 +1,17 @@
+{
+  "name": "soap-sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for SOAP (Spatial Omnity Agentic Protocol)",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest"
+  },
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}
