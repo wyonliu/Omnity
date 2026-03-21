@@ -842,3 +842,134 @@ class TestConnectionManagerCatchUp:
             assert msg["topic"] == "locks"
 
         asyncio.run(_run())
+
+
+# ── S4: Spatial Query & Discovery tests ───────────────────────
+
+class TestSpatialQuery:
+    """S4: Runtime spatial query methods."""
+
+    def setup_method(self):
+        self.rt = SOAPRuntime.load(MALL)
+
+    def test_query_objects_by_type(self):
+        results = self.rt.query_objects(obj_type="npc.store_clerk")
+        assert len(results) > 0
+        assert all(o["type"] == "npc.store_clerk" for o in results)
+
+    def test_query_objects_by_reality(self):
+        results = self.rt.query_objects(reality="physical")
+        assert len(results) > 0
+        assert all(o.get("reality") == "physical" for o in results)
+
+    def test_query_objects_by_affordance(self):
+        results = self.rt.query_objects(affordance="speak")
+        assert len(results) > 0
+        for o in results:
+            assert "speak" in o.get("affordances", [])
+
+    def test_query_objects_by_region(self):
+        results = self.rt.query_objects(region_id="atrium")
+        assert len(results) > 0
+        atrium = self.rt.get_region("atrium")
+        contained = set(atrium.get("contained_object_ids", []))
+        for o in results:
+            assert o["id"] in contained
+
+    def test_query_objects_combined(self):
+        results = self.rt.query_objects(reality="physical", region_id="atrium")
+        for o in results:
+            assert o.get("reality") == "physical"
+
+    def test_query_objects_nonexistent_region(self):
+        results = self.rt.query_objects(region_id="nonexistent")
+        assert results == []
+
+    def test_spatial_query_sphere(self):
+        fountain = self.rt.get_object("fountain_center")
+        b = fountain.get("bounds", {})
+        cx = (b["min"][0] + b["max"][0]) / 2
+        cy = (b["min"][1] + b["max"][1]) / 2
+        cz = (b["min"][2] + b["max"][2]) / 2
+        results = self.rt.spatial_query(center=[cx, cy, cz], radius=50.0)
+        ids = [o["id"] for o in results]
+        assert "fountain_center" in ids
+
+    def test_spatial_query_small_radius(self):
+        results = self.rt.spatial_query(center=[0, 0, 0], radius=0.01)
+        assert isinstance(results, list)
+
+    def test_spatial_query_bbox(self):
+        results = self.rt.spatial_query(
+            bbox_min=[-100, -100, -100], bbox_max=[100, 100, 100])
+        assert len(results) > 0
+
+    def test_region_inventory(self):
+        inv = self.rt.region_inventory("atrium")
+        assert inv is not None
+        assert inv["region_id"] == "atrium"
+        assert inv["object_count"] > 0
+
+    def test_region_inventory_not_found(self):
+        assert self.rt.region_inventory("nonexistent") is None
+
+    def test_region_inventory_includes_agents(self):
+        self.rt.register_agent("bot_inv", position=[0, 0, 0])
+        ar = self.rt.get_registered_agent("bot_inv")
+        ar.near_target = "atrium"
+        inv = self.rt.region_inventory("atrium")
+        agent_ids = [a["id"] for a in inv["agents"]]
+        assert "bot_inv" in agent_ids
+
+
+@requires_fastapi
+class TestV1SpatialEndpoints:
+    """S4: HTTP endpoints for spatial query."""
+
+    def setup_method(self):
+        self.app = create_app(MALL)
+        self.client = TestClient(self.app)
+
+    def test_search_by_type(self):
+        r = self.client.get("/api/v1/objects/search?type=npc.store_clerk")
+        assert r.status_code == 200
+        assert len(r.json()["objects"]) > 0
+
+    def test_search_by_reality(self):
+        r = self.client.get("/api/v1/objects/search?reality=physical")
+        assert r.status_code == 200
+        assert len(r.json()["objects"]) > 0
+
+    def test_search_by_affordance(self):
+        r = self.client.get("/api/v1/objects/search?affordance=speak")
+        assert r.status_code == 200
+        for o in r.json()["objects"]:
+            assert "speak" in o["affordances"]
+
+    def test_search_by_region(self):
+        r = self.client.get("/api/v1/objects/search?region_id=atrium")
+        assert r.status_code == 200
+        assert len(r.json()["objects"]) > 0
+
+    def test_spatial_sphere(self):
+        r = self.client.get("/api/v1/objects/spatial?cx=0&cy=0&cz=0&radius=200")
+        assert r.status_code == 200
+        assert len(r.json()["objects"]) > 0
+
+    def test_spatial_bbox(self):
+        r = self.client.get(
+            "/api/v1/objects/spatial?min_x=-100&min_y=-100&min_z=-100"
+            "&max_x=100&max_y=100&max_z=100")
+        assert r.status_code == 200
+        assert len(r.json()["objects"]) > 0
+
+    def test_region_inventory(self):
+        r = self.client.get("/api/v1/regions/atrium/inventory")
+        assert r.status_code == 200
+        inv = r.json()
+        assert inv["region_id"] == "atrium"
+        assert inv["object_count"] > 0
+
+    def test_region_inventory_not_found(self):
+        r = self.client.get("/api/v1/regions/nonexistent/inventory")
+        assert r.status_code == 404

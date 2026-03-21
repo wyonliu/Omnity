@@ -421,6 +421,112 @@ class SOAPRuntime:
     def get_events_since(self, after_seq: int = 0) -> List[Dict[str, Any]]:
         return [e.to_dict() for e in self.event_log if e.seq > after_seq]
 
+    # ── S4: spatial query & discovery ──────────────────────────
+
+    def query_objects(self, *,
+                      obj_type: Optional[str] = None,
+                      reality: Optional[str] = None,
+                      affordance: Optional[str] = None,
+                      tag: Optional[str] = None,
+                      region_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Search objects by type, reality, affordance, tag, or region."""
+        # resolve region → contained object IDs
+        region_oids: Optional[set] = None
+        if region_id:
+            region = self.get_region(region_id)
+            if not region:
+                return []
+            region_oids = set(region.get("contained_object_ids", []))
+
+        results = []
+        for obj in self.list_objects():
+            if region_oids is not None and obj["id"] not in region_oids:
+                continue
+            if obj_type and obj.get("type") != obj_type:
+                continue
+            if reality and obj.get("reality") != reality:
+                continue
+            if affordance and affordance not in obj.get("affordances", []):
+                continue
+            if tag and tag not in obj.get("tags", []):
+                continue
+            results.append(obj)
+        return results
+
+    def spatial_query(self, *,
+                      center: Optional[List[float]] = None,
+                      radius: Optional[float] = None,
+                      bbox_min: Optional[List[float]] = None,
+                      bbox_max: Optional[List[float]] = None) -> List[Dict[str, Any]]:
+        """Query objects by spatial proximity (sphere or AABB).
+
+        - Sphere: center + radius
+        - AABB: bbox_min + bbox_max
+        Objects without bounds are excluded.
+        """
+        results = []
+        for obj in self.list_objects():
+            bounds = obj.get("bounds", {})
+            obj_min = bounds.get("min")
+            obj_max = bounds.get("max")
+            if not obj_min or not obj_max or len(obj_min) < 3 or len(obj_max) < 3:
+                continue
+            obj_cx = (obj_min[0] + obj_max[0]) / 2
+            obj_cy = (obj_min[1] + obj_max[1]) / 2
+            obj_cz = (obj_min[2] + obj_max[2]) / 2
+
+            if center and radius is not None:
+                if len(center) < 3:
+                    continue
+                dx = obj_cx - center[0]
+                dy = obj_cy - center[1]
+                dz = obj_cz - center[2]
+                dist = (dx*dx + dy*dy + dz*dz) ** 0.5
+                if dist > radius:
+                    continue
+            elif bbox_min and bbox_max:
+                if len(bbox_min) < 3 or len(bbox_max) < 3:
+                    continue
+                # AABB overlap test (object center must be inside query box)
+                if not (bbox_min[0] <= obj_cx <= bbox_max[0] and
+                        bbox_min[1] <= obj_cy <= bbox_max[1] and
+                        bbox_min[2] <= obj_cz <= bbox_max[2]):
+                    continue
+            else:
+                continue  # need either sphere or bbox query
+
+            results.append(obj)
+        return results
+
+    def region_inventory(self, region_id: str) -> Optional[Dict[str, Any]]:
+        """Get region summary with all contained objects and their states."""
+        region = self.get_region(region_id)
+        if not region:
+            return None
+        obj_map = {o["id"]: o for o in self.list_objects()}
+        items = []
+        for oid in region.get("contained_object_ids", []):
+            obj = obj_map.get(oid)
+            if obj:
+                items.append({
+                    "id": obj["id"],
+                    "type": obj.get("type"),
+                    "reality": obj.get("reality"),
+                    "affordances": obj.get("affordances", []),
+                    "state": obj.get("state"),
+                })
+        agents_here = [ar.to_dict() for ar in self._agent_registry.values()
+                       if ar.near_target == region_id and ar.status != "disconnected"]
+        return {
+            "region_id": region_id,
+            "name": region.get("name"),
+            "purpose_tags": region.get("purpose_tags", []),
+            "object_count": len(items),
+            "objects": items,
+            "agent_count": len(agents_here),
+            "agents": agents_here,
+        }
+
     # ── write: record event ─────────────────────────────────────
 
     def _record(self, agent_id: str, verb: str, target_id: str,

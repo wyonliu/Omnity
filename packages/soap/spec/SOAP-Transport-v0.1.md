@@ -52,6 +52,8 @@ All v1 endpoints are prefixed with `/api/v1`. Legacy endpoints (`/api/scene`, `/
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/v1/objects` | List all objects (id, type, reality, affordances, state) |
+| `GET` | `/api/v1/objects/search` | Search by `type`, `reality`, `affordance`, `tag`, `region_id` |
+| `GET` | `/api/v1/objects/spatial` | Spatial query by sphere (`cx,cy,cz,radius`) or AABB (`min_x..max_z`) |
 | `GET` | `/api/v1/objects/{id}` | Full object detail |
 
 ### 4.3 Regions
@@ -60,6 +62,7 @@ All v1 endpoints are prefixed with `/api/v1`. Legacy endpoints (`/api/scene`, `/
 |--------|------|-------------|
 | `GET` | `/api/v1/regions` | List all regions |
 | `GET` | `/api/v1/regions/{id}` | Full region detail |
+| `GET` | `/api/v1/regions/{id}/inventory` | Region summary with objects, states, and present agents |
 
 ### 4.4 Actions
 

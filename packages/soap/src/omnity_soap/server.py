@@ -112,15 +112,21 @@ class ConnectionManager:
 
     def __init__(self) -> None:
         self._connections: Dict[str, Any] = {}  # ws_id -> connection info
-        self._lock = asyncio.Lock()
+        self._lock: Optional[asyncio.Lock] = None  # lazy init for Python 3.9
         self._counter = 0
         self._ws_seq = 0  # monotonic sequence for WS events
         self._recent_events: List[Dict[str, Any]] = []  # ring buffer for catch-up
         self._max_recent = 500  # keep last 500 events for reconnection
 
+    def _get_lock(self) -> asyncio.Lock:
+        """Lazy-init asyncio.Lock (Python 3.9 needs a running event loop)."""
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
+
     async def connect(self, ws: Any, agent_id: str, topics: Set[str],
                       region_filter: Optional[str] = None) -> str:
-        async with self._lock:
+        async with self._get_lock():
             self._counter += 1
             ws_id = f"ws_{self._counter}"
             self._connections[ws_id] = {
@@ -130,7 +136,7 @@ class ConnectionManager:
             return ws_id
 
     async def disconnect(self, ws_id: str) -> Optional[str]:
-        async with self._lock:
+        async with self._get_lock():
             conn = self._connections.pop(ws_id, None)
             return conn["agent_id"] if conn else None
 
@@ -138,7 +144,7 @@ class ConnectionManager:
                             remove: Optional[Set[str]] = None) -> None:
         add = add or set()
         remove = remove or set()
-        async with self._lock:
+        async with self._get_lock():
             conn = self._connections.get(ws_id)
             if conn:
                 conn["topics"] |= add
@@ -146,7 +152,7 @@ class ConnectionManager:
 
     async def set_region_filter(self, ws_id: str, region_id: Optional[str]) -> None:
         """Set region filter for a connection. None = receive all regions."""
-        async with self._lock:
+        async with self._get_lock():
             conn = self._connections.get(ws_id)
             if conn:
                 conn["region_filter"] = region_id
@@ -176,7 +182,7 @@ class ConnectionManager:
         if ws_topic is None:
             ws_topic = runtime_topic  # fallback: use raw topic
 
-        async with self._lock:
+        async with self._get_lock():
             self._ws_seq += 1
             seq = self._ws_seq
             envelope = {
@@ -208,7 +214,7 @@ class ConnectionManager:
 
     async def catch_up(self, ws_id: str, after_seq: int) -> None:
         """Send missed events since after_seq to a specific connection."""
-        async with self._lock:
+        async with self._get_lock():
             conn = self._connections.get(ws_id)
             if not conn:
                 return
@@ -225,7 +231,7 @@ class ConnectionManager:
                 break
 
     async def send_to(self, ws_id: str, data: Any) -> None:
-        async with self._lock:
+        async with self._get_lock():
             conn = self._connections.get(ws_id)
         if conn:
             try:
@@ -338,10 +344,51 @@ def create_app(scene_path: Optional[Path] = None):
     def v1_summary():
         return JSONResponse(_get_rt().summary())
 
-    # Objects
+    # Objects — specific routes BEFORE parametric {obj_id}
     @app.get("/api/v1/objects")
     def v1_objects():
         return JSONResponse({"objects": _get_rt().list_objects()})
+
+    # S4: Spatial Query & Discovery
+    @app.get("/api/v1/objects/search")
+    def v1_search_objects(
+        type: Optional[str] = Query(None),
+        reality: Optional[str] = Query(None),
+        affordance: Optional[str] = Query(None),
+        tag: Optional[str] = Query(None),
+        region_id: Optional[str] = Query(None),
+    ):
+        """Search objects by type, reality, affordance, tag, or region."""
+        return JSONResponse({
+            "objects": _get_rt().query_objects(
+                obj_type=type, reality=reality,
+                affordance=affordance, tag=tag, region_id=region_id,
+            )
+        })
+
+    @app.get("/api/v1/objects/spatial")
+    def v1_spatial_query(
+        cx: Optional[float] = Query(None),
+        cy: Optional[float] = Query(None),
+        cz: Optional[float] = Query(None),
+        radius: Optional[float] = Query(None),
+        min_x: Optional[float] = Query(None),
+        min_y: Optional[float] = Query(None),
+        min_z: Optional[float] = Query(None),
+        max_x: Optional[float] = Query(None),
+        max_y: Optional[float] = Query(None),
+        max_z: Optional[float] = Query(None),
+    ):
+        """Query objects by spatial proximity (sphere or AABB)."""
+        center = [cx, cy, cz] if cx is not None and cy is not None and cz is not None else None
+        bbox_min = [min_x, min_y, min_z] if min_x is not None and min_y is not None and min_z is not None else None
+        bbox_max = [max_x, max_y, max_z] if max_x is not None and max_y is not None and max_z is not None else None
+        return JSONResponse({
+            "objects": _get_rt().spatial_query(
+                center=center, radius=radius,
+                bbox_min=bbox_min, bbox_max=bbox_max,
+            )
+        })
 
     @app.get("/api/v1/objects/{obj_id}")
     def v1_object(obj_id: str):
@@ -361,6 +408,14 @@ def create_app(scene_path: Optional[Path] = None):
         if not region:
             raise HTTPException(404, f"Region '{region_id}' not found")
         return JSONResponse(region)
+
+    @app.get("/api/v1/regions/{region_id}/inventory")
+    def v1_region_inventory(region_id: str):
+        """Get region summary with all contained objects and agents."""
+        inv = _get_rt().region_inventory(region_id)
+        if not inv:
+            raise HTTPException(404, f"Region '{region_id}' not found")
+        return JSONResponse(inv)
 
     # Actions
     @app.post("/api/v1/actions")
