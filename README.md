@@ -25,7 +25,8 @@
 - **SOAP 愿景与边界（最终版 v2.0）**：[`docs/soap/PROTOCOL_VISION_AND_EXECUTION.md`](./docs/soap/PROTOCOL_VISION_AND_EXECUTION.md) — 含「能否全行业一键协同」的深度论证与 **Conformance Tier**
 - **活商场思想实验**：[`docs/soap/THOUGHT_EXPERIMENT_THE_LIVING_MALL.md`](./docs/soap/THOUGHT_EXPERIMENT_THE_LIVING_MALL.md)
 - **SOAP 周粒度 backlog**：[`docs/soap/WORK_PLAN.md`](./docs/soap/WORK_PLAN.md)
-- **SOAP v0.1 规范与代码**：[`packages/soap/`](./packages/soap/) · `soap-validate` · `soap-explore` · **`soap-view`**（浏览器可视化） · `soap-mcp`
+- **SOAP v0.1 规范与代码**：[`packages/soap/`](./packages/soap/) · `soap-validate` · `soap-explore` · **`soap-view`**（浏览器可视化 + Agent 自主巡游） · `soap-mcp`
+- **soap-view 亮点**：商场平面图 + Agent 思维气泡 + 平滑移动动画 + 一键自主巡游演示 + HTTP API（任意外部 Agent 可接入）
 - **可视化灵感与合规引用**：[`docs/soap/VISUALIZER_INSPIRATION.md`](./docs/soap/VISUALIZER_INSPIRATION.md)  
 - **第三方 Agent / OpenClaw / MR**：[`docs/soap/THIRD_PARTY_AGENTS_AND_MR.md`](./docs/soap/THIRD_PARTY_AGENTS_AND_MR.md)
 - **社区**：[GitHub Discussions](https://github.com/wyonliu/Omnity/discussions)（RFC / Q&A / AMA）

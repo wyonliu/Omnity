@@ -1,4 +1,12 @@
-"""soap-view：本地 HTTP 服务，浏览器内可视化 SOAP 场景（平面图 + 关系图）。"""
+"""soap-view：本地 HTTP 服务，浏览器可视化 SOAP 场景 + 实时动作事件流。
+
+端点：
+  /api/scene  — 当前场景快照（含被 Agent 修改后的最新状态）
+  /api/roles  — 角色视角
+  /api/events?after=N — 事件日志（轮询）
+  /api/act    — POST 执行动作（也可从浏览器 / curl 触发，与 soap-mcp 同一 Runtime）
+  其余       — 静态文件（dist/）
+"""
 from __future__ import annotations
 
 import argparse
@@ -8,22 +16,23 @@ import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, Optional
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from omnity_soap.explore import load_scene, viewer_roles_payload
 from omnity_soap.paths import default_scene_path, viewer_static_dir, package_root
+from omnity_soap.runtime import SOAPRuntime
+
+_runtime: Optional[SOAPRuntime] = None
 
 
-def _scene_path() -> Path:
-    return default_scene_path()
-
-
-def _load_scene_dict(path: Path) -> Dict[str, Any]:
-    return load_scene(path)
+def _get_runtime() -> SOAPRuntime:
+    global _runtime
+    if _runtime is None:
+        _runtime = SOAPRuntime.load(default_scene_path())
+    return _runtime
 
 
 def _safe_file_under_root(root: Path, rel: str) -> Optional[Path]:
-    """解析 root 下的相对路径；禁止越界与路径遍历。存在且为文件则返回。"""
     if not rel or rel == "/":
         rel = "index.html"
     rel = rel.replace("\\", "/").lstrip("/")
@@ -40,7 +49,7 @@ def _safe_file_under_root(root: Path, rel: str) -> Optional[Path]:
 
 
 class _Handler(BaseHTTPRequestHandler):
-    server_version = "SOAP-View/0.1"
+    server_version = "SOAP-View/0.2"
 
     def log_message(self, fmt: str, *args: Any) -> None:
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
@@ -50,6 +59,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(body)
 
@@ -57,34 +67,66 @@ class _Handler(BaseHTTPRequestHandler):
         data = json.dumps(obj, ensure_ascii=False, indent=2).encode("utf-8")
         self._send(code, data, "application/json; charset=utf-8")
 
+    def _read_body(self) -> bytes:
+        length = int(self.headers.get("Content-Length", 0))
+        return self.rfile.read(length) if length > 0 else b""
+
+    def do_OPTIONS(self) -> None:  # noqa: N802
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
+    def do_POST(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        path = unquote(parsed.path, encoding="utf-8") or "/"
+
+        if path == "/api/act":
+            try:
+                body = json.loads(self._read_body())
+            except Exception:
+                self._send_json({"error": "invalid_json"}, 400)
+                return
+            rt = _get_runtime()
+            agent_id = body.get("agent_id", "anonymous")
+            verb = body.get("verb", "")
+            target_id = body.get("target_id", "")
+            params = body.get("params", {})
+            result = rt.execute_action(agent_id, verb, target_id, params)
+            self._send_json(result.to_dict())
+            return
+
+        self._send(404, b"not found", "text/plain; charset=utf-8")
+
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
-        path = parsed.path or "/"
+        path = unquote(parsed.path, encoding="utf-8") or "/"
+        qs = parse_qs(parsed.query)
+
+        rt = _get_runtime()
 
         if path == "/api/scene":
-            p = _scene_path()
-            if not p.is_file():
-                self._send_json({"error": "scene_not_found", "path": str(p)}, 404)
-                return
-            try:
-                scene = _load_scene_dict(p)
-            except Exception as e:
-                self._send_json({"error": "scene_invalid", "detail": str(e)}, 500)
-                return
-            self._send_json({"meta": {"scene_path": str(p)}, "scene": scene})
+            self._send_json({"meta": {"scene_path": str(default_scene_path())},
+                             "scene": rt.raw})
             return
 
         if path == "/api/roles":
-            p = _scene_path()
-            if not p.is_file():
-                self._send_json({"error": "scene_not_found", "path": str(p)}, 404)
-                return
             try:
-                scene = _load_scene_dict(p)
+                self._send_json({"roles": viewer_roles_payload(rt.raw),
+                                 "scene_path": str(default_scene_path())})
             except Exception as e:
-                self._send_json({"error": "scene_invalid", "detail": str(e)}, 500)
-                return
-            self._send_json({"roles": viewer_roles_payload(scene), "scene_path": str(p)})
+                self._send_json({"error": "roles_failed", "detail": str(e)}, 500)
+            return
+
+        if path == "/api/events":
+            after = int(qs.get("after", ["0"])[0])
+            events = rt.get_events_since(after)
+            self._send_json({"events": events, "latest_seq": rt._seq})
+            return
+
+        if path == "/api/summary":
+            self._send_json(rt.summary())
             return
 
         static_root = viewer_static_dir()
@@ -98,15 +140,19 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="SOAP scene web viewer (local only by default).")
+    parser = argparse.ArgumentParser(description="SOAP scene web viewer + action server.")
     parser.add_argument("--host", default="127.0.0.1", help="Bind address (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=8765, help="Port (default: 8765)")
     args = parser.parse_args()
 
-    p = _scene_path()
+    p = default_scene_path()
     if not p.is_file():
         print(f"场景文件不存在: {p}\n请设置 SOAP_SCENE_PATH。", file=sys.stderr)
         sys.exit(1)
+
+    global _runtime
+    _runtime = SOAPRuntime.load(p)
+
     static = viewer_static_dir()
     if not (static / "index.html").is_file():
         dist = package_root() / "web" / "viewer" / "dist"
@@ -122,6 +168,7 @@ def main() -> None:
     httpd = ThreadingHTTPServer((args.host, args.port), _Handler)
     print(f"SOAP-View → http://{args.host}:{args.port}/")
     print(f"场景: {p}")
+    print(f"API: /api/scene · /api/roles · /api/events · /api/act (POST)")
     print("Ctrl+C 停止")
     try:
         httpd.serve_forever()

@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "vendor:gacn": "bash scripts/sync-gacn-assets.sh",
     "build": "vite build",
     "dev": "vite"
   },

@@ -6,6 +6,11 @@
 |------|-----------|
 | `style.css` | `generative_agents/frontend/static/css/style.css` |
 
-本页布局（Bootstrap 3.4 + 白底 + `#game-container` + `.media` 详情条）与上游回放页 **结构对齐**，**未复制**对方 `village` tilemap / 精灵图。
+**可选（不入库，见 `web/viewer/.gitignore`）**：运行 `npm run vendor:gacn` 后会出现：
 
-SOAP-View 其余代码（Phaser 场景逻辑、vis-network、Vite 构建）仍以 Omnity 仓库 **Apache-2.0** 授权。
+- `assets/village/` — 上游 `generative_agents/frontend/static/assets/village/`（tilemap、图块、agents 图集等）
+- `example/movement.json` — 上游 `generative_agents/results/compressed/example/movement.json`（示例回放）
+
+此时 Phaser 回放逻辑与上游 `main_script.html` **对齐**（路径改为 `/vendor/generative-agents-cn/assets/village/…`）。未运行同步时仍为 SOAP 自研 `pixel-mall` 场景。
+
+SOAP-View 其余胶水代码（Vite、vis-network、`main.js` 分支）以 Omnity 仓库 **Apache-2.0** 授权。GenerativeAgentsCN 为独立项目，**不暗示商标或隶属关系**。

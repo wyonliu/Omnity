@@ -1,7 +1,1 @@
-/* SOAP-View 在 GenerativeAgentsCN 白底布局上的少量补充 */
-
-.soap-graph-mount {
-  height: 420px;
-  background: #fafafa;
-  border-top: 1px solid #ddd;
-}
+/* 保留空文件，避免 import 报错 */

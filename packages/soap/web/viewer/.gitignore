@@ -1,1 +1,6 @@
 node_modules/
+# GenerativeAgentsCN village 与示例回放（由 npm run vendor:gacn 拉取，体积大）
+public/vendor/generative-agents-cn/assets/
+public/vendor/generative-agents-cn/example/
+dist/vendor/generative-agents-cn/assets/
+dist/vendor/generative-agents-cn/example/
