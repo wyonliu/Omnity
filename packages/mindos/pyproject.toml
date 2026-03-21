@@ -4,21 +4,27 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mindos"
-version = "0.1.0"
+version = "0.1.1"
 description = "Portable Digital Soul Protocol — your AI knows you, everywhere."
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
 dependencies = [
     "pyyaml>=6.0",
-    "numpy>=1.24",
-    "sentence-transformers>=2.2",
-    "aiohttp>=3.9",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio"]
+semantic = [
+    "numpy>=1.24",
+    "sentence-transformers>=2.2",
+]
+dev = ["pytest>=7.0", "pytest-asyncio"]
 llm = ["openai>=1.0"]
+all = [
+    "numpy>=1.24",
+    "sentence-transformers>=2.2",
+    "openai>=1.0",
+]
 
 [project.scripts]
 mindos = "mindos.cli:main"

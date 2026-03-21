@@ -48,13 +48,16 @@ def cmd_serve(args: argparse.Namespace) -> None:
     if args.dashboard:
         run_dashboard(m, port=args.port)
     else:
-        print(f"mindos serve: 请指定 --dashboard 或 --mcp")
+        print("mindos serve: 请指定一种模式：")
+        print("  --dashboard   本地可视化面板（默认端口 3456，占用时自动递增）")
+        print("  --mcp         MCP Server（即将支持）")
         sys.exit(1)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="mindos", description="Portable Digital Soul Protocol")
     parser.add_argument("--path", default="~/.mindos", help="Mindos 数据目录")
+    parser.add_argument("--version", action="store_true", help="显示版本并退出")
     sub = parser.add_subparsers(dest="command")
 
     p_init = sub.add_parser("init", help="创建新的 Mindos")
@@ -66,13 +69,20 @@ def main() -> None:
 
     p_forget = sub.add_parser("forget", help="物理擦除记忆")
     p_forget.add_argument("pattern", help="要擦除的内容关键词")
-    p_forget.add_argument("--scope", default="all", choices=["all", "fact", "episode", "preference"])
+    p_forget.add_argument(
+        "--scope", default="all",
+        choices=["all", "fact", "episode", "preference", "skill", "relation"],
+    )
 
     p_serve = sub.add_parser("serve", help="启动服务")
     p_serve.add_argument("--dashboard", action="store_true", help="启动可视化面板")
     p_serve.add_argument("--port", type=int, default=3456)
 
     args = parser.parse_args()
+    if getattr(args, "version", False):
+        from mindos import __version__
+        print(__version__)
+        sys.exit(0)
     if not args.command:
         parser.print_help()
         sys.exit(0)

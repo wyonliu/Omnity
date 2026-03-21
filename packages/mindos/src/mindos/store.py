@@ -10,7 +10,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-import numpy as np
+try:
+    import numpy as np
+except ImportError:
+    np = None  # vector search disabled
 
 
 # ---------------------------------------------------------------------------
@@ -71,7 +74,7 @@ class Memory:
     accessed_at: float = 0.0
     access_count: int = 0
     decay_weight: float = 1.0
-    embedding: Optional[np.ndarray] = field(default=None, repr=False)
+    embedding: Optional[Any] = field(default=None, repr=False)  # np.ndarray when numpy available
     meta: dict[str, Any] = field(default_factory=dict)
 
 
@@ -96,8 +99,10 @@ class MemoryStore:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(self.db_path))
         self._conn.row_factory = sqlite3.Row
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.executescript(_SCHEMA)
-        self._embeddings_cache: dict[str, np.ndarray] = {}
+        self._embeddings_cache: dict[str, Any] = {}
         self._load_embeddings()
 
     # -- write -----------------------------------------------------------------
@@ -159,9 +164,9 @@ class MemoryStore:
         ).fetchall()
         return [self._row_to_memory(r) for r in rows]
 
-    def search_vector(self, query_vec: np.ndarray, top_k: int = 10) -> list[Memory]:
+    def search_vector(self, query_vec: Any, top_k: int = 10) -> list[Memory]:
         """Cosine-similarity vector search against cached embeddings."""
-        if not self._embeddings_cache:
+        if np is None or not self._embeddings_cache:
             return []
         ids = list(self._embeddings_cache.keys())
         mat = np.stack([self._embeddings_cache[i] for i in ids])
@@ -232,19 +237,25 @@ class MemoryStore:
                 "SELECT id FROM memories WHERE content LIKE ?", (f"%{pattern}%",),
             ).fetchall()
         ids = [r["id"] for r in rows]
-        if not ids:
-            return 0
-        placeholders = ",".join("?" * len(ids))
-        self._conn.execute(f"DELETE FROM memories WHERE id IN ({placeholders})", ids)
-        # Also remove from knowledge graph
-        for mid in ids:
-            self._conn.execute(
-                "DELETE FROM knowledge_graph WHERE subject LIKE ? OR object LIKE ?",
-                (f"%{pattern}%", f"%{pattern}%"),
-            )
-            self._embeddings_cache.pop(mid, None)
+        if ids:
+            placeholders = ",".join("?" * len(ids))
+            self._conn.execute(f"DELETE FROM memories WHERE id IN ({placeholders})", ids)
+            for mid in ids:
+                self._embeddings_cache.pop(mid, None)
+        # Always scrub knowledge graph (even when no memory rows matched)
+        self._conn.execute(
+            "DELETE FROM knowledge_graph WHERE subject LIKE ? OR object LIKE ? OR predicate LIKE ?",
+            (f"%{pattern}%", f"%{pattern}%", f"%{pattern}%"),
+        )
         self._conn.commit()
         return len(ids)
+
+    def content_exists(self, content: str) -> bool:
+        """True if an identical memory body already exists."""
+        row = self._conn.execute(
+            "SELECT 1 FROM memories WHERE content = ? LIMIT 1", (content,),
+        ).fetchone()
+        return row is not None
 
     # -- internal --------------------------------------------------------------
 
@@ -256,6 +267,8 @@ class MemoryStore:
         self._conn.commit()
 
     def _load_embeddings(self) -> None:
+        if np is None:
+            return
         rows = self._conn.execute("SELECT id, embedding FROM memories WHERE embedding IS NOT NULL").fetchall()
         for r in rows:
             arr = np.frombuffer(r["embedding"], dtype=np.float32)
@@ -263,7 +276,7 @@ class MemoryStore:
 
     def _row_to_memory(self, row: sqlite3.Row) -> Memory:
         emb = None
-        if row["embedding"]:
+        if row["embedding"] and np is not None:
             emb = np.frombuffer(row["embedding"], dtype=np.float32)
         meta = json.loads(row["meta"]) if row["meta"] else {}
         return Memory(

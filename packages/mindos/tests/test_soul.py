@@ -83,5 +83,41 @@ def test_full_lifecycle():
     print("\n✅ All tests passed!")
 
 
+def test_commit_deduplicates():
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="D")
+        m.commit([{"role": "user", "content": "我住在杭州"}], source="t1")
+        r2 = m.commit([{"role": "user", "content": "我住在杭州"}], source="t2")
+        assert r2.get("skipped_duplicate", 0) >= 1, "second commit should skip duplicate fact"
+
+
+def test_forget_knowledge_graph():
+    from mindos.store import Triple
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="K")
+        m.store.add_triple(Triple("User", "visited", "东京"))
+        m.store.add_triple(Triple("User", "likes", "coffee"))
+        before = len(m.store.triples())
+        assert before == 2
+        m.forget("东京")
+        triples = m.store.triples()
+        assert len(triples) == 1
+        assert triples[0].object == "coffee"
+
+
+def test_reload_identity():
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="Stale")
+        m.identity["name"] = "Fresh"
+        m.save_identity()
+        m.identity["name"] = "Stale"  # simulate outdated in-memory copy
+        m.reload_identity()
+        assert m.identity["name"] == "Fresh"
+
+
 if __name__ == "__main__":
     test_full_lifecycle()
+    test_commit_deduplicates()
+    test_forget_knowledge_graph()
+    test_reload_identity()
+    print("✅ Extended tests passed!")

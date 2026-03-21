@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from mindos.core import Mindos
 
 _mindos: "Mindos | None" = None
+_serve_port: int = 3456
 
 _HTML = r"""<!DOCTYPE html>
 <html lang="zh">
@@ -60,7 +61,7 @@ input[type=text] { background: var(--card); border: 1px solid var(--border); col
 <body>
 
 <h1>🧠 Mindos Dashboard</h1>
-<p class="subtitle">Portable Digital Soul Protocol — <span id="soulName">loading...</span></p>
+<p class="subtitle">Portable Digital Soul Protocol — <span id="soulName">loading...</span><br><span id="serveInfo" style="opacity:.75"></span></p>
 
 <div class="grid">
   <div class="card">
@@ -123,6 +124,14 @@ function toast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+async function loadConfig() {
+  try {
+    const c = await api('/api/config');
+    document.getElementById('serveInfo').textContent =
+      `本机服务 http://127.0.0.1:${c.port} · 数据 ${c.data_root} · v${c.version}`;
+  } catch { /* ignore */ }
 }
 
 async function loadStatus() {
@@ -196,7 +205,10 @@ async function doCommit() {
     method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({messages, source: 'dashboard'})
   });
-  toast(`commit 完成：新增 ${data.memories_added} 条记忆`);
+  let msg = `commit：新增 ${data.memories_added} 条`;
+  if (data.skipped_duplicate) msg += `，去重跳过 ${data.skipped_duplicate}`;
+  if (data.skipped_sensitive) msg += `，敏感跳过 ${data.skipped_sensitive}`;
+  toast(msg);
   document.getElementById('commitUI').style.display = 'none';
   loadStatus(); loadMemories();
 }
@@ -214,7 +226,7 @@ async function doForget() {
   loadStatus(); loadMemories(); loadKG();
 }
 
-loadStatus(); loadMemories(); loadKG();
+loadConfig(); loadStatus(); loadMemories(); loadKG();
 setInterval(loadStatus, 5000);
 </script>
 </body>
@@ -252,6 +264,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+            return
+
+        if path == "/api/config":
+            from mindos import __version__
+            self._json({
+                "port": _serve_port,
+                "version": __version__,
+                "data_root": str(_mindos.root),
+            })
             return
 
         if path == "/api/status":
@@ -330,9 +351,10 @@ def _pick_port(preferred: int = 3456, max_attempts: int = 32) -> int:
 
 
 def run_dashboard(mindos_instance: "Mindos", port: int = 3456) -> None:
-    global _mindos
+    global _mindos, _serve_port
     _mindos = mindos_instance
     actual = _pick_port(port)
+    _serve_port = actual
     if actual != port:
         print(f"⚠ 端口 {port} 已被占用，已改用 {actual}")
     server = HTTPServer(("127.0.0.1", actual), DashboardHandler)

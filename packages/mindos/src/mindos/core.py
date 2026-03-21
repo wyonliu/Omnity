@@ -8,9 +8,28 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 
-import yaml
+try:
+    import yaml
+except ImportError:
+    yaml = None  # fallback to JSON
 
 from mindos.store import Memory, MemoryStore, Triple
+
+
+def _dump_identity(data: dict, path) -> None:
+    if yaml:
+        path.write_text(yaml.dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    else:
+        import json as _json
+        path.write_text(_json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _load_identity(path) -> dict:
+    text = path.read_text(encoding="utf-8")
+    if yaml:
+        return yaml.safe_load(text) or {}
+    import json as _json
+    return _json.loads(text)
 
 _DEFAULT_IDENTITY = {
     "version": 1,
@@ -50,14 +69,19 @@ class Mindos:
 
         id_path = root / "identity.yaml"
         if id_path.exists():
-            identity = yaml.safe_load(id_path.read_text(encoding="utf-8")) or {}
+            identity = _load_identity(id_path)
         else:
             identity = dict(_DEFAULT_IDENTITY)
-            id_path.write_text(yaml.dump(identity, allow_unicode=True, sort_keys=False),
-                               encoding="utf-8")
+            _dump_identity(identity, id_path)
 
         store = MemoryStore(root / "memory.db")
         return cls(root, store, identity)
+
+    def reload_identity(self) -> None:
+        """Reload identity.yaml from disk (after manual edits)."""
+        id_path = self.root / "identity.yaml"
+        if id_path.exists():
+            self.identity = _load_identity(id_path)
 
     @classmethod
     def init(cls, path: str | Path = "~/.mindos", name: str = "User",
@@ -76,8 +100,7 @@ class Mindos:
         identity["updated_at"] = time.strftime("%Y-%m-%d")
 
         id_path = root / "identity.yaml"
-        id_path.write_text(yaml.dump(identity, allow_unicode=True, sort_keys=False),
-                           encoding="utf-8")
+        _dump_identity(identity, id_path)
 
         store = MemoryStore(root / "memory.db")
         inst = cls(root, store, identity)
@@ -99,7 +122,10 @@ class Mindos:
         emb = self._get_embedder()
         if not emb:
             return None
-        import numpy as np
+        try:
+            import numpy as np
+        except ImportError:
+            return None
         vec = emb.encode(text, show_progress_bar=False)
         return np.array(vec, dtype=np.float32)
 
@@ -140,8 +166,15 @@ class Mindos:
         qvec = self._embed(query) if query else None
         if qvec is not None:
             memories = self.store.search_vector(qvec, top_k=15)
-        if not memories and query:
-            memories = self.store.search_text(query.split()[0] if query.split() else "", limit=15)
+        if not memories and query.strip():
+            # Keyword fallback: whole phrase (works for CJK) + first English token
+            q = query.strip()
+            memories = self.store.search_text(q[:64], limit=15)
+            if not memories and q.split():
+                memories = self.store.search_text(q.split()[0], limit=15)
+            # Last resort: recent memories so hydrate is never totally empty when DB has data
+            if not memories and self.store.count() > 0:
+                memories = self.store.list_recent(limit=8)
 
         # 4. Assemble within budget (rough char estimate: 1 token ≈ 2 chars for CJK)
         char_budget = max_tokens * 2
@@ -174,7 +207,9 @@ class Mindos:
     def commit(self, messages: list[dict], source: str = "unknown",
                auto_extract: bool = True) -> dict[str, Any]:
         """Digest a conversation and write new memories."""
-        result = {"memories_added": 0, "facts": [], "skipped_sensitive": 0}
+        result: dict[str, Any] = {
+            "memories_added": 0, "facts": [], "skipped_sensitive": 0, "skipped_duplicate": 0,
+        }
 
         full_text = "\n".join(
             f"{m.get('role', '?')}: {m.get('content', '')}" for m in messages
@@ -185,6 +220,9 @@ class Mindos:
             for fact in facts:
                 if self._is_sensitive(fact["content"]):
                     result["skipped_sensitive"] += 1
+                    continue
+                if self.store.content_exists(fact["content"]):
+                    result["skipped_duplicate"] += 1
                     continue
                 mem = Memory(
                     id=uuid.uuid4().hex[:12],
@@ -202,9 +240,9 @@ class Mindos:
         if self._is_sensitive(full_text):
             result["skipped_sensitive"] += 1
 
-        # Store episode summary (skip if sensitive)
+        # Store episode summary (skip if sensitive or duplicate)
         summary = self._summarize(full_text)
-        if summary and not self._is_sensitive(summary):
+        if summary and not self._is_sensitive(summary) and not self.store.content_exists(summary):
             ep = Memory(
                 id=uuid.uuid4().hex[:12],
                 type="episode",
@@ -281,5 +319,4 @@ class Mindos:
     def save_identity(self) -> None:
         self.identity["updated_at"] = time.strftime("%Y-%m-%d")
         path = self.root / "identity.yaml"
-        path.write_text(yaml.dump(self.identity, allow_unicode=True, sort_keys=False),
-                        encoding="utf-8")
+        _dump_identity(self.identity, path)

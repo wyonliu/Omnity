@@ -1,5 +1,6 @@
 """Demo: seed a Mindos with rich data, then launch the Dashboard."""
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -117,6 +118,11 @@ def seed():
 
 
 def main():
+    ap = argparse.ArgumentParser(description="Mindos demo: seed data + Dashboard")
+    ap.add_argument("--port", type=int, default=3456, help="Dashboard 端口（占用时自动递增）")
+    ap.add_argument("--no-serve", action="store_true", help="只灌数据，不启动 Web")
+    args = ap.parse_args()
+
     print("=" * 50)
     print("  Mindos Demo — 创建灵魂 + 启动 Dashboard")
     print("=" * 50)
@@ -137,10 +143,14 @@ def main():
     print(ctx)
     print()
 
-    # Launch dashboard
+    if args.no_serve:
+        print("（--no-serve）已跳过 Dashboard。可用：")
+        print(f"  PYTHONPATH=src python3 -m mindos.cli serve --dashboard --port {args.port} --path {DEMO_PATH}")
+        return
+
     from mindos.dashboard import run_dashboard
     print("=" * 50)
-    run_dashboard(m, port=3456)
+    run_dashboard(m, port=args.port)
 
 
 if __name__ == "__main__":
