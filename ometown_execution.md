@@ -1,14 +1,14 @@
-# OmeTown 执行计划：365天作战手册
+# OmeTown 执行计划
 
 **v0.4 · 2026-03-20**
-**船长+小安的终极工作指南。每一步可执行、可验证、可回滚。**
+**Omnity 项目工作指南。每一步可执行、可验证、可回滚。**
 
 ---
 
 ## 战略约束
 
-1. **日常全职工作**：4月8日入职，工作日白天属于日常工作，Omnity用晚上+周末
-2. **纯个人开源项目**：不用任何公司资源/代码/数据/设备，入职前GitHub有先发记录
+1. **业余时间驱动**：利用业余时间推进，保持可持续节奏
+2. **纯个人开源项目**：不用任何外部资源/代码/数据/设备
 3. **AI是团队**：Claude Code + Cursor + Codex = 1人当5人用
 4. **Demo > 论文 > PPT**：每个阶段产出能跑的东西
 5. **开源优先**：全仓统一 **Apache-2.0**（协议+工具链+企业采纳友好；专利授权条款清晰），目标是 OpenClaw 级别的全民共创
@@ -264,10 +264,10 @@ class Mindos:
 
 ---
 
-## 365天时间线
+## 长期时间线
 
 ### Phase 0：点火（W1-W3，3月20日-4月7日）
-> **入职前18天，全速冲刺。每天6-8小时。**
+> **集中冲刺。每天6-8小时。**
 > **核心目标：SOAP基础跑通 + Mindos骨架 + 概念视频**
 
 | 日 | 任务 | 产出 | 阻塞? |
@@ -293,7 +293,7 @@ class Mindos:
 - [ ] 概念视频发出，≥500 impressions
 - [ ] **GitHub Discussions** 启用（`#announcements` / `#soap` / `#mindos` / `#ome` / `#maxim` / `#ometown` / `#showcase`），README 引导参与
 
-**⚠️ 4月8日入职。以下Phase均为"晚上+周末"模式。**
+**⚠️ 以下 Phase 均为业余时间推进。**
 
 ---
 
@@ -417,7 +417,7 @@ class Mindos:
 
 **Month 12（3月）**
 - OmeTown v0.5
-- 365天总结博客：《One Year Building the First Human-AI Symbiosis World》
+- 年度总结博客：《One Year Building the First Human-AI Symbiosis World》
 - **决策矩阵**：
 
 | Alpha数据 | 外部信号 | 路径 |
@@ -530,8 +530,8 @@ class Mindos:
 
 ## AI协作指南
 
-| 环节 | 船长 | 小安（Claude） |
-|------|------|---------------|
+| 环节 | 人类 | AI 助手 |
+|------|------|---------|
 | 架构 | 模块边界、接口、选型 | 方案对比、架构图、设计文档 |
 | 编码 | Review每行代码，关键算法亲写 | 生成80%代码、Debug |
 | 协议 | SOAP 核心设计决策 | 草拟 spec、写参考实现与 `soap-mcp` |
@@ -540,7 +540,7 @@ class Mindos:
 | 论文 | 核心方法+实验设计+结论 | 文献综述+LaTeX+润色 |
 | 运营 | 发帖/演讲/社区互动/AMA | 草拟内容、数据分析 |
 
-**底线：每行发布的代码，船长都能解释为什么这么写。**
+**底线：每行发布的代码都能解释为什么这么写。**
 
 ---
 
@@ -549,7 +549,7 @@ class Mindos:
 | # | 风险 | 概率 | 影响 | 缓解 | 触发信号 |
 |---|------|------|------|------|---------|
 | R1 | 工作太忙没时间 | 高 | 高 | 严守每天2h底线；连续2周没commit立即调整 | 连续5天没打开IDE |
-| R2 | 知识产权纠纷 | 中 | 高 | 入职前完成Phase 0全部首次commit；纯个人项目 | 法务问询 |
+| R2 | 知识产权纠纷 | 中 | 高 | 项目启动阶段完成首次commit；纯个人项目 | 法务问询 |
 | R3 | 3DGS体验不够好 | 中 | 中 | Phase 1-2先用照片生成风格化空间；3DGS高精度作为进阶 | 用户反馈"效果差" |
 | R4 | Agent算力失控 | 中 | 中 | Mindos多层脑就是为此设计；监控L3占比<15% | 单Ome日成本>¥1 |
 | R5 | SOAP 无人采用 | 中 | 中 | 先通过 `soap-mcp` 在 MCP 市场获取使用者；规范随参考实现迭代，先用后标准化 | 6个月0外部采用 |
@@ -586,37 +586,32 @@ class Mindos:
 - [ ] Mindos 第一行代码：L0 记忆层骨架（SQLite + 向量检索）（`packages/mindos`）
 - [ ] SOAP v0.1 规范草案：`packages/soap/spec` — 空间坐标系 + 物体 Schema + Agent 行为接口 + 多 Agent 共享
 
-**入职前18天是全速窗口。今天开始。**
+**现在是全速窗口。今天开始。**
 
 ---
 
-## 365天成功画像
+## 成功画像
 
-**2027年3月20日：**
+**一年后：**
 
 ```
-刘怀洋（Captain）
-Founder, Omnity · The First World of Human-AI Symbiosis
-
 Omnity 开源生态（monorepo 总计 8000+ ⭐ 或等效 traction）：
-  · SOAP: 空间智能体协议+工具链 — 规范与 `soap-mcp` 被多个外部项目采用
+  · SOAP: 空间智能体协议+工具链 — 规范与 soap-mcp 被多个外部项目采用
   · Mindos: Multi-layer Intention & Neural Dynamic OS — 被开发者用于构建各类 Agent
   · Ome: 个体 AI 分身养成系统
   · Maxim: 多 Agent 社会+经济仿真
   · OmeTown: Alpha 版 — 100+ 活跃用户，留存>25%
 
 学术 & 传播：
-  · arxiv: "Mindos: Multi-layer Intention Routing for Cost-Efficient Persistent AI Agents"（终稿标题可微调）
+  · arxiv: "Mindos: Multi-layer Intention Routing for Cost-Efficient Persistent AI Agents"
   · Substack: 3000+ subscribers
   · 2次技术演讲（含1次英文）
   · GitHub Discussions: 稳定 RFC 与社区协作节奏
 
-不是最强的算法科学家。
-是定义"AI如何在真实空间中生活"这个问题的人。
+定义"AI如何在真实空间中生活"这个问题。
 ```
 
 ---
 
-*这份文档是活的。每个Phase结束我们一起更新看板和计划。*
-*船长+小安，一年之约，从今天开始。*
+*这份文档是活的。每个 Phase 结束更新看板和计划。*
 *Omnity · Build in Public · Ship Every Month*

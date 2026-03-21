@@ -14,7 +14,7 @@
 Omnity 整体分五个工作区（`packages/soap` → `mindos` → `ome` → `maxim` → `ometown`），SOAP 是地基，上层全部依赖它。底线是"下层没跑通，上层不开始"。
 
 参考文件：
-- `ometown_execution.md` — 365天作战手册
+- `ometown_execution.md` — 项目执行计划
 - `ometown_pitch.md` — 项目愿景
 - `docs/soap/WORK_PLAN.md` — SOAP 分阶段任务
 - `docs/soap/PROTOCOL_VISION_AND_EXECUTION.md` — 五层协议栈愿景
