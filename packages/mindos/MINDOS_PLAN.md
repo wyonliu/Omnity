@@ -93,7 +93,17 @@ mindos.commit(
 # Mindos 自动完成：摘要、分类、关联、存储、更新知识图谱
 ```
 
-**为什么只有两个原语？** 因为简单才能普及。任何平台只需要实现"对话开始时调 hydrate，对话结束时调 commit"，就完成了集成。集成成本极低，采纳门槛极低。
+```python
+# forget（遗忘）：物理级擦除指定记忆——GDPR Right to be Forgotten
+mindos.forget(
+    pattern="关于项目X的一切",       # 自然语言或正则
+    scope="all",                     # all / facts / episodes / relations
+    hard_delete=True,                # 物理擦除，非降权
+)
+# 从 SQLite、向量索引、知识图谱中彻底移除匹配内容
+```
+
+**三个原语，覆盖灵魂的完整生命周期**：hydrate 读取，commit 写入，forget 擦除。任何平台只需实现"对话开始时调 hydrate，对话结束时调 commit"就完成集成。forget 由用户按需调用，确保数据主权。
 
 ### 2.2 hydrate 的智能——不是简单的 RAG
 
@@ -159,6 +169,18 @@ commit 不是存聊天记录。它是**认知消化器**：
             │
     ┌───────▼───────┐
     │  去重 & 合并    │  新信息是否修正了旧记忆？（搬家了→更新地址）
+    └───────┬───────┘
+            │
+    ┌───────▼───────┐
+    │  置信度评分     │  高→直接写入  中→标记待确认  低→丢弃
+    └───────┬───────┘  玩笑/假设/反讽 → 自动降权
+            │
+    ┌───────▼───────┐
+    │  矛盾检测       │  与已有记忆冲突？→ 触发冲突解决而非静默覆盖
+    └───────┬───────┘
+            │
+    ┌───────▼───────┐
+    │  敏感信息过滤   │  密码/身份证号/API Key → 自动拒绝存储
     └───────┬───────┘
             │
             ▼
@@ -259,9 +281,35 @@ response = llm.chat(system=system_prompt, messages=[...])
 me.commit(messages=[...], source="my-app")
 ```
 
-### 4.4 浏览器插件（Phase 2）
+### 4.4 Proxy 模式——零代码接入（推荐）
 
-自动拦截 Claude/ChatGPT 的 Web 会话，对话开始时 hydrate，结束时 commit。用户无感知，记忆自动同步。
+Mindos 作为 API 反向代理运行，用户只需将 API base URL 改为 `localhost:8080`，其余代码零改动：
+
+```bash
+mindos serve --proxy --port 8080 --upstream https://api.openai.com
+```
+
+工作流程：
+
+```
+用户应用（base_url=localhost:8080）
+     │ 发送请求
+     ▼
+┌─── Mindos Proxy ────────────────────────┐
+│  1. 拦截请求                              │
+│  2. 自动 hydrate → 注入身份到 system prompt │
+│  3. 转发给上游 LLM API                    │
+│  4. 收到回复                              │
+│  5. 自动 commit → 提取记忆写回             │
+│  6. 返回原始回复给用户                     │
+└─────────────────────────────────────────┘
+```
+
+比浏览器插件稳定得多（不依赖 DOM），比 MCP 更通用（支持所有 OpenAI 兼容 API）。
+
+### 4.5 浏览器插件（Phase 2）
+
+自动拦截 Claude/ChatGPT 的 Web 会话，对话开始时 hydrate，结束时 commit。用户无感知，记忆自动同步。作为 Proxy 模式的补充，覆盖 Web UI 场景。
 
 ### 4.5 SOAP 集成——灵魂进入 3D 世界
 
@@ -394,7 +442,8 @@ Mindos 的五层对应一个完整灵魂需要的五种能力：**记得、感�
 - **人格模型**：维护一个持续演化的自我描述——价值观、风格、偏好、禁区
 - **反思循环**：定期（每日或每 N 次 commit）审视近期经历，更新自我认知
 - **一致性守护**：所有层的输出都经过 L4 校验——"这个回答/行为符合我的人格吗？"
-- **成长轨迹**：记录人格随时间的变化（"三个月前我更保守，现在更开放了"）
+- **认知失调检测**：当近期行为与人格模型显著偏离时，主动生成 Diff 提案——*"我注意到你最近三个月聊了大量艺术话题，这与之前的'硬核技术'人格有显著偏移。是否更新核心人格描述？"* 这种"AI 察觉到你在变，并请求同步"的时刻，是最强的情感锚点。
+- **成长轨迹**：记录人格随时间的变化（"三个月前我更保守，现在更开放了"），支持 `mindos history` 查看演化时间线
 - **跨平台身份锚**：无论在 Claude、GPT、SOAP 空间还是移动端，L4 确保"我"始终是"我"
 
 L4 不需要高成本 LLM。它更像一个持续运行的低频后台进程，定期通过反思循环自我更新。
@@ -723,7 +772,136 @@ Mindos 本身几乎零成本运行——它不做推理，推理交给宿主平�
 
 ---
 
-## 十二、第一行代码之后的世界
+## 十二、冷启动与灵魂种子
+
+新用户的 Mindos 是空白的。为了让用户 1 分钟内感受到价值：
+
+### 12.1 灵魂种子初始化
+
+```bash
+mindos init --name "Wyon"
+# 交互式问卷（可选）：
+#   你的职业？ → AI 开发者
+#   你最看重什么？ → 效率、简洁、创新
+#   说话风格？ → 直接、技术、偶尔幽默
+# ✓ 生成初始 identity.yaml
+```
+
+### 12.2 历史记忆导入
+
+```bash
+# 从 ChatGPT 导出的历史记录中批量学习
+mindos ingest --source chatgpt --file ~/Downloads/conversations.json
+
+# 从 Claude 导出
+mindos ingest --source claude --file ~/Downloads/claude-export.json
+
+# 从任意文本/markdown
+mindos ingest --source notes --file ~/Documents/my-notes.md
+```
+
+### 12.3 灵魂成长指标
+
+`mindos status` 始终展示灵魂的成长状态：
+
+```
+🧠 Mindos Status
+─────────────────────────
+灵魂年龄：  42 天
+记忆总量：  1,247 条（本周 +89）
+知识图谱：  341 实体 / 1,022 关系
+人格特征：  好奇、高效、直接
+最近成长：  "对设计模式的理解显著加深"
+今日 commit：7 次（Claude ×3, Cursor ×4）
+```
+
+---
+
+## 十三、可视化面板（Dashboard）
+
+```bash
+mindos serve --dashboard
+# ✓ Dashboard 运行在 http://localhost:3456
+```
+
+本地网页面板，展示灵魂的完整状态：
+
+- **记忆浏览器**：按时间/来源/主题浏览所有记忆，支持搜索和删除
+- **知识图谱**：交互式图谱可视化，展示人物、概念、事件之间的关联
+- **人格演化**：时间线展示人格描述的历次变化和触发原因
+- **hydrate 历史**：哪些记忆被注入到了哪个平台的哪次对话
+- **commit 审计**：每次 commit 提取了什么，置信度如何，是否有待确认项
+- **成本追踪**：本月 LLM 调用次数和花费
+
+Dashboard 既增强用户掌控感（"我的灵魂里到底有什么"），也是极好的传播素材。
+
+---
+
+## 十四、数据格式开放规范
+
+`~/.mindos/` 的文件格式不只是实现细节——它是一套**开放标准**。
+
+### 14.1 identity.yaml 规范
+
+```yaml
+# Mindos Identity Schema v1
+version: 1
+name: "Wyon"
+personality:
+  traits: ["curious", "efficient", "direct"]
+  style: "简洁技术风，偶尔幽默"
+  values: ["创新", "效率", "开源"]
+  boundaries: ["不讨论政治", "拒绝生成有害内容"]
+capabilities:
+  - domain: "AI 开发"
+    level: "expert"
+  - domain: "产品设计"
+    level: "proficient"
+relations: []  # 自动维护
+created_at: "2026-03-21"
+updated_at: "2026-03-21"
+```
+
+### 14.2 memory.db Schema（SQLite）
+
+```sql
+CREATE TABLE memories (
+    id          TEXT PRIMARY KEY,
+    type        TEXT NOT NULL,  -- fact / episode / preference / relation / skill
+    content     TEXT NOT NULL,
+    source      TEXT,           -- claude / gpt / cursor / manual
+    confidence  REAL DEFAULT 1.0,
+    created_at  DATETIME,
+    accessed_at DATETIME,
+    access_count INTEGER DEFAULT 0,
+    decay_weight REAL DEFAULT 1.0,
+    embedding   BLOB           -- 向量，用于语义检索
+);
+
+CREATE TABLE knowledge_graph (
+    subject     TEXT,
+    predicate   TEXT,
+    object      TEXT,
+    source      TEXT,
+    confidence  REAL DEFAULT 1.0,
+    created_at  DATETIME,
+    PRIMARY KEY (subject, predicate, object)
+);
+
+CREATE TABLE personality_history (
+    id          TEXT PRIMARY KEY,
+    snapshot    TEXT,           -- 人格描述 JSON
+    trigger     TEXT,           -- 什么触发了这次更新
+    diff        TEXT,           -- 与上一版的差异
+    created_at  DATETIME
+);
+```
+
+发布这套规范的目标：让其他项目能直接读取 Mindos 格式的数据。当 OpenClaw 开始原生支持 `~/.mindos/` 作为 memory provider，协议级护城河就形成了。
+
+---
+
+## 十五、第一行代码之后的世界
 
 ```bash
 # 安装

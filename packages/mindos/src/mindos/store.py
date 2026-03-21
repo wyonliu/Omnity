@@ -1,0 +1,278 @@
+"""L0 Hippocampus — Memory storage backed by SQLite + vector search."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+import time
+import uuid
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Optional
+
+import numpy as np
+
+
+# ---------------------------------------------------------------------------
+# Schema
+# ---------------------------------------------------------------------------
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS memories (
+    id           TEXT PRIMARY KEY,
+    type         TEXT NOT NULL,
+    content      TEXT NOT NULL,
+    source       TEXT,
+    confidence   REAL DEFAULT 1.0,
+    created_at   REAL,
+    accessed_at  REAL,
+    access_count INTEGER DEFAULT 0,
+    decay_weight REAL DEFAULT 1.0,
+    embedding    BLOB,
+    meta         TEXT
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_graph (
+    subject    TEXT,
+    predicate  TEXT,
+    object     TEXT,
+    source     TEXT,
+    confidence REAL DEFAULT 1.0,
+    created_at REAL,
+    PRIMARY KEY (subject, predicate, object)
+);
+
+CREATE TABLE IF NOT EXISTS personality_history (
+    id         TEXT PRIMARY KEY,
+    snapshot   TEXT,
+    trigger    TEXT,
+    diff       TEXT,
+    created_at REAL
+);
+
+CREATE INDEX IF NOT EXISTS idx_mem_type ON memories(type);
+CREATE INDEX IF NOT EXISTS idx_mem_source ON memories(source);
+CREATE INDEX IF NOT EXISTS idx_mem_created ON memories(created_at);
+"""
+
+
+# ---------------------------------------------------------------------------
+# Data types
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Memory:
+    id: str
+    type: str  # fact | episode | preference | relation | skill
+    content: str
+    source: str = ""
+    confidence: float = 1.0
+    created_at: float = 0.0
+    accessed_at: float = 0.0
+    access_count: int = 0
+    decay_weight: float = 1.0
+    embedding: Optional[np.ndarray] = field(default=None, repr=False)
+    meta: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class Triple:
+    subject: str
+    predicate: str
+    object: str
+    source: str = ""
+    confidence: float = 1.0
+
+
+# ---------------------------------------------------------------------------
+# MemoryStore
+# ---------------------------------------------------------------------------
+
+class MemoryStore:
+    """SQLite-backed memory store with in-process vector search."""
+
+    def __init__(self, db_path: str | Path) -> None:
+        self.db_path = Path(db_path)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._conn = sqlite3.connect(str(self.db_path))
+        self._conn.row_factory = sqlite3.Row
+        self._conn.executescript(_SCHEMA)
+        self._embeddings_cache: dict[str, np.ndarray] = {}
+        self._load_embeddings()
+
+    # -- write -----------------------------------------------------------------
+
+    def add(self, mem: Memory) -> str:
+        if not mem.id:
+            mem.id = uuid.uuid4().hex[:12]
+        now = time.time()
+        if not mem.created_at:
+            mem.created_at = now
+        mem.accessed_at = now
+        emb_blob = mem.embedding.tobytes() if mem.embedding is not None else None
+        self._conn.execute(
+            "INSERT OR REPLACE INTO memories "
+            "(id, type, content, source, confidence, created_at, accessed_at, "
+            " access_count, decay_weight, embedding, meta) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (mem.id, mem.type, mem.content, mem.source, mem.confidence,
+             mem.created_at, mem.accessed_at, mem.access_count,
+             mem.decay_weight, emb_blob, json.dumps(mem.meta, ensure_ascii=False)),
+        )
+        self._conn.commit()
+        if mem.embedding is not None:
+            self._embeddings_cache[mem.id] = mem.embedding
+        return mem.id
+
+    def add_triple(self, t: Triple) -> None:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO knowledge_graph "
+            "(subject, predicate, object, source, confidence, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (t.subject, t.predicate, t.object, t.source, t.confidence, time.time()),
+        )
+        self._conn.commit()
+
+    def record_personality(self, snapshot: dict, trigger: str, diff: str = "") -> None:
+        self._conn.execute(
+            "INSERT INTO personality_history (id, snapshot, trigger, diff, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (uuid.uuid4().hex[:12], json.dumps(snapshot, ensure_ascii=False),
+             trigger, diff, time.time()),
+        )
+        self._conn.commit()
+
+    # -- read ------------------------------------------------------------------
+
+    def get(self, mem_id: str) -> Optional[Memory]:
+        row = self._conn.execute("SELECT * FROM memories WHERE id=?", (mem_id,)).fetchone()
+        if not row:
+            return None
+        self._touch(mem_id)
+        return self._row_to_memory(row)
+
+    def search_text(self, query: str, limit: int = 20) -> list[Memory]:
+        """Keyword search (LIKE)."""
+        rows = self._conn.execute(
+            "SELECT * FROM memories WHERE content LIKE ? ORDER BY accessed_at DESC LIMIT ?",
+            (f"%{query}%", limit),
+        ).fetchall()
+        return [self._row_to_memory(r) for r in rows]
+
+    def search_vector(self, query_vec: np.ndarray, top_k: int = 10) -> list[Memory]:
+        """Cosine-similarity vector search against cached embeddings."""
+        if not self._embeddings_cache:
+            return []
+        ids = list(self._embeddings_cache.keys())
+        mat = np.stack([self._embeddings_cache[i] for i in ids])
+        qn = query_vec / (np.linalg.norm(query_vec) + 1e-9)
+        mn = mat / (np.linalg.norm(mat, axis=1, keepdims=True) + 1e-9)
+        scores = mn @ qn
+        top_idx = np.argsort(scores)[::-1][:top_k]
+        result = []
+        for idx in top_idx:
+            mid = ids[idx]
+            mem = self.get(mid)
+            if mem:
+                result.append(mem)
+        return result
+
+    def list_recent(self, limit: int = 50, mem_type: Optional[str] = None) -> list[Memory]:
+        if mem_type:
+            rows = self._conn.execute(
+                "SELECT * FROM memories WHERE type=? ORDER BY created_at DESC LIMIT ?",
+                (mem_type, limit),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM memories ORDER BY created_at DESC LIMIT ?", (limit,),
+            ).fetchall()
+        return [self._row_to_memory(r) for r in rows]
+
+    def count(self) -> int:
+        return self._conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+
+    def triples(self, subject: Optional[str] = None) -> list[Triple]:
+        if subject:
+            rows = self._conn.execute(
+                "SELECT * FROM knowledge_graph WHERE subject=?", (subject,),
+            ).fetchall()
+        else:
+            rows = self._conn.execute("SELECT * FROM knowledge_graph").fetchall()
+        return [Triple(r["subject"], r["predicate"], r["object"], r["source"], r["confidence"])
+                for r in rows]
+
+    def stats(self) -> dict[str, Any]:
+        total = self.count()
+        by_type = {}
+        for row in self._conn.execute(
+            "SELECT type, COUNT(*) as c FROM memories GROUP BY type"
+        ).fetchall():
+            by_type[row["type"]] = row["c"]
+        kg_count = self._conn.execute("SELECT COUNT(*) FROM knowledge_graph").fetchone()[0]
+        return {"total_memories": total, "by_type": by_type, "knowledge_graph_triples": kg_count}
+
+    def personality_timeline(self) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT * FROM personality_history ORDER BY created_at ASC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # -- forget (hard delete) --------------------------------------------------
+
+    def forget(self, pattern: str, mem_type: Optional[str] = None) -> int:
+        """Physical erasure of memories matching pattern. Returns count deleted."""
+        if mem_type:
+            rows = self._conn.execute(
+                "SELECT id FROM memories WHERE content LIKE ? AND type=?",
+                (f"%{pattern}%", mem_type),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT id FROM memories WHERE content LIKE ?", (f"%{pattern}%",),
+            ).fetchall()
+        ids = [r["id"] for r in rows]
+        if not ids:
+            return 0
+        placeholders = ",".join("?" * len(ids))
+        self._conn.execute(f"DELETE FROM memories WHERE id IN ({placeholders})", ids)
+        # Also remove from knowledge graph
+        for mid in ids:
+            self._conn.execute(
+                "DELETE FROM knowledge_graph WHERE subject LIKE ? OR object LIKE ?",
+                (f"%{pattern}%", f"%{pattern}%"),
+            )
+            self._embeddings_cache.pop(mid, None)
+        self._conn.commit()
+        return len(ids)
+
+    # -- internal --------------------------------------------------------------
+
+    def _touch(self, mem_id: str) -> None:
+        self._conn.execute(
+            "UPDATE memories SET accessed_at=?, access_count=access_count+1 WHERE id=?",
+            (time.time(), mem_id),
+        )
+        self._conn.commit()
+
+    def _load_embeddings(self) -> None:
+        rows = self._conn.execute("SELECT id, embedding FROM memories WHERE embedding IS NOT NULL").fetchall()
+        for r in rows:
+            arr = np.frombuffer(r["embedding"], dtype=np.float32)
+            self._embeddings_cache[r["id"]] = arr
+
+    def _row_to_memory(self, row: sqlite3.Row) -> Memory:
+        emb = None
+        if row["embedding"]:
+            emb = np.frombuffer(row["embedding"], dtype=np.float32)
+        meta = json.loads(row["meta"]) if row["meta"] else {}
+        return Memory(
+            id=row["id"], type=row["type"], content=row["content"],
+            source=row["source"] or "", confidence=row["confidence"],
+            created_at=row["created_at"], accessed_at=row["accessed_at"],
+            access_count=row["access_count"], decay_weight=row["decay_weight"],
+            embedding=emb, meta=meta,
+        )
+
+    def close(self) -> None:
+        self._conn.close()
