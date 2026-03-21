@@ -125,6 +125,10 @@ class _Handler(BaseHTTPRequestHandler):
             self._send_json({"events": events, "latest_seq": rt._seq})
             return
 
+        if path == "/api/agents":
+            self._send_json({"agents": rt.list_agents()})
+            return
+
         if path == "/api/summary":
             self._send_json(rt.summary())
             return

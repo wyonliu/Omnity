@@ -61,7 +61,9 @@ export function mountPixelMall(parentId, { onSelect }) {
     const g = ROOM_GEOM[id];
     return g ? { x: tx(g.x + g.w / 2), y: ty(g.z + g.h / 2) } : null;
   }
-  function resolveXY(id) { return entityXY(id) || regionCenter(id); }
+  function resolveXY(id) {
+    return entityXY(id) || regionCenter(id) || agentBasePos(payload?.agents?.[id]);
+  }
 
   function agentBasePos(ag) {
     return ag?.nearTarget ? resolveXY(ag.nearTarget) : null;
@@ -348,11 +350,12 @@ export function mountPixelMall(parentId, { onSelect }) {
   // ── 动画引擎 ─────────────────────────────────────────────────
 
   function startAction(type, agentId, targetId, onDone) {
+    if (anim?.onDone) { const prev = anim.onDone; anim.onDone = null; prev(); }
     const agents = payload?.agents || {};
     const ag = agents[agentId];
     const fromXY = agentBasePos(ag);
-    const toXY = resolveXY(targetId);
-    const frames = 60; // ~1s at 60fps
+    const toXY = resolveXY(targetId) || agentBasePos(agents[targetId]);
+    const frames = 60;
     anim = { type, agentId, targetId, fromXY, toXY, t: frames, total: frames, onDone };
     if (toXY) panTo(toXY.x, toXY.y);
     if (!running) runLoop();
@@ -421,7 +424,10 @@ export function mountPixelMall(parentId, { onSelect }) {
   return {
     refresh(p) { payload = p; items = p.items || []; draw(); },
     action(type, agentId, targetId, onDone) { startAction(type, agentId, targetId, onDone); },
-    clearTrail() { trail = null; anim = null; draw(); },
+    clearTrail() {
+      if (anim?.onDone) { const prev = anim.onDone; anim.onDone = null; prev(); }
+      trail = null; anim = null; draw();
+    },
     destroy() { canvas.remove(); },
   };
 }

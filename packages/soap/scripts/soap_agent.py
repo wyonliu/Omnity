@@ -11,6 +11,9 @@ Usage:
     # With OpenAI:
     OPENAI_API_KEY=sk-... python scripts/soap_agent.py --brain openai
 
+    # With DeepSeek:
+    DEEPSEEK_API_KEY=sk-... python scripts/soap_agent.py --brain deepseek
+
 The agent connects to a running soap-view server, perceives the environment,
 thinks about what to do, and acts — a complete sense-think-act loop.
 """
@@ -179,6 +182,36 @@ def think_openai(perception: Dict, memory: List[Dict], step: int) -> Dict[str, A
     return json.loads(resp.choices[0].message.content)
 
 
+def think_deepseek(perception: Dict, memory: List[Dict], step: int) -> Dict[str, Any]:
+    """Use DeepSeek API (OpenAI-compatible) for reasoning.
+
+    Set DEEPSEEK_API_KEY env var before running.
+    """
+    try:
+        import openai
+    except ImportError:
+        print("ERROR: pip install openai", file=sys.stderr)
+        sys.exit(1)
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
+    if not api_key:
+        print("ERROR: set DEEPSEEK_API_KEY environment variable", file=sys.stderr)
+        sys.exit(1)
+    client = openai.OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+    resp = client.chat.completions.create(
+        model="deepseek-chat",
+        max_tokens=512,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": build_user_prompt(perception, memory, step)},
+        ],
+        response_format={"type": "json_object"},
+    )
+    text = resp.choices[0].message.content.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+    return json.loads(text)
+
+
 def think_heuristic(perception: Dict, memory: List[Dict], step: int) -> Dict[str, Any]:
     """Built-in heuristic brain — no API key needed.
 
@@ -300,6 +333,7 @@ BRAINS = {
     "heuristic": think_heuristic,
     "claude": think_claude,
     "openai": think_openai,
+    "deepseek": think_deepseek,
 }
 
 

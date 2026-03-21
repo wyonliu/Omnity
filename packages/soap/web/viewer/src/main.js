@@ -75,9 +75,16 @@ function fillRoleSelect() {
 
 // ── 控制台 ─────────────────────────────────────────────────────
 
-function fillTargets() {
+function fillTargets(extraAgents) {
   const sel = $("ctrlTarget");
   sel.innerHTML = "";
+  if (extraAgents?.length) {
+    for (const a of extraAgents) {
+      const opt = document.createElement("option"); opt.value = a.id;
+      opt.textContent = `🤖 ${a.id} (HP=${a.hp ?? "?"})`;
+      sel.appendChild(opt);
+    }
+  }
   for (const r of scene?.regions || []) {
     const opt = document.createElement("option"); opt.value = r.id;
     opt.textContent = `📍 ${r.name || r.id}`; sel.appendChild(opt);
@@ -195,6 +202,24 @@ const DEMO_PLAN = [
 
 let demoRunning = false;
 let demoAbort = false;
+let demoInterrupted = false;
+let demoResolveWait = null;
+
+function handleAgentInterrupted(targetAgentId, attackerId, data) {
+  if (targetAgentId === "explorer" && demoRunning) {
+    demoInterrupted = true;
+    const hp = data.hp_remaining ?? "?";
+    const action = data.action || "attack";
+    logThought("explorer", `被 ${attackerId} 打断了！(${action}, HP=${hp}) 需要重新规划…`);
+    agentState["explorer"] = {
+      ...agentState["explorer"],
+      thought: `被 ${attackerId} 打断了！HP=${hp}`,
+      hp,
+    };
+    renderMap();
+    if (demoResolveWait) demoResolveWait();
+  }
+}
 
 function logThought(agentId, text) {
   const log = $("eventLog");
@@ -205,28 +230,60 @@ function logThought(agentId, text) {
   log.scrollTop = log.scrollHeight;
 }
 
+function interruptibleSleep(ms) {
+  return new Promise(resolve => {
+    demoResolveWait = resolve;
+    const timer = setTimeout(() => { demoResolveWait = null; resolve(); }, ms);
+    const orig = demoResolveWait;
+    demoResolveWait = () => { clearTimeout(timer); demoResolveWait = null; resolve(); };
+  });
+}
+
 async function runDemoAgent() {
   if (demoRunning) { demoAbort = true; return; }
-  demoRunning = true; demoAbort = false;
+  demoRunning = true; demoAbort = false; demoInterrupted = false;
   const btn = $("qDemo");
   btn.textContent = "⏹ 停止"; btn.style.borderColor = "var(--accent)";
 
   const agentId = "explorer";
-  agentState[agentId] = { nearTarget: "atrium", thought: null };
+  agentState[agentId] = { nearTarget: "atrium", thought: null, hp: 100 };
   renderMap();
   await sleep(500);
 
   for (const step of DEMO_PLAN) {
     if (demoAbort) break;
+
+    if (demoInterrupted) {
+      demoInterrupted = false;
+      agentState[agentId].thought = "呃……让我缓一下……";
+      renderMap();
+      logThought(agentId, "被打断后需要恢复，稍等片刻…");
+      await interruptibleSleep(3000);
+      if (demoAbort) break;
+      const hp = agentState[agentId].hp ?? 100;
+      if (hp <= 0) {
+        agentState[agentId].thought = "我被击败了……";
+        renderMap();
+        logThought(agentId, "HP归零，巡游终止。");
+        await sleep(2000);
+        break;
+      }
+      agentState[agentId].thought = "好吧，继续探索！";
+      renderMap();
+      logThought(agentId, "恢复完毕，继续巡游。");
+      await sleep(1500);
+    }
+
     agentState[agentId].thought = step.thought;
     renderMap();
     logThought(agentId, step.thought);
-    await sleep(step.think || 1000);
+    await interruptibleSleep(step.think || 1000);
     if (demoAbort) break;
+    if (demoInterrupted) continue;
     await executeAction(agentId, step.verb, step.target, step.params || {});
     agentState[agentId].thought = null;
     renderMap();
-    await sleep(step.pause || 1500);
+    await interruptibleSleep(step.pause || 1500);
   }
 
   if (!demoAbort) {
@@ -277,8 +334,25 @@ function evHTML(ev) {
 
 async function pollEvents() {
   try {
-    const res = await fetch(`/api/events?after=${lastSeq}`);
-    const data = await res.json();
+    const [evRes, agRes] = await Promise.all([
+      fetch(`/api/events?after=${lastSeq}`),
+      fetch("/api/agents"),
+    ]);
+    const data = await evRes.json();
+    const agData = await agRes.json();
+    const serverAgents = agData.agents || [];
+
+    const prevSel = $("ctrlTarget").value;
+    fillTargets(serverAgents);
+    if (prevSel) $("ctrlTarget").value = prevSel;
+
+    for (const sa of serverAgents) {
+      if (!agentState[sa.id]) agentState[sa.id] = {};
+      agentState[sa.id].hp = sa.hp;
+      agentState[sa.id].serverStatus = sa.status;
+      if (sa.near_target) agentState[sa.id].nearTarget = sa.near_target;
+    }
+
     const events = data.events || [];
     if (events.length > 0) {
       const log = $("eventLog");
@@ -288,6 +362,9 @@ async function pollEvents() {
         if (ev.result?.ok && ev.agent_id) {
           if (!agentState[ev.agent_id]) agentState[ev.agent_id] = {};
           agentState[ev.agent_id].nearTarget = ev.target_id;
+        }
+        if (ev.result?.data?.interrupted && ev.result?.data?.is_agent) {
+          handleAgentInterrupted(ev.target_id, ev.agent_id, ev.result.data);
         }
       }
       log.scrollTop = log.scrollHeight;

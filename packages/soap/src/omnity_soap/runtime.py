@@ -10,9 +10,10 @@ import copy
 import json
 import threading
 import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from omnity_soap.validate import validate_scene_file
 
@@ -57,6 +58,60 @@ class Event:
 
 
 @dataclass
+class AgentRecord:
+    """Registered agent with presence tracking."""
+    id: str
+    agent_type: str  # "human" | "autonomous" | "npc" | "robot" | "unknown"
+    capabilities: List[str] = field(default_factory=list)
+    position: Optional[List[float]] = None
+    near_target: str = "atrium"
+    meta: Dict[str, Any] = field(default_factory=dict)
+    registered_at: float = 0.0
+    last_heartbeat: float = 0.0
+    status: str = "active"  # "active" | "stale" | "disconnected"
+    hp: int = 100
+    action_count: int = 0
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {
+            "id": self.id, "agent_type": self.agent_type,
+            "capabilities": self.capabilities,
+            "near_target": self.near_target,
+            "status": self.status, "hp": self.hp,
+            "action_count": self.action_count,
+            "registered_at": self.registered_at,
+            "last_heartbeat": self.last_heartbeat,
+        }
+        if self.position:
+            d["position"] = self.position
+        if self.meta:
+            d["meta"] = self.meta
+        return d
+
+
+@dataclass
+class LockRecord:
+    """Advisory lock on an object."""
+    object_id: str
+    agent_id: str
+    lock_id: str
+    acquired_at: float
+    ttl: float
+    expires_at: float
+
+    def is_expired(self) -> bool:
+        return time.time() > self.expires_at
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "object_id": self.object_id, "agent_id": self.agent_id,
+            "lock_id": self.lock_id, "acquired_at": self.acquired_at,
+            "ttl": self.ttl, "expires_at": self.expires_at,
+            "expired": self.is_expired(),
+        }
+
+
+@dataclass
 class SOAPRuntime:
     """Mutable in-memory scene graph with action execution and event log."""
 
@@ -65,6 +120,10 @@ class SOAPRuntime:
     event_log: List[Event] = field(default_factory=list)
     _seq: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    _agents: Dict[str, Dict[str, Any]] = field(default_factory=dict, repr=False)
+    _agent_registry: Dict[str, AgentRecord] = field(default_factory=dict, repr=False)
+    _object_locks: Dict[str, LockRecord] = field(default_factory=dict, repr=False)
+    _event_listeners: List[Callable] = field(default_factory=list, repr=False)
 
     @classmethod
     def load(cls, path: Path) -> SOAPRuntime:
@@ -72,7 +131,192 @@ class SOAPRuntime:
         raw = json.loads(path.read_text(encoding="utf-8"))
         return cls(raw=copy.deepcopy(raw), space_id=raw["space_id"])
 
-    # ── read API (unchanged) ────────────────────────────────────
+    # ── agent tracking ─────────────────────────────────────────
+
+    def _touch_agent(self, agent_id: str, near_target: Optional[str] = None) -> Dict[str, Any]:
+        """Ensure agent is tracked; update position if given."""
+        ag = self._agents.setdefault(agent_id, {
+            "id": agent_id, "hp": 100, "status": "active",
+            "near_target": "atrium", "action_count": 0,
+        })
+        ag["action_count"] = ag.get("action_count", 0) + 1
+        ag["last_active"] = time.time()
+        if near_target:
+            ag["near_target"] = near_target
+        return ag
+
+    def list_agents(self) -> List[Dict[str, Any]]:
+        # Prefer registry records; fall back to legacy _agents
+        if self._agent_registry:
+            return [ar.to_dict() for ar in self._agent_registry.values()]
+        return list(self._agents.values())
+
+    def get_agent(self, agent_id: str) -> Optional[Dict[str, Any]]:
+        ar = self._agent_registry.get(agent_id)
+        if ar:
+            return ar.to_dict()
+        return self._agents.get(agent_id)
+
+    # ── agent registry ────────────────────────────────────────
+
+    def register_agent(self, agent_id: str, agent_type: str = "unknown",
+                       capabilities: Optional[List[str]] = None,
+                       position: Optional[List[float]] = None,
+                       meta: Optional[Dict[str, Any]] = None) -> AgentRecord:
+        """Register an agent. Raises ValueError if already registered."""
+        if agent_id in self._agent_registry:
+            raise ValueError(f"Agent '{agent_id}' already registered")
+        now = time.time()
+        ar = AgentRecord(
+            id=agent_id, agent_type=agent_type,
+            capabilities=capabilities or [],
+            position=position, meta=meta or {},
+            registered_at=now, last_heartbeat=now,
+        )
+        self._agent_registry[agent_id] = ar
+        # also track in legacy dict for backward compat
+        self._agents[agent_id] = ar.to_dict()
+        self._notify_listeners("agent.registered", {"agent": ar.to_dict()})
+        return ar
+
+    def deregister_agent(self, agent_id: str) -> bool:
+        """Remove agent. Returns True if found."""
+        ar = self._agent_registry.pop(agent_id, None)
+        self._agents.pop(agent_id, None)
+        if ar:
+            self._notify_listeners("agent.deregistered", {"agent_id": agent_id})
+            return True
+        return False
+
+    def heartbeat(self, agent_id: str, position: Optional[List[float]] = None,
+                  status: str = "active") -> bool:
+        """Update agent heartbeat. Returns False if not registered."""
+        ar = self._agent_registry.get(agent_id)
+        if not ar:
+            return False
+        ar.last_heartbeat = time.time()
+        ar.status = status
+        if position:
+            ar.position = position
+        # sync legacy
+        self._agents[agent_id] = ar.to_dict()
+        return True
+
+    def get_registered_agent(self, agent_id: str) -> Optional[AgentRecord]:
+        return self._agent_registry.get(agent_id)
+
+    def nearby_agents(self, agent_id: str, radius: float = 10.0) -> List[Dict[str, Any]]:
+        """Return agents near the given agent (same region or with close positions)."""
+        me = self._agent_registry.get(agent_id)
+        if not me:
+            return []
+        results = []
+        for ar in self._agent_registry.values():
+            if ar.id == agent_id or ar.status == "disconnected":
+                continue
+            # position-based distance
+            if me.position and ar.position and len(me.position) >= 3 and len(ar.position) >= 3:
+                dx = me.position[0] - ar.position[0]
+                dy = me.position[1] - ar.position[1]
+                dz = me.position[2] - ar.position[2]
+                dist = (dx*dx + dy*dy + dz*dz) ** 0.5
+                if dist <= radius:
+                    results.append(ar.to_dict())
+                continue
+            # fallback: same near_target
+            if me.near_target and me.near_target == ar.near_target:
+                results.append(ar.to_dict())
+        return results
+
+    def reap_stale_agents(self, heartbeat_ttl: float = 30.0) -> List[str]:
+        """Mark agents stale/disconnected based on heartbeat TTL. Returns changed IDs."""
+        now = time.time()
+        changed = []
+        for ar in list(self._agent_registry.values()):
+            elapsed = now - ar.last_heartbeat
+            if ar.status == "active" and elapsed > heartbeat_ttl:
+                ar.status = "stale"
+                self._agents[ar.id] = ar.to_dict()
+                changed.append(ar.id)
+            elif ar.status == "stale" and elapsed > heartbeat_ttl * 2:
+                ar.status = "disconnected"
+                self._agents[ar.id] = ar.to_dict()
+                changed.append(ar.id)
+        if changed:
+            self._notify_listeners("agents.status_changed",
+                                   {"agent_ids": changed})
+        return changed
+
+    # ── object locking ────────────────────────────────────────
+
+    def acquire_lock(self, object_id: str, agent_id: str,
+                     ttl: float = 30.0) -> Optional[LockRecord]:
+        """Acquire advisory lock. Returns None if already held by another agent."""
+        with self._lock:
+            existing = self._object_locks.get(object_id)
+            if existing and not existing.is_expired() and existing.agent_id != agent_id:
+                return None  # held by someone else
+            now = time.time()
+            lr = LockRecord(
+                object_id=object_id, agent_id=agent_id,
+                lock_id=str(uuid.uuid4()), acquired_at=now,
+                ttl=ttl, expires_at=now + ttl,
+            )
+            self._object_locks[object_id] = lr
+            self._notify_listeners("lock.acquired", lr.to_dict())
+            return lr
+
+    def release_lock(self, object_id: str, agent_id: str) -> bool:
+        """Release lock. Only the holder can release."""
+        with self._lock:
+            lr = self._object_locks.get(object_id)
+            if not lr:
+                return False
+            if lr.agent_id != agent_id and not lr.is_expired():
+                return False
+            self._object_locks.pop(object_id, None)
+            self._notify_listeners("lock.released",
+                                   {"object_id": object_id, "agent_id": agent_id})
+            return True
+
+    def check_lock(self, object_id: str) -> Optional[LockRecord]:
+        """Check lock status. Auto-clears expired locks."""
+        lr = self._object_locks.get(object_id)
+        if lr and lr.is_expired():
+            self._object_locks.pop(object_id, None)
+            self._notify_listeners("lock.expired", lr.to_dict())
+            return None
+        return lr
+
+    def _check_lock_for_manipulate(self, object_id: str, agent_id: str) -> Optional[ActionResult]:
+        """Returns LOCK_HELD ActionResult if object is locked by another agent, else None."""
+        lr = self.check_lock(object_id)
+        if lr and lr.agent_id != agent_id:
+            return ActionResult(
+                ok=False, verb="MANIPULATE", code="LOCK_HELD",
+                detail=f"Object '{object_id}' is locked by agent '{lr.agent_id}' until {lr.expires_at}",
+            )
+        return None
+
+    # ── event listeners ───────────────────────────────────────
+
+    def add_event_listener(self, callback: Callable) -> None:
+        self._event_listeners.append(callback)
+
+    def remove_event_listener(self, callback: Callable) -> None:
+        try:
+            self._event_listeners.remove(callback)
+        except ValueError:
+            pass
+
+    def _notify_listeners(self, topic: str, data: Any) -> None:
+        for cb in self._event_listeners:
+            try:
+                cb(topic, data)
+            except Exception:
+                pass
+
+    # ── read API ──────────────────────────────────────────────
 
     def summary(self) -> Dict[str, Any]:
         return {
@@ -81,6 +325,7 @@ class SOAPRuntime:
             "title": self.raw.get("title"),
             "object_count": len(self.raw.get("objects", [])),
             "region_count": len(self.raw.get("regions", [])),
+            "agent_count": len(self._agents),
             "event_count": len(self.event_log),
         }
 
@@ -117,12 +362,16 @@ class SOAPRuntime:
                 result=result.to_dict(),
             )
             self.event_log.append(ev)
-            return ev
+        # notify outside lock to avoid deadlocks
+        self._notify_listeners("events", ev.to_dict())
+        return ev
 
     # ── action verbs ────────────────────────────────────────────
 
     def observe(self, agent_id: str, target_id: str) -> ActionResult:
-        """OBSERVE — 返回目标物体/区域的感知摘要。"""
+        """OBSERVE — 返回目标物体/区域/agent 的感知摘要。"""
+        self._touch_agent(agent_id, near_target=target_id)
+
         obj = self.get_object(target_id)
         if obj is not None:
             snapshot = {
@@ -148,18 +397,37 @@ class SOAPRuntime:
                         "id": o["id"], "type": o.get("type"),
                         "reality": o.get("reality"),
                     })
+            agents_here = [a for a in self._agents.values()
+                           if a.get("near_target") in
+                           ([region["id"]] + region.get("contained_object_ids", []))]
             snapshot = {
                 "id": region["id"],
                 "name": region.get("name"),
                 "purpose_tags": region.get("purpose_tags", []),
                 "objects": objs_in,
+                "agents": [{"id": a["id"], "hp": a.get("hp"), "status": a.get("status")}
+                           for a in agents_here if a["id"] != agent_id],
+            }
+            res = ActionResult(ok=True, verb="OBSERVE", code="OK", data=snapshot)
+            self._record(agent_id, "OBSERVE", target_id, {}, res)
+            return res
+
+        target_agent = self.get_agent(target_id)
+        if target_agent is not None:
+            snapshot = {
+                "id": target_agent["id"],
+                "type": "agent",
+                "hp": target_agent.get("hp", 100),
+                "status": target_agent.get("status", "active"),
+                "near_target": target_agent.get("near_target"),
+                "action_count": target_agent.get("action_count", 0),
             }
             res = ActionResult(ok=True, verb="OBSERVE", code="OK", data=snapshot)
             self._record(agent_id, "OBSERVE", target_id, {}, res)
             return res
 
         res = ActionResult(ok=False, verb="OBSERVE", code="NOT_FOUND",
-                           detail=f"No object or region with id '{target_id}'")
+                           detail=f"No object, region, or agent with id '{target_id}'")
         self._record(agent_id, "OBSERVE", target_id, {}, res)
         return res
 
@@ -168,6 +436,7 @@ class SOAPRuntime:
 
         如果 object_id 是区域而非物体，视为 agent 自身移动到该区域（记录事件但不修改场景几何）。
         """
+        self._touch_agent(agent_id, near_target=object_id)
         obj = self.get_object(object_id)
         if obj is None:
             region = self.get_region(object_id)
@@ -221,8 +490,21 @@ class SOAPRuntime:
 
     def manipulate(self, agent_id: str, object_id: str, action: str,
                    params: Optional[Dict[str, Any]] = None) -> ActionResult:
-        """MANIPULATE — 对物体执行一个 affordance 动作。"""
+        """MANIPULATE — 对物体或 agent 执行动作。"""
         params = params or {}
+        self._touch_agent(agent_id)
+
+        # Advisory lock check
+        lock_err = self._check_lock_for_manipulate(object_id, agent_id)
+        if lock_err:
+            self._record(agent_id, "MANIPULATE", object_id,
+                         {"action": action, **params}, lock_err)
+            return lock_err
+
+        target_agent = self.get_agent(object_id)
+        if target_agent is not None and object_id != agent_id:
+            return self._manipulate_agent(agent_id, target_agent, action, params)
+
         obj = self.get_object(object_id)
         if obj is None:
             res = ActionResult(ok=False, verb="MANIPULATE", code="UNKNOWN_OBJECT",
@@ -294,6 +576,40 @@ class SOAPRuntime:
                            detail=f"{action} on {object_id}", data=response_data)
         self._record(agent_id, "MANIPULATE", object_id,
                      {"action": action, **params}, res)
+        return res
+
+    def _manipulate_agent(self, agent_id: str, target: Dict[str, Any],
+                          action: str, params: Dict[str, Any]) -> ActionResult:
+        """Handle MANIPULATE actions targeting another agent."""
+        tid = target["id"]
+        response_data: Dict[str, Any] = {"object_id": tid, "action": action, "is_agent": True}
+
+        if action == "attack_target":
+            damage = params.get("damage", 25)
+            hp = target.get("hp", 100)
+            hp = max(0, hp - damage)
+            target["hp"] = hp
+            response_data["hp_remaining"] = hp
+            response_data["damage_dealt"] = damage
+            if hp == 0:
+                target["status"] = "defeated"
+                response_data["defeated"] = True
+            else:
+                target["status"] = "interrupted"
+                response_data["interrupted"] = True
+
+        elif action == "speak":
+            msg = params.get("message", "")
+            response_data["reply"] = f"[{tid}] 嗯？谁在跟我说话……「{msg}」"
+            target["status"] = "interrupted"
+            response_data["interrupted"] = True
+
+        else:
+            response_data["reply"] = f"[{tid}] 对 agent 执行了 {action}"
+
+        res = ActionResult(ok=True, verb="MANIPULATE", code="OK",
+                           detail=f"{action} on agent {tid}", data=response_data)
+        self._record(agent_id, "MANIPULATE", tid, {"action": action, **params}, res)
         return res
 
     def _npc_reply(self, obj: Dict[str, Any], message: str) -> str:
