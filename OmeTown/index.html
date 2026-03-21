@@ -102,8 +102,10 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:cen
 .arch-layer:hover{background:rgba(0,212,255,0.03);}
 .arch-level{padding:28px 24px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-right:1px solid var(--border2);text-align:center;}
 .arch-level-num{font-family:'Space Mono',monospace;font-size:11px;letter-spacing:3px;font-weight:700;}
-.arch-level-num.l3{color:var(--gold);}
-.arch-level-num.l2{color:var(--violet2);}
+.arch-level-num.l5{color:var(--gold);}
+.arch-level-num.l4{color:var(--rose);}
+.arch-level-num.l3{color:var(--violet2);}
+.arch-level-num.l2{color:var(--green);}
 .arch-level-num.l1{color:var(--cyan);}
 .arch-content{padding:24px 32px;}
 .arch-name{font-family:'Noto Serif SC',serif;font-size:17px;font-weight:700;color:var(--text);margin-bottom:6px;}
@@ -158,21 +160,22 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:cen
 
 /* LANDSCAPE */
 .landscape{margin-top:48px;position:relative;}
-.ls-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:0;border:1px solid var(--border);min-height:420px;}
+.ls-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:0;border:2px solid rgba(0,212,255,0.25);min-height:420px;position:relative;}
+.ls-grid::before{content:'';position:absolute;top:50%;left:0;right:0;height:2px;background:linear-gradient(to right,rgba(0,212,255,0.08),rgba(0,212,255,0.3),rgba(0,212,255,0.08));z-index:1;pointer-events:none;}
+.ls-grid::after{content:'';position:absolute;left:50%;top:0;bottom:0;width:2px;background:linear-gradient(to bottom,rgba(0,212,255,0.08),rgba(0,212,255,0.3),rgba(0,212,255,0.08));z-index:1;pointer-events:none;}
 .ls-quad{padding:32px;display:flex;flex-direction:column;position:relative;}
-.ls-quad:nth-child(1){border-right:1px solid var(--border);border-bottom:1px solid var(--border);}
-.ls-quad:nth-child(2){border-bottom:1px solid var(--border);}
-.ls-quad:nth-child(3){border-right:1px solid var(--border);}
+.ls-quad:nth-child(1){border-right:1px solid transparent;border-bottom:1px solid transparent;}
+.ls-quad:nth-child(2){border-bottom:1px solid transparent;}
+.ls-quad:nth-child(3){border-right:1px solid transparent;}
 .ls-q-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:3px;color:var(--muted2);margin-bottom:auto;}
-/* top-right is OmeTown */
-.ls-quad.star{background:linear-gradient(135deg,rgba(0,212,255,0.06),rgba(139,92,246,0.04));position:relative;}
-.ls-quad.star::after{content:'';position:absolute;inset:0;border:1px solid rgba(0,212,255,0.2);pointer-events:none;}
+.ls-quad.star{background:linear-gradient(135deg,rgba(0,212,255,0.08),rgba(139,92,246,0.06));position:relative;}
+.ls-quad.star::after{content:'';position:absolute;inset:0;border:2px solid rgba(0,212,255,0.3);pointer-events:none;box-shadow:inset 0 0 40px rgba(0,212,255,0.05);}
 .ls-item{margin-top:12px;}
 .ls-item-name{font-family:'Noto Serif SC',serif;font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;}
 .ls-item-name.gold{color:var(--cyan);font-size:20px;}
 .ls-item-desc{font-size:11px;color:var(--muted2);line-height:1.5;}
-.ls-axis-x{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-family:'Space Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--muted2);padding:0 4px;}
-.ls-axis-y{position:absolute;top:0;bottom:0;left:-56px;display:flex;flex-direction:column;justify-content:space-between;align-items:center;font-family:'Space Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--muted2);padding:4px 0;}
+.ls-axis-x{display:flex;justify-content:space-between;align-items:center;margin-top:14px;font-family:'Space Mono',monospace;font-size:11px;letter-spacing:4px;color:var(--cyan);padding:0 4px;opacity:0.7;}
+.ls-axis-y{position:absolute;top:0;bottom:0;left:-64px;display:flex;flex-direction:column;justify-content:space-between;align-items:center;font-family:'Space Mono',monospace;font-size:11px;letter-spacing:4px;color:var(--cyan);padding:4px 0;opacity:0.7;}
 .ls-axis-y span{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;}
 
 .comp-table{width:100%;border-collapse:collapse;margin-top:48px;}
@@ -414,20 +417,36 @@ footer{border-top:1px solid var(--border2);padding:60px 48px;text-align:center;p
   </div>
 
   <!-- ARCHITECTURE -->
-  <h3 class="reveal" style="font-family:'Noto Serif SC',serif;font-size:22px;font-weight:700;margin-top:64px;margin-bottom:4px;">三层架构（对应开源 Monorepo）</h3>
+  <h3 class="reveal" style="font-family:'Noto Serif SC',serif;font-size:22px;font-weight:700;margin-top:64px;margin-bottom:4px;">五层架构（对应五个开源子项目）</h3>
   <div class="arch-diagram reveal">
+    <div class="arch-layer">
+      <div class="arch-level"><span class="arch-level-num l5">LAYER 5</span></div>
+      <div class="arch-content">
+        <div class="arch-name">世界层 — OmeTown</div>
+        <div class="arch-pkg">PACKAGES/OMETOWN</div>
+        <div class="arch-desc">终局产品：集成所有子项目的虚实共生世界 &middot; 永续小镇 &middot; 多端体验</div>
+      </div>
+    </div>
+    <div class="arch-layer">
+      <div class="arch-level"><span class="arch-level-num l4">LAYER 4</span></div>
+      <div class="arch-content">
+        <div class="arch-name">经济层 — Maxim</div>
+        <div class="arch-pkg">PACKAGES/MAXIM</div>
+        <div class="arch-desc">多 Agent 社会仿真 + 经济引擎 &middot; OmeCoin 锚定真实服务价值 &middot; 职业/收入/消费/交易/供需全闭环</div>
+      </div>
+    </div>
     <div class="arch-layer">
       <div class="arch-level"><span class="arch-level-num l3">LAYER 3</span></div>
       <div class="arch-content">
-        <div class="arch-name">经济层 — Ome Economy</div>
-        <div class="arch-pkg">PACKAGES/OME + PACKAGES/MAXIM</div>
-        <div class="arch-desc">每个 Ome 是独立经济体 &middot; OmeCoin 锚定真实服务价值 &middot; 数字劳动 &rarr; 真实收益 &middot; 社会仿真 + 经济引擎</div>
+        <div class="arch-name">生命层 — Ome</div>
+        <div class="arch-pkg">PACKAGES/OME</div>
+        <div class="arch-desc">个体 Agent 养成系统 &middot; 人格复制 + 技能 + 工作 + 社交 + 成长 &middot; 活着的数字生命</div>
       </div>
     </div>
     <div class="arch-layer">
       <div class="arch-level"><span class="arch-level-num l2">LAYER 2</span></div>
       <div class="arch-content">
-        <div class="arch-name">生命层 — Mindos</div>
+        <div class="arch-name">智慧层 — Mindos</div>
         <div class="arch-pkg">PACKAGES/MINDOS</div>
         <div class="arch-desc">多层脑 L0 记忆 &rarr; L1 本能 &rarr; L2 思考 &rarr; L3 意图 &middot; 反思/成长 &middot; 单体日成本 &lt; &yen;0.3</div>
       </div>
@@ -435,9 +454,9 @@ footer{border-top:1px solid var(--border2);padding:60px 48px;text-align:center;p
     <div class="arch-layer">
       <div class="arch-level"><span class="arch-level-num l1">LAYER 1</span></div>
       <div class="arch-content">
-        <div class="arch-name">世界层 — SOAP (Spatial Omnity Agentic Protocol)</div>
+        <div class="arch-name">协议层 — SOAP</div>
         <div class="arch-pkg">PACKAGES/SOAP</div>
-        <div class="arch-desc">空间智能体开放协议 &middot; scan / sem / edit / render / soap-mcp &middot; 手机 / PC / MR / 具身 / AI 眼镜</div>
+        <div class="arch-desc">空间智能体开放协议 &middot; scan / sem / edit / render / soap-mcp &middot; 手机/PC/MR/具身/AI 眼镜</div>
       </div>
     </div>
   </div>
@@ -706,7 +725,10 @@ footer{border-top:1px solid var(--border2);padding:60px 48px;text-align:center;p
       不是另一个世界——<br>
       是你这个世界的<span style="color:var(--cyan);font-weight:600;">无限放大器</span>。
     </p>
-    <p class="vision-sub" style="margin-top:40px;">THE FIRST WORLD OF HUMAN-AI SYMBIOSIS</p>
+    <p class="hero-title" style="font-size:clamp(28px,5vw,56px);margin-top:40px;animation:none;opacity:1;">
+      <span class="line1">OmeTown</span>
+    </p>
+    <p class="vision-sub" style="margin-top:16px;">THE FIRST WORLD OF HUMAN-AI SYMBIOSIS</p>
     <p class="vision-sub" style="margin-top:12px;">REAL SPACES &middot; REAL RELATIONSHIPS &middot; REAL VALUE</p>
   </div>
 </section>
