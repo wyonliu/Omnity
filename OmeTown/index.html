@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OmeTown · The First World of Human-AI Symbiosis</title>
+<meta name="description" content="OmeTown — AI与人共生的永续小镇。真实空间，真实关系，真实价值。Omnity开源生态。">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F3D8;</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;700;900&family=Space+Mono:wght@400;700&family=Noto+Sans+SC:wght@300;400;500;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:#040410;--deep:#080818;--panel:#0c0c20;--card:#10102a;--card2:#141436;
+  --cyan:#00d4ff;--cyan2:#38e8ff;--gold:#c8a96e;--gold2:#e8c87a;
+  --violet:#8b5cf6;--violet2:#a78bfa;--rose:#f472b6;--green:#34d399;
+  --text:#e8e4f0;--muted:rgba(232,228,240,0.5);--muted2:rgba(232,228,240,0.3);
+  --border:rgba(0,212,255,0.12);--border2:rgba(0,212,255,0.06);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{background:var(--void);color:var(--text);font-family:'Noto Sans SC','Inter',sans-serif;overflow-x:hidden;}
+::-webkit-scrollbar{width:3px;}::-webkit-scrollbar-track{background:var(--void);}::-webkit-scrollbar-thumb{background:var(--cyan);}
+#cosmos{position:fixed;inset:0;z-index:0;pointer-events:none;}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:0 48px;height:64px;background:rgba(4,4,16,0.88);border-bottom:1px solid var(--border2);backdrop-filter:blur(20px);}
+.nav-logo{font-family:'Noto Serif SC',serif;font-size:22px;font-weight:900;letter-spacing:1px;}
+.nav-logo .o{color:var(--cyan);}.nav-logo .me{color:var(--text);}.nav-logo .tag{color:var(--violet2);opacity:0.5;font-size:13px;margin-left:8px;font-family:'Space Mono',monospace;font-weight:400;letter-spacing:3px;}
+.nav-links{display:flex;gap:28px;align-items:center;}
+.nav-link{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--muted);text-decoration:none;transition:color 0.2s;}.nav-link:hover{color:var(--cyan);}
+.nav-btn{background:var(--cyan);color:var(--void);font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:2px;padding:8px 20px;border:none;cursor:pointer;transition:all 0.2s;text-decoration:none;}.nav-btn:hover{background:var(--cyan2);}
+
+/* ANIMATIONS */
+@keyframes fadeUp{from{opacity:0;transform:translateY(32px);}to{opacity:1;transform:translateY(0);}}
+@keyframes glow{0%,100%{opacity:0.4;}50%{opacity:1;}}
+@keyframes pulse-ring{0%{transform:scale(1);opacity:0.6;}100%{transform:scale(2.5);opacity:0;}}
+.reveal{opacity:0;transform:translateY(40px);transition:all 0.8s cubic-bezier(0.16,1,0.3,1);}.reveal.visible{opacity:1;transform:translateY(0);}
+
+/* HERO */
+.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 40px 60px;text-align:center;position:relative;z-index:1;}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 45% at 50% 35%,rgba(0,212,255,0.06) 0%,transparent 70%),radial-gradient(ellipse 40% 30% at 30% 60%,rgba(139,92,246,0.04) 0%,transparent 60%);pointer-events:none;}
+.hero-badge{font-family:'Space Mono',monospace;font-size:11px;letter-spacing:5px;color:var(--cyan);margin-bottom:40px;display:flex;align-items:center;gap:12px;opacity:0;animation:fadeUp 1s 0.2s forwards;}
+.hero-dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);animation:glow 2.5s infinite;position:relative;}
+.hero-dot::after{content:'';position:absolute;inset:-4px;border-radius:50%;border:1px solid var(--cyan);animation:pulse-ring 2.5s infinite;}
+.hero-title{font-family:'Noto Serif SC',serif;font-size:clamp(44px,9vw,110px);font-weight:900;line-height:0.92;letter-spacing:-2px;opacity:0;animation:fadeUp 1.2s 0.4s forwards;}
+.hero-title .line1{display:block;background:linear-gradient(135deg,var(--cyan),var(--violet2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.hero-title .line2{display:block;color:var(--text);margin-top:4px;font-size:clamp(28px,5vw,60px);}
+.hero-tagline{margin-top:28px;font-family:'Space Mono',monospace;font-size:12px;letter-spacing:6px;color:var(--muted);opacity:0;animation:fadeUp 1s 0.7s forwards;text-transform:uppercase;}
+.hero-desc{margin-top:36px;font-size:clamp(16px,1.8vw,21px);font-weight:300;line-height:1.9;max-width:760px;color:rgba(232,228,240,0.75);opacity:0;animation:fadeUp 1s 0.9s forwards;}
+.hero-desc em{color:var(--cyan);font-style:normal;font-weight:500;}
+.hero-desc .gold{color:var(--gold);font-weight:600;}
+.hero-cta{margin-top:48px;display:flex;gap:16px;flex-wrap:wrap;justify-content:center;opacity:0;animation:fadeUp 1s 1.1s forwards;}
+.btn-glow{background:linear-gradient(135deg,var(--cyan),#0099cc);color:var(--void);font-family:'Space Mono',monospace;font-size:12px;font-weight:700;letter-spacing:3px;padding:16px 40px;border:none;cursor:pointer;transition:all 0.3s;text-decoration:none;}
+.btn-glow:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,212,255,0.3);}
+.btn-ghost{background:transparent;color:var(--cyan);font-family:'Space Mono',monospace;font-size:12px;letter-spacing:3px;padding:16px 40px;border:1px solid rgba(0,212,255,0.3);cursor:pointer;transition:all 0.2s;text-decoration:none;}
+.btn-ghost:hover{background:rgba(0,212,255,0.06);border-color:var(--cyan);}
+.scroll-hint{position:absolute;bottom:36px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;opacity:0;animation:fadeUp 1s 2s forwards;}
+.scroll-hint span{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:4px;color:rgba(0,212,255,0.3);}
+.scroll-line{width:1px;height:48px;background:linear-gradient(to bottom,var(--cyan),transparent);animation:scrollP 2.5s infinite;}
+@keyframes scrollP{0%{transform:scaleY(0);transform-origin:top;}50%{transform:scaleY(1);transform-origin:top;}51%{transform-origin:bottom;}100%{transform:scaleY(0);transform-origin:bottom;}}
+
+/* SECTIONS */
+.section{max-width:1160px;margin:0 auto;padding:120px 48px;position:relative;z-index:1;}
+.section-label{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:6px;color:var(--cyan);margin-bottom:20px;display:block;text-transform:uppercase;}
+.section-title{font-family:'Noto Serif SC',serif;font-size:clamp(28px,4.5vw,52px);font-weight:900;line-height:1.15;margin-bottom:28px;}
+.section-title .hl{background:linear-gradient(135deg,var(--cyan),var(--violet2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.section-body{font-size:16px;line-height:1.9;color:var(--muted);max-width:720px;}
+.section-body strong{color:var(--text);font-weight:500;}
+.divider{height:1px;background:linear-gradient(to right,transparent,var(--border),transparent);margin:0 48px;position:relative;z-index:1;}
+
+/* QUESTIONS */
+.questions{display:flex;flex-direction:column;gap:3px;margin-top:56px;}
+.q-item{display:flex;align-items:center;gap:20px;padding:24px 32px;background:rgba(0,212,255,0.02);border:1px solid var(--border2);transition:all 0.4s;cursor:default;}
+.q-item:hover{background:rgba(0,212,255,0.05);border-color:var(--border);transform:translateX(8px);}
+.q-icon{font-size:28px;flex-shrink:0;width:40px;text-align:center;}
+.q-text{font-family:'Noto Serif SC',serif;font-size:clamp(15px,1.8vw,19px);font-weight:500;color:var(--text);line-height:1.5;}
+.q-text .hl{color:var(--cyan);font-weight:700;}
+.q-answer{font-family:'Space Mono',monospace;font-size:11px;letter-spacing:2px;color:var(--violet2);margin-left:auto;flex-shrink:0;white-space:nowrap;}
+
+/* FORMULA */
+.formula-box{margin-top:56px;text-align:center;padding:48px 40px;background:linear-gradient(135deg,rgba(0,212,255,0.04),rgba(139,92,246,0.04));border:1px solid var(--border);position:relative;overflow:hidden;}
+.formula-box::before{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(circle at 60% 40%,rgba(0,212,255,0.03),transparent 50%);pointer-events:none;}
+.formula-big{font-family:'Space Mono',monospace;font-size:clamp(14px,2vw,20px);font-weight:700;color:var(--text);letter-spacing:2px;line-height:1.8;}
+.formula-big .op{color:var(--cyan);}
+.formula-big .brand{color:var(--gold);}
+
+/* CURVES */
+.curves{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin-top:56px;}
+.curve-card{background:rgba(0,212,255,0.02);border:1px solid var(--border2);padding:40px 32px;position:relative;overflow:hidden;transition:all 0.4s;}
+.curve-card:hover{background:rgba(0,212,255,0.05);border-color:var(--border);}
+.curve-card::before{content:'';position:absolute;top:0;left:0;width:100%;height:3px;background:linear-gradient(90deg,var(--cyan),var(--violet));transform:scaleX(0);transform-origin:left;transition:transform 0.5s;}
+.curve-card:hover::before{transform:scaleX(1);}
+.curve-num{font-family:'Space Mono',monospace;font-size:64px;font-weight:700;color:rgba(0,212,255,0.06);position:absolute;top:12px;right:20px;line-height:1;}
+.curve-icon{font-size:28px;margin-bottom:20px;display:block;}
+.curve-h{font-family:'Noto Serif SC',serif;font-size:20px;font-weight:700;color:var(--text);margin-bottom:14px;line-height:1.3;}
+.curve-p{font-size:13px;color:var(--muted);line-height:1.8;}
+.curve-p strong{color:var(--cyan);font-weight:500;}
+
+/* ARCH */
+.arch-diagram{margin-top:48px;background:rgba(0,212,255,0.02);border:1px solid var(--border2);padding:0;overflow:hidden;}
+.arch-layer{display:grid;grid-template-columns:120px 1fr;border-bottom:1px solid var(--border2);transition:background 0.3s;}
+.arch-layer:last-child{border-bottom:none;}
+.arch-layer:hover{background:rgba(0,212,255,0.03);}
+.arch-level{padding:28px 24px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-right:1px solid var(--border2);text-align:center;}
+.arch-level-num{font-family:'Space Mono',monospace;font-size:11px;letter-spacing:3px;font-weight:700;}
+.arch-level-num.l3{color:var(--gold);}
+.arch-level-num.l2{color:var(--violet2);}
+.arch-level-num.l1{color:var(--cyan);}
+.arch-content{padding:24px 32px;}
+.arch-name{font-family:'Noto Serif SC',serif;font-size:17px;font-weight:700;color:var(--text);margin-bottom:6px;}
+.arch-pkg{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--cyan);margin-bottom:8px;}
+.arch-desc{font-size:13px;color:var(--muted);line-height:1.6;}
+
+/* TWO PATHS */
+.paths{display:grid;grid-template-columns:1fr 1fr;gap:2px;margin-top:56px;}
+.path-card{background:rgba(0,212,255,0.02);border:1px solid var(--border2);padding:40px 36px;transition:all 0.4s;position:relative;overflow:hidden;}
+.path-card:hover{background:rgba(0,212,255,0.05);border-color:var(--border);}
+.path-icon{font-size:36px;margin-bottom:20px;display:block;}
+.path-tag{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:4px;color:var(--violet2);margin-bottom:12px;display:block;}
+.path-h{font-family:'Noto Serif SC',serif;font-size:22px;font-weight:700;color:var(--gold);margin-bottom:14px;line-height:1.3;}
+.path-p{font-size:14px;color:var(--muted);line-height:1.8;}
+.path-p strong{color:var(--text);font-weight:500;}
+
+/* AMPLIFY */
+.amps{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;margin-top:56px;}
+.amp{background:rgba(0,212,255,0.02);border:1px solid var(--border2);padding:32px 24px;text-align:center;transition:all 0.4s;}
+.amp:hover{background:rgba(0,212,255,0.05);border-color:var(--border);transform:translateY(-4px);}
+.amp-icon{font-size:32px;margin-bottom:14px;display:block;}
+.amp-h{font-family:'Noto Serif SC',serif;font-size:16px;font-weight:700;margin-bottom:8px;}
+.amp-h .hl{color:var(--cyan);}
+.amp-p{font-size:12px;color:var(--muted2);line-height:1.7;}
+
+/* SCENARIOS */
+.scenarios{display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px;margin-top:56px;}
+.scenario{background:rgba(0,212,255,0.02);border:1px solid var(--border2);padding:32px 28px;transition:all 0.4s;}
+.scenario:hover{background:rgba(0,212,255,0.05);border-color:var(--border);}
+.scenario:nth-child(4),.scenario:nth-child(5){grid-column:auto;}
+.scenario-icon{font-size:28px;margin-bottom:14px;display:block;}
+.scenario-h{font-family:'Noto Serif SC',serif;font-size:16px;font-weight:700;color:var(--gold);margin-bottom:10px;}
+.scenario-p{font-size:12px;color:var(--muted);line-height:1.8;}
+.scenario-p strong{color:var(--text);font-weight:500;}
+
+/* EVO TABLE */
+.evo-table{width:100%;border-collapse:collapse;margin-top:48px;}
+.evo-table th{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--cyan);text-align:left;padding:16px 20px;border-bottom:1px solid var(--border);text-transform:uppercase;}
+.evo-table td{font-size:14px;color:var(--muted);padding:18px 20px;border-bottom:1px solid var(--border2);vertical-align:top;line-height:1.7;}
+.evo-table td:first-child{font-family:'Space Mono',monospace;font-weight:700;color:var(--text);white-space:nowrap;width:100px;}
+.evo-table tr:hover td{background:rgba(0,212,255,0.02);}
+
+/* MOATS */
+.moats{display:grid;grid-template-columns:1fr 1fr;gap:2px;margin-top:56px;}
+.moat{background:rgba(0,212,255,0.02);border:1px solid var(--border2);padding:36px 32px;position:relative;overflow:hidden;transition:all 0.4s;}
+.moat:hover{background:rgba(0,212,255,0.05);border-color:var(--border);}
+.moat-num{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--violet2);margin-bottom:14px;display:block;}
+.moat-h{font-family:'Noto Serif SC',serif;font-size:18px;font-weight:700;color:var(--text);margin-bottom:12px;line-height:1.3;}
+.moat-p{font-size:13px;color:var(--muted);line-height:1.8;}
+.moat-p strong{color:var(--cyan);font-weight:500;}
+.moat-highlight{margin-top:14px;padding:10px 14px;background:rgba(0,212,255,0.04);border-left:2px solid var(--cyan);font-family:'Space Mono',monospace;font-size:11px;color:var(--text);line-height:1.6;}
+
+/* LANDSCAPE */
+.landscape{margin-top:48px;position:relative;}
+.ls-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:0;border:1px solid var(--border);min-height:420px;}
+.ls-quad{padding:32px;display:flex;flex-direction:column;position:relative;}
+.ls-quad:nth-child(1){border-right:1px solid var(--border);border-bottom:1px solid var(--border);}
+.ls-quad:nth-child(2){border-bottom:1px solid var(--border);}
+.ls-quad:nth-child(3){border-right:1px solid var(--border);}
+.ls-q-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:3px;color:var(--muted2);margin-bottom:auto;}
+/* top-right is OmeTown */
+.ls-quad.star{background:linear-gradient(135deg,rgba(0,212,255,0.06),rgba(139,92,246,0.04));position:relative;}
+.ls-quad.star::after{content:'';position:absolute;inset:0;border:1px solid rgba(0,212,255,0.2);pointer-events:none;}
+.ls-item{margin-top:12px;}
+.ls-item-name{font-family:'Noto Serif SC',serif;font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;}
+.ls-item-name.gold{color:var(--cyan);font-size:20px;}
+.ls-item-desc{font-size:11px;color:var(--muted2);line-height:1.5;}
+.ls-axis-x{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-family:'Space Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--muted2);padding:0 4px;}
+.ls-axis-y{position:absolute;top:0;bottom:0;left:-56px;display:flex;flex-direction:column;justify-content:space-between;align-items:center;font-family:'Space Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--muted2);padding:4px 0;}
+.ls-axis-y span{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;}
+
+.comp-table{width:100%;border-collapse:collapse;margin-top:48px;}
+.comp-table th{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--cyan);text-align:left;padding:14px 16px;border-bottom:1px solid var(--border);}
+.comp-table td{font-size:13px;color:var(--muted);padding:14px 16px;border-bottom:1px solid var(--border2);line-height:1.6;}
+.comp-table td:first-child{font-weight:600;color:var(--text);white-space:nowrap;}
+.comp-table tr:hover td{background:rgba(0,212,255,0.02);}
+
+/* BIZ TABLE */
+.biz-table{width:100%;border-collapse:collapse;margin-top:48px;}
+.biz-table th{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--cyan);text-align:left;padding:14px 16px;border-bottom:1px solid var(--border);}
+.biz-table td{font-size:13px;color:var(--muted);padding:14px 16px;border-bottom:1px solid var(--border2);line-height:1.5;}
+.biz-table td:first-child{font-weight:600;color:var(--text);}
+.biz-table tr:last-child td{font-weight:700;color:var(--cyan);border-top:1px solid var(--border);}
+
+/* CAPS */
+.caps{display:grid;grid-template-columns:repeat(5,1fr);gap:2px;margin-top:56px;}
+.cap{background:rgba(0,212,255,0.02);border:1px solid var(--border2);padding:28px 20px;text-align:center;transition:all 0.4s;}
+.cap:hover{background:rgba(0,212,255,0.05);border-color:var(--border);transform:translateY(-4px);}
+.cap-icon{font-size:28px;margin-bottom:14px;display:block;}
+.cap-h{font-family:'Noto Serif SC',serif;font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;}
+.cap-p{font-size:11px;color:var(--muted2);line-height:1.6;}
+
+/* FUND */
+.fund-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px;margin-top:48px;}
+.fund-box{background:rgba(0,212,255,0.02);border:1px solid var(--border2);padding:36px 32px;}
+.fund-label{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:4px;color:var(--cyan);margin-bottom:12px;display:block;}
+.fund-big{font-family:'Noto Serif SC',serif;font-size:48px;font-weight:900;color:var(--text);line-height:1;}
+.fund-sub{font-size:13px;color:var(--muted);margin-top:8px;}
+.fund-bars{margin-top:32px;max-width:560px;}
+.fund-bar{margin-bottom:14px;}
+.fund-bar-label{display:flex;justify-content:space-between;margin-bottom:4px;}
+.fund-bar-label span:first-child{font-size:13px;color:var(--text);}
+.fund-bar-label span:last-child{font-family:'Space Mono',monospace;font-size:12px;color:var(--cyan);}
+.fund-bar-track{height:4px;background:rgba(0,212,255,0.08);border-radius:2px;overflow:hidden;}
+.fund-bar-fill{height:100%;border-radius:2px;}
+
+/* QUOTE */
+.quote-wrap{padding:100px 48px;position:relative;z-index:1;}
+.quote-wrap::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 50% 40% at 50% 50%,rgba(0,212,255,0.04) 0%,transparent 70%);}
+.quote-inner{max-width:800px;margin:0 auto;text-align:center;position:relative;}
+.quote-text{font-family:'Noto Serif SC',serif;font-size:clamp(18px,2.8vw,32px);font-weight:300;line-height:1.7;color:rgba(232,228,240,0.9);}
+.quote-text strong{color:var(--cyan);font-weight:700;}
+
+/* VISION */
+.vision-block{margin-top:56px;text-align:center;max-width:740px;margin-left:auto;margin-right:auto;}
+.vision-big{font-family:'Noto Serif SC',serif;font-size:clamp(22px,3.5vw,40px);font-weight:900;line-height:1.5;margin-bottom:24px;}
+.vision-big .hl{background:linear-gradient(135deg,var(--cyan),var(--violet2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.vision-sub{font-family:'Space Mono',monospace;font-size:13px;letter-spacing:4px;color:var(--muted);line-height:2;}
+
+/* FOOTER */
+footer{border-top:1px solid var(--border2);padding:60px 48px;text-align:center;position:relative;z-index:1;}
+.footer-logo{font-family:'Noto Serif SC',serif;font-size:28px;font-weight:900;}
+.footer-logo .o{color:var(--cyan);}.footer-logo .me{color:var(--text);}
+.footer-sub{font-family:'Space Mono',monospace;font-size:10px;color:rgba(0,212,255,0.25);letter-spacing:5px;margin-top:12px;}
+.footer-links{margin-top:20px;display:flex;gap:24px;justify-content:center;}
+.footer-links a{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--muted2);text-decoration:none;transition:color 0.2s;}
+.footer-links a:hover{color:var(--cyan);}
+
+@media(max-width:900px){
+  nav{padding:0 20px;}.section{padding:80px 24px;}
+  .curves,.moats,.paths,.fund-grid{grid-template-columns:1fr;}
+  .scenarios{grid-template-columns:1fr 1fr;}
+  .amps{grid-template-columns:1fr 1fr;}
+  .caps{grid-template-columns:repeat(3,1fr);}
+  .ls-grid{grid-template-columns:1fr;grid-template-rows:auto;}
+  .ls-quad:nth-child(1),.ls-quad:nth-child(3){border-right:none;}
+  .ls-quad{border-bottom:1px solid var(--border)!important;}
+  .ls-axis-y{display:none;}.landscape{padding-left:0!important;}.ls-axis-x{margin-top:16px;}
+  .hero{padding:80px 24px 60px;}
+}
+@media(max-width:600px){
+  .nav-link{display:none;}.caps{grid-template-columns:1fr 1fr;}
+  .scenarios{grid-template-columns:1fr;}.amps{grid-template-columns:1fr 1fr;}
+  .hero-title{font-size:clamp(32px,11vw,52px);}
+}
+</style>
+</head>
+<body>
+
+<canvas id="cosmos"></canvas>
+
+<nav>
+  <div class="nav-logo"><span class="o">Ome</span><span class="me">Town</span><span class="tag">by Omnity</span></div>
+  <div class="nav-links">
+    <a href="#questions" class="nav-link">VISION</a>
+    <a href="#what" class="nav-link">PRODUCT</a>
+    <a href="#moats" class="nav-link">TECH</a>
+    <a href="#business" class="nav-link">BUSINESS</a>
+    <a href="https://github.com/wyonliu/Omnity" target="_blank" class="nav-btn">GITHUB</a>
+  </div>
+</nav>
+
+<!-- ══════ HERO ══════ -->
+<section class="hero">
+  <div class="hero-badge"><span class="hero-dot"></span>BUILDING IN PUBLIC &middot; OPEN SOURCE</div>
+  <h1 class="hero-title">
+    <span class="line1">OmeTown</span>
+    <span class="line2">AI 与人共生的永续小镇</span>
+  </h1>
+  <p class="hero-tagline">Real Spaces &middot; Real Relationships &middot; Real Value</p>
+  <p class="hero-desc">
+    你的 AI 分身叫 <em>Ome</em>。它继承你的记忆、人格、专业和人脉。<br>
+    它住在你<span class="gold">真实世界的 3D 数字映像</span>里——24 小时替你社交、接单、经营、创造。<br>
+    <em>你的能力、关系、记忆、空间，都被无限放大。</em>
+  </p>
+  <div class="hero-cta">
+    <a href="https://github.com/wyonliu/Omnity" target="_blank" class="btn-glow">VIEW ON GITHUB</a>
+    <a href="#questions" class="btn-ghost">READ THE VISION</a>
+  </div>
+  <div class="scroll-hint"><span>SCROLL</span><div class="scroll-line"></div></div>
+</section>
+
+<!-- ══════ FIVE QUESTIONS ══════ -->
+<section id="questions" class="section">
+  <div class="reveal">
+    <span class="section-label">The Questions We Answer</span>
+    <h2 class="section-title">五个问题，<span class="hl">一个答案</span></h2>
+  </div>
+  <div class="questions reveal">
+    <div class="q-item">
+      <span class="q-icon">&#x1F99E;</span>
+      <span class="q-text">如何让 OpenClaw 龙虾来到<span class="hl">真实 3D 世界</span>？</span>
+      <span class="q-answer">SOAP</span>
+    </div>
+    <div class="q-item">
+      <span class="q-icon">&#x1F9E0;</span>
+      <span class="q-text">如何让 Agent 拥有多层持久记忆，<span class="hl">越来越懂你</span>？</span>
+      <span class="q-answer">MINDOS</span>
+    </div>
+    <div class="q-item">
+      <span class="q-icon">&#x1F453;</span>
+      <span class="q-text">如何让手机 / PC / MR / 具身机器人 / AI 眼镜<span class="hl">共享同一个空间</span>？</span>
+      <span class="q-answer">SOAP PROTOCOL</span>
+    </div>
+    <div class="q-item">
+      <span class="q-icon">&#x1F916;</span>
+      <span class="q-text">如何让 AI 分身 24 小时替你<span class="hl">社交、接单、打工</span>？</span>
+      <span class="q-answer">OME</span>
+    </div>
+    <div class="q-item">
+      <span class="q-icon">&#x1F3D8;&#xFE0F;</span>
+      <span class="q-text">如何打造一个永续运转的<span class="hl">人机共生碳硅基小镇</span>？</span>
+      <span class="q-answer">OMETOWN</span>
+    </div>
+  </div>
+
+  <div class="formula-box reveal">
+    <p class="formula-big">
+      <span class="brand">OmeTown</span> <span class="op">=</span>
+      Simile <span class="op">+</span> Wanaka <span class="op">+</span> Elys <span class="op">+</span> 3DGS-UGC
+    </p>
+    <p style="margin-top:16px;font-size:14px;color:var(--muted);line-height:1.8;">
+      Simile 的社会仿真 &middot; Wanaka 的 3D 世界构建 &middot; Elys 的 Agent 社交<br>
+      <strong style="color:var(--cyan);">+ 真实空间 3DGS 映射 + 开放协议 SOAP + 共生经济系统</strong>
+    </p>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══════ WHY NOW ══════ -->
+<section class="section">
+  <div class="reveal">
+    <span class="section-label">I &middot; Why Now</span>
+    <h2 class="section-title">三条曲线正在交汇</h2>
+  </div>
+  <div class="curves reveal">
+    <div class="curve-card">
+      <span class="curve-num">1</span>
+      <span class="curve-icon">&#x1F916;</span>
+      <h3 class="curve-h">Agent：从对话到行动</h3>
+      <p class="curve-p">多步规划、工具调用、持久记忆、多 Agent 协作正成为默认能力。<strong>Agent 即将成为能替你经营、服务、创造的数字员工。</strong></p>
+    </div>
+    <div class="curve-card">
+      <span class="curve-num">2</span>
+      <span class="curve-icon">&#x1F30D;</span>
+      <h3 class="curve-h">3D 空间成本暴跌</h3>
+      <p class="curve-p">3DGS + 深度估计 + 开放词汇分割。<strong>将一个真实房间变为可交互 3D 空间的成本趋近于零。</strong></p>
+    </div>
+    <div class="curve-card">
+      <span class="curve-num">3</span>
+      <span class="curve-icon">&#x1F4F1;</span>
+      <h3 class="curve-h">空间计算多端爆发</h3>
+      <p class="curve-p">手机 / PC / MR 头显 / AI 眼镜 / 具身机器人——<strong>多端共享同一 3D 空间的基础设施正在就绪。</strong></p>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══════ WHAT ══════ -->
+<section id="what" class="section">
+  <div class="reveal">
+    <span class="section-label">II &middot; Product</span>
+    <h2 class="section-title">OmeTown：真实世界的数字映射<br>AI 在其中<span class="hl">为你而活</span></h2>
+    <p class="section-body">你用手机拍你的房间——3DGS 重建为照片级 3D 空间。你的 Ome 在里面帮你接客户、经营生意、拓展人脉。<strong>关键词不是「虚拟」，是「映射」。不是逃到另一个世界，是让 AI 在你真实世界的数字映像里替你创造价值。</strong></p>
+  </div>
+
+  <!-- FOUR AMPLIFICATIONS -->
+  <div class="amps reveal">
+    <div class="amp">
+      <span class="amp-icon">&#x1F4AA;</span>
+      <h4 class="amp-h"><span class="hl">能力</span>增强</h4>
+      <p class="amp-p">Ome 继承你的专业技能，24 小时接单/创作/服务。一人成为一支团队。</p>
+    </div>
+    <div class="amp">
+      <span class="amp-icon">&#x1F91D;</span>
+      <h4 class="amp-h"><span class="hl">关系</span>增强</h4>
+      <p class="amp-p">Ome 替你社交、筛选人脉、维护关系。人脉网络在你不知道的时候扩大 10 倍。</p>
+    </div>
+    <div class="amp">
+      <span class="amp-icon">&#x1F9E0;</span>
+      <h4 class="amp-h"><span class="hl">记忆</span>增强</h4>
+      <p class="amp-p">多层持久记忆系统。Ome 越活越懂你，记住每个客户、每次对话、每个偏好。</p>
+    </div>
+    <div class="amp">
+      <span class="amp-icon">&#x1F30D;</span>
+      <h4 class="amp-h"><span class="hl">空间</span>映射</h4>
+      <p class="amp-p">真实房间、店铺、展厅 3DGS 扫描入驻小镇。物理世界在数字端被无限放大。</p>
+    </div>
+  </div>
+
+  <!-- TWO PATHS -->
+  <h3 class="reveal" style="font-family:'Noto Serif SC',serif;font-size:22px;font-weight:700;margin-top:64px;margin-bottom:4px;">两条玩法路径</h3>
+  <div class="paths reveal">
+    <div class="path-card">
+      <span class="path-icon">&#x1F3AE;</span>
+      <span class="path-tag">PATH A &middot; WANAKA MODE</span>
+      <h3 class="path-h">创建你的 Ome，加入社区</h3>
+      <p class="path-p">直接创建自己的 Ome 角色，设定人格、技能、形象。它进入 OmeTown，和其他 Ome 社交、工作、经营。<strong>像养成 + 社交游戏，但 Ome 能替你赚真钱。</strong></p>
+    </div>
+    <div class="path-card">
+      <span class="path-icon">&#x1F4F7;</span>
+      <span class="path-tag">PATH B &middot; 3DGS-UGC MODE</span>
+      <h3 class="path-h">扫描你的空间，入驻小镇</h3>
+      <p class="path-p">用手机拍你的家、店铺、工作室——3DGS 生成照片级 3D 空间。邀请 Ome 入驻，它在你真实空间里替你工作。<strong>你的真实世界直接成为数字资产。</strong></p>
+    </div>
+  </div>
+
+  <!-- ARCHITECTURE -->
+  <h3 class="reveal" style="font-family:'Noto Serif SC',serif;font-size:22px;font-weight:700;margin-top:64px;margin-bottom:4px;">三层架构（对应开源 Monorepo）</h3>
+  <div class="arch-diagram reveal">
+    <div class="arch-layer">
+      <div class="arch-level"><span class="arch-level-num l3">LAYER 3</span></div>
+      <div class="arch-content">
+        <div class="arch-name">经济层 — Ome Economy</div>
+        <div class="arch-pkg">PACKAGES/OME + PACKAGES/MAXIM</div>
+        <div class="arch-desc">每个 Ome 是独立经济体 &middot; OmeCoin 锚定真实服务价值 &middot; 数字劳动 &rarr; 真实收益 &middot; 社会仿真 + 经济引擎</div>
+      </div>
+    </div>
+    <div class="arch-layer">
+      <div class="arch-level"><span class="arch-level-num l2">LAYER 2</span></div>
+      <div class="arch-content">
+        <div class="arch-name">生命层 — Mindos</div>
+        <div class="arch-pkg">PACKAGES/MINDOS</div>
+        <div class="arch-desc">多层脑 L0 记忆 &rarr; L1 本能 &rarr; L2 思考 &rarr; L3 意图 &middot; 反思/成长 &middot; 单体日成本 &lt; &yen;0.3</div>
+      </div>
+    </div>
+    <div class="arch-layer">
+      <div class="arch-level"><span class="arch-level-num l1">LAYER 1</span></div>
+      <div class="arch-content">
+        <div class="arch-name">世界层 — SOAP (Spatial Omnity Agentic Protocol)</div>
+        <div class="arch-pkg">PACKAGES/SOAP</div>
+        <div class="arch-desc">空间智能体开放协议 &middot; scan / sem / edit / render / soap-mcp &middot; 手机 / PC / MR / 具身 / AI 眼镜</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="quote-wrap">
+  <div class="quote-inner reveal">
+    <p class="quote-text">
+      当 1000 万个 Ome 在小镇里生活、工作、交易——<br>
+      为它们背后的 1000 万个<strong>真实的人</strong>创造真实价值——<br>
+      这就是<strong>下一代互联网的入口</strong>。
+    </p>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ══════ OME ══════ -->
+<section class="section">
+  <div class="reveal">
+    <span class="section-label">III &middot; Ome</span>
+    <h2 class="section-title">不是宠物，不是工具<br>是你的<span class="hl">数字生命</span></h2>
+    <p class="section-body">所有 AI 伴侣都是宠物，所有 Agent 框架都是工具。<strong>Ome 是两者之上的存在</strong>——它继承你的人格与记忆，持续成长，替你创造真实价值。OpenClaw 往下看一步就是 Ome：Agent 不再是一次性调用，而是<strong>活着的、能代表你的数字生命。</strong></p>
+  </div>
+
+  <div class="scenarios reveal">
+    <div class="scenario">
+      <span class="scenario-icon">&#x1F3A8;</span>
+      <h3 class="scenario-h">独立设计师</h3>
+      <p class="scenario-p">Ome 住在 3DGS 工作室里，自主接待、生成 3D 方案。<strong>你一个人 = 一个设计事务所。</strong></p>
+    </div>
+    <div class="scenario">
+      <span class="scenario-icon">&#x2615;</span>
+      <h3 class="scenario-h">咖啡店主</h3>
+      <p class="scenario-p">Ome 当 AI 店长——记住常客口味，和隔壁花店的 Ome 联动活动。<strong>24 小时数字门面。</strong></p>
+    </div>
+    <div class="scenario">
+      <span class="scenario-icon">&#x270D;&#xFE0F;</span>
+      <h3 class="scenario-h">内容创作者</h3>
+      <p class="scenario-p">Ome 熟读你所有文章，以你的风格回答。<strong>24 小时品牌大使。</strong></p>
+    </div>
+    <div class="scenario">
+      <span class="scenario-icon">&#x1F91D;</span>
+      <h3 class="scenario-h">社交代理</h3>
+      <p class="scenario-p">Ome 筛选人脉，预热商务关系。<strong>人脉网络不知不觉扩大 10 倍。</strong></p>
+    </div>
+    <div class="scenario">
+      <span class="scenario-icon">&#x1F3E2;</span>
+      <h3 class="scenario-h">企业 Ome 军团</h3>
+      <p class="scenario-p">展厅 3DGS 扫描 + 专业 Ome 顾问。<strong>24 小时销售团队，边际成本趋零。</strong></p>
+    </div>
+  </div>
+
+  <h3 class="reveal" style="font-family:'Noto Serif SC',serif;font-size:20px;font-weight:700;margin-top:56px;">Ome 进化路径</h3>
+  <table class="evo-table reveal">
+    <thead><tr><th>阶段</th><th>Ome 的能力</th><th>真实价值</th></tr></thead>
+    <tbody>
+      <tr><td style="color:var(--cyan);">Step 1</td><td>有性格的对话 + 空间行走 + 基础记忆</td><td>陪伴 + 空间中的 AI 伴侣</td></tr>
+      <tr><td style="color:var(--cyan);">Step 2</td><td>自主任务执行 + 多 Ome 协作</td><td>个人助理：接待、整理、日程</td></tr>
+      <tr><td style="color:var(--cyan);">Step 3</td><td>商业交易 + 内容创作 + 客户服务</td><td><strong style="color:var(--gold);">收入放大器</strong>：一人公司</td></tr>
+      <tr><td style="color:var(--cyan);">Step 4+</td><td>自主学习 + 跨平台 + 物理世界联动</td><td><strong style="color:var(--gold);">数字员工</strong>：AI 劳动力市场</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══════ ECONOMY ══════ -->
+<section class="section">
+  <div class="reveal">
+    <span class="section-label">IV &middot; Ome Economy</span>
+    <h2 class="section-title">不是游戏币<br>是 <span class="hl">AI 劳动力经济</span>的起点</h2>
+    <p class="section-body">锚定物在体外——<strong>Ome 创造的真实服务价值</strong>。接待一个真实客户、促成一笔真实交易，就有真实价值流入系统。</p>
+  </div>
+  <div class="curves reveal" style="margin-top:48px;">
+    <div class="curve-card">
+      <span class="curve-num">1</span>
+      <h3 class="curve-h">积分经济</h3>
+      <p class="curve-p">上线即用。OmeCoin 平台积分，空间装饰/技能/道具。零监管风险。</p>
+    </div>
+    <div class="curve-card">
+      <span class="curve-num">2</span>
+      <h3 class="curve-h">创作者经济</h3>
+      <p class="curve-p">Ome 创作的内容可交易，平台 30%。对标 Roblox 开发者经济。</p>
+    </div>
+    <div class="curve-card">
+      <span class="curve-num">3</span>
+      <h3 class="curve-h">AI 劳动力市场</h3>
+      <p class="curve-p"><strong>千亿美金终局：平台抽成式的 AI 劳动力市场。Uber 在 AI 时代的重演。</strong></p>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══════ TECH MOATS ══════ -->
+<section id="moats" class="section">
+  <div class="reveal">
+    <span class="section-label">V &middot; Technology</span>
+    <h2 class="section-title">四重护城河<br><span class="hl">对应四个开源子项目</span></h2>
+  </div>
+  <div class="moats reveal">
+    <div class="moat">
+      <span class="moat-num">MOAT 01 &middot; PACKAGES/SOAP</span>
+      <h3 class="moat-h">SOAP 空间智能体协议 + 3DGS 管线</h3>
+      <p class="moat-p">定义 AI Agent 如何进入、理解和操作真实 3D 空间的<strong>全球开放标准与完整工具链</strong>。创始人主导 3DGS 从研究到生产全链路落地。手机/PC/MR/具身/AI 眼镜全端共享同一空间协议。</p>
+      <div class="moat-highlight">SOAP v0.1 规范 + JSON Schema + soap-mcp 已上线 &middot; MCP 空间类工具蓝海</div>
+    </div>
+    <div class="moat">
+      <span class="moat-num">MOAT 02 &middot; PACKAGES/MINDOS</span>
+      <h3 class="moat-h">Mindos 多层脑 Agent OS</h3>
+      <p class="moat-p">解决「Agent 太贵」的行业死穴。<strong>L0 记忆 &rarr; L1 本能 &rarr; L2 思考 &rarr; L3 意图</strong>，分层路由器自动分发。持久记忆让 Ome 越活越懂你，反思循环让性格从经历中涌现。</p>
+      <div class="moat-highlight">单 Ome 日均成本 &lt; &yen;0.3 &middot; 1 万 Ome 在线 = 每月 &yen;9 万</div>
+    </div>
+    <div class="moat">
+      <span class="moat-num">MOAT 03 &middot; PACKAGES/OME</span>
+      <h3 class="moat-h">Ome 个体 Agent 养成系统</h3>
+      <p class="moat-p">OpenClaw 的下一步：Agent 不再是一次性调用，而是<strong>活着的数字生命</strong>。人格复制引擎 + 技能系统 + 工作引擎 + 社交引擎 + 成长系统。用户 5 分钟创建自己的 Ome。</p>
+      <div class="moat-highlight">ome-persona / ome-skill / ome-work / ome-social / ome-grow</div>
+    </div>
+    <div class="moat">
+      <span class="moat-num">MOAT 04 &middot; PACKAGES/MAXIM</span>
+      <h3 class="moat-h">Maxim 多 Agent 社会仿真 + 经济引擎</h3>
+      <p class="moat-p">第一个开源的 Simile 级 AI 社会模拟器。多 Ome 自发社交、合作、竞争、冲突 + <strong>OmeCoin 经济系统</strong>：职业/收入/消费/交易/税收/供需全闭环。</p>
+      <div class="moat-highlight">空间语义数据飞轮：「空间 &times; 语言 &times; 行为」对齐数据集 &mdash; 全球最稀缺</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══════ LANDSCAPE ══════ -->
+<section class="section">
+  <div class="reveal">
+    <span class="section-label">VI &middot; Landscape</span>
+    <h2 class="section-title">空间 &times; AI 的<span class="hl">唯一交汇点</span></h2>
+    <p class="section-body">同时具备 3DGS 空间能力和 AI Agent 架构能力的产品——<strong>目前全球只有 OmeTown。</strong></p>
+  </div>
+
+  <div class="landscape reveal" style="padding-left:60px;">
+    <div class="ls-axis-y">
+      <span>SPATIAL DEPTH &uarr;</span>
+      <span style="opacity:0.3;">LOW</span>
+    </div>
+    <div class="ls-grid">
+      <!-- Top Left: high space, low AI -->
+      <div class="ls-quad">
+        <span class="ls-q-label">HIGH SPACE &middot; LOW AI</span>
+        <div class="ls-item"><div class="ls-item-name">Wanaka</div><div class="ls-item-desc">风格化 3D + UGC 方向对，但 3D 粗糙，无 AI 角色深度</div></div>
+        <div class="ls-item"><div class="ls-item-name">Meta Horizon</div><div class="ls-item-desc">投入 $1000 亿证明了一件事：空间没有 AI 灵魂是死的</div></div>
+      </div>
+      <!-- Top Right: high space, high AI = OmeTown -->
+      <div class="ls-quad star">
+        <span class="ls-q-label">HIGH SPACE &middot; HIGH AI</span>
+        <div class="ls-item">
+          <div class="ls-item-name gold">OmeTown</div>
+          <div class="ls-item-desc" style="color:var(--text);font-size:12px;line-height:1.7;">
+            照片级真实空间映射<br>
+            + Mindos 多层脑 Agent<br>
+            + Ome 养成 + Maxim 经济<br>
+            + SOAP 开放协议与工具链<br>
+            + 多端：手机/PC/MR/具身
+          </div>
+        </div>
+      </div>
+      <!-- Bottom Left: low space, low AI -->
+      <div class="ls-quad">
+        <span class="ls-q-label">LOW SPACE &middot; LOW AI</span>
+        <div class="ls-item"><div class="ls-item-name">Roblox</div><div class="ls-item-desc">方块 UGC + 创作者经济，但世界是「死」的，没有 AI 生命</div></div>
+      </div>
+      <!-- Bottom Right: low space, high AI -->
+      <div class="ls-quad">
+        <span class="ls-q-label">LOW SPACE &middot; HIGH AI</span>
+        <div class="ls-item"><div class="ls-item-name">Character.AI</div><div class="ls-item-desc">证明人愿意和 AI 建立情感连接，但 AI 没有「身体」</div></div>
+        <div class="ls-item"><div class="ls-item-name">Elys</div><div class="ls-item-desc">A2A 方向正确，但纯文字无空间感</div></div>
+        <div class="ls-item"><div class="ls-item-name">Simile</div><div class="ls-item-desc">AI 社会仿真可行，但是研究设施非消费级产品</div></div>
+      </div>
+    </div>
+    <div class="ls-axis-x"><span style="opacity:0.3;">LOW</span><span>AI AGENT DEPTH &rarr;</span></div>
+  </div>
+
+  <p class="reveal" style="margin-top:48px;text-align:center;font-family:'Noto Serif SC',serif;font-size:17px;font-weight:700;line-height:1.6;color:var(--muted);">
+    Meta 花 $1000 亿证明的教训：空间没有 AI 灵魂是死的。<br>
+    <span style="color:var(--cyan);">我们反过来——AI 从第一天起就有生命，真实空间是它的家。</span>
+  </p>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══════ BUSINESS ══════ -->
+<section id="business" class="section">
+  <div class="reveal">
+    <span class="section-label">VII &middot; Business</span>
+    <h2 class="section-title">多层变现：从陪伴到<span class="hl">AI 劳动力经济</span></h2>
+  </div>
+  <table class="biz-table reveal">
+    <thead><tr><th>层级</th><th>模式</th><th>100 万 MAU</th><th>1000 万 MAU</th></tr></thead>
+    <tbody>
+      <tr><td>L1 订阅</td><td>Ome+ 会员（¥30/月，付费率 8%）</td><td>&yen;240 万/月</td><td>&yen;2400 万/月</td></tr>
+      <tr><td>L2 消耗</td><td>Token / 技能 / 空间生成</td><td>&yen;500 万/月</td><td>&yen;6000 万/月</td></tr>
+      <tr><td>L3 UGC</td><td>空间 / 道具 / Ome 模板抽成 30%</td><td>&yen;300 万/月</td><td>&yen;4000 万/月</td></tr>
+      <tr><td>L4 B 端</td><td>品牌空间入驻 / 数字化服务</td><td>&yen;500 万/月</td><td>&yen;5000 万/月</td></tr>
+      <tr><td style="color:var(--gold);">L5 AI 劳动力</td><td>Ome 服务交易平台抽成</td><td>&yen;200 万/月</td><td>&yen;8000 万/月</td></tr>
+      <tr><td>合计</td><td></td><td>&yen;1740 万/月</td><td>&yen;2.54 亿/月</td></tr>
+    </tbody>
+  </table>
+  <p class="reveal" style="margin-top:24px;font-family:'Noto Serif SC',serif;font-size:20px;font-weight:700;text-align:center;">
+    千亿美金不在 L1-L4。<span style="color:var(--cyan);">在 L5。</span>
+  </p>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══════ WHY US ══════ -->
+<section class="section">
+  <div class="reveal">
+    <span class="section-label">VIII &middot; Why Us</span>
+    <h2 class="section-title">五项能力同时具备<br><span class="hl">缺任何一项产品就不成立</span></h2>
+  </div>
+  <div class="caps reveal">
+    <div class="cap"><span class="cap-icon">&#x1F30D;</span><h4 class="cap-h">3DGS 规模化</h4><p class="cap-p">全球 &lt;10 人做过研究到生产全链路</p></div>
+    <div class="cap"><span class="cap-icon">&#x1F4F1;</span><h4 class="cap-h">多端产品落地</h4><p class="cap-p">手机/PC/MR 全端「哇」时刻已验证</p></div>
+    <div class="cap"><span class="cap-icon">&#x1F9E0;</span><h4 class="cap-h">AI Agent 架构</h4><p class="cap-p">Mindos 多层脑，日成本 &lt;&yen;0.3</p></div>
+    <div class="cap"><span class="cap-icon">&#x1F6E0;&#xFE0F;</span><h4 class="cap-h">产品 &times; 技术双栈</h4><p class="cap-p">北大 CV + 10 年创业 + 大厂管理</p></div>
+    <div class="cap"><span class="cap-icon">&#x1F4E2;</span><h4 class="cap-h">叙事 &times; 社区</h4><p class="cap-p">CaptainCast 播客 + 开源社区运营</p></div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══════ SEED ROUND ══════ -->
+<section class="section">
+  <div class="reveal">
+    <span class="section-label">IX &middot; Seed Round</span>
+    <h2 class="section-title">种子轮融资</h2>
+  </div>
+  <div class="fund-grid reveal">
+    <div class="fund-box"><span class="fund-label">RAISE</span><div class="fund-big" style="color:var(--cyan);">$10M</div><div class="fund-sub">种子轮融资额</div></div>
+    <div class="fund-box"><span class="fund-label">VALUATION</span><div class="fund-big">$50M</div><div class="fund-sub">Pre-money</div></div>
+  </div>
+  <div class="fund-bars reveal" style="margin-top:48px;max-width:560px;">
+    <div class="fund-bar"><div class="fund-bar-label"><span>算力 (GPU 训练 + 推理 + 空间数据)</span><span>30%</span></div><div class="fund-bar-track"><div class="fund-bar-fill" style="width:30%;background:var(--cyan);"></div></div></div>
+    <div class="fund-bar"><div class="fund-bar-label"><span>核心团队 (AI-native 全栈)</span><span>35%</span></div><div class="fund-bar-track"><div class="fund-bar-fill" style="width:35%;background:var(--violet);"></div></div></div>
+    <div class="fund-bar"><div class="fund-bar-label"><span>运营 (开源社区 + 冷启动 + 内容)</span><span>25%</span></div><div class="fund-bar-track"><div class="fund-bar-fill" style="width:25%;background:var(--gold);"></div></div></div>
+    <div class="fund-bar"><div class="fund-bar-label"><span>储备 (18 个月 runway)</span><span>10%</span></div><div class="fund-bar-track"><div class="fund-bar-fill" style="width:10%;background:var(--green);"></div></div></div>
+  </div>
+  <div class="reveal" style="margin-top:48px;background:rgba(0,212,255,0.02);border:1px solid var(--border2);padding:32px;">
+    <span style="font-family:'Space Mono',monospace;font-size:10px;letter-spacing:4px;color:var(--cyan);display:block;margin-bottom:12px;">18-MONTH MILESTONE</span>
+    <p style="font-size:15px;color:var(--text);line-height:1.8;">50 万 MAU &middot; 月留存 &gt;40% &middot; 付费率 &gt;5% &middot; SOAP 被 &ge;3 个外部项目采用</p>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══════ VISION ══════ -->
+<section class="section" style="padding-bottom:60px;">
+  <div class="reveal"><span class="section-label">X &middot; Vision</span></div>
+  <div class="vision-block reveal">
+    <p class="vision-big">
+      你的能力被 Ome 无限放大。<br>
+      你的关系被 Ome 持续增强。<br>
+      你的记忆被 Ome 永久守护。<br>
+      你的空间被 Ome 照进数字世界。
+    </p>
+    <p style="font-size:17px;color:var(--muted);line-height:1.9;margin:32px 0;">
+      不是另一个世界——<br>
+      是你这个世界的<span style="color:var(--cyan);font-weight:600;">无限放大器</span>。
+    </p>
+    <p class="vision-sub" style="margin-top:40px;">THE FIRST WORLD OF HUMAN-AI SYMBIOSIS</p>
+    <p class="vision-sub" style="margin-top:12px;">REAL SPACES &middot; REAL RELATIONSHIPS &middot; REAL VALUE</p>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-logo"><span class="o">Ome</span><span class="me">Town</span></div>
+  <div class="footer-sub">AI &amp; HUMAN SYMBIOSIS &middot; PERPETUAL TOWN</div>
+  <div class="footer-links">
+    <a href="https://github.com/wyonliu/Omnity" target="_blank">GITHUB</a>
+    <a href="https://github.com/wyonliu/Omnity/discussions" target="_blank">DISCUSSIONS</a>
+  </div>
+  <p style="margin-top:24px;font-size:11px;color:rgba(0,212,255,0.15);font-family:'Space Mono',monospace;letter-spacing:2px;">Omnity &middot; Build in Public &middot; Apache-2.0</p>
+</footer>
+
+<script>
+// Particle canvas
+(function(){
+  const c=document.getElementById('cosmos'),x=c.getContext('2d');let w,h,pts=[];
+  function resize(){w=c.width=innerWidth;h=c.height=innerHeight;pts=[];for(let i=0;i<80;i++)pts.push({x:Math.random()*w,y:Math.random()*h,r:Math.random()*1.2+0.3,dx:(Math.random()-0.5)*0.12,dy:(Math.random()-0.5)*0.12,o:Math.random()*0.35+0.1});}
+  resize();addEventListener('resize',resize);
+  (function draw(){
+    x.clearRect(0,0,w,h);
+    for(const p of pts){p.x+=p.dx;p.y+=p.dy;if(p.x<0)p.x=w;if(p.x>w)p.x=0;if(p.y<0)p.y=h;if(p.y>h)p.y=0;x.beginPath();x.arc(p.x,p.y,p.r,0,Math.PI*2);x.fillStyle=`rgba(0,212,255,${p.o})`;x.fill();}
+    for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=dx*dx+dy*dy;if(d<20000){x.beginPath();x.moveTo(pts[i].x,pts[i].y);x.lineTo(pts[j].x,pts[j].y);x.strokeStyle=`rgba(0,212,255,${0.025*(1-d/20000)})`;x.stroke();}}
+    requestAnimationFrame(draw);
+  })();
+})();
+// Scroll reveal
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');obs.unobserve(e.target);}});},{threshold:0.1});
+document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
+// Smooth nav
+document.querySelectorAll('.nav-link').forEach(a=>{a.addEventListener('click',e=>{const h=a.getAttribute('href');if(h&&h.startsWith('#')){e.preventDefault();document.querySelector(h)?.scrollIntoView({behavior:'smooth'});}});});
+</script>
+</body>
+</html>
