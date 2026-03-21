@@ -143,5 +143,15 @@ export function computeMapPayload(soapScene) {
     if (rb) regionRects.push({ id: r.id, name: r.name || r.id, rb });
   }
 
-  return { xmin, xmax, zmin, zmax, regions: regionRects, items, objects, regions };
+  // 注意：不可再写简写 `regions`，否则会覆盖上面的几何包络数组
+  return {
+    xmin,
+    xmax,
+    zmin,
+    zmax,
+    regionBounds: regionRects,
+    items,
+    objects,
+    soapRegions: regions,
+  };
 }

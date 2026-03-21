@@ -40,7 +40,7 @@ export function mountPixelMall(parentId, { onSelect }) {
       this.entityRoot.removeAll(true);
       this.labelRoot.removeAll(true);
 
-      const { xmin, xmax, zmin, zmax, regions, items } = payload;
+      const { xmin, xmax, zmin, zmax, regionBounds, items } = payload;
       const worldW = (xmax - xmin) * TILE;
       const worldH = (zmax - zmin) * TILE;
 
@@ -66,7 +66,7 @@ export function mountPixelMall(parentId, { onSelect }) {
       }
 
       this.regionG.lineStyle(2, 0x9b59b6, 0.55);
-      for (const rr of regions) {
+      for (const rr of regionBounds || []) {
         const b = rr.rb;
         const rx = (b.xmin - xmin) * TILE;
         const ry = (zmax - b.zmax) * TILE;
