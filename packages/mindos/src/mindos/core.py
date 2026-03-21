@@ -1,22 +1,26 @@
-"""Mindos core — the digital soul: hydrate / commit / forget."""
+"""Mindos core — the digital soul facade over the five-layer brain.
+
+Provides the public API: hydrate / commit / forget / recall / status / reflect.
+Internally delegates to LayerRouter → L0-L4.
+"""
 
 from __future__ import annotations
 
-import re
 import time
-import uuid
 from pathlib import Path
 from typing import Any, Optional
 
 try:
     import yaml
 except ImportError:
-    yaml = None  # fallback to JSON
+    yaml = None
 
-from mindos.store import Memory, MemoryStore, Triple
+from mindos.config import MindosConfig
+from mindos.router import LayerRouter
+from mindos.store import MemoryStore
 
 
-def _dump_identity(data: dict, path) -> None:
+def _dump_identity(data: dict, path: Path) -> None:
     if yaml:
         path.write_text(yaml.dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
     else:
@@ -24,14 +28,15 @@ def _dump_identity(data: dict, path) -> None:
         path.write_text(_json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _load_identity(path) -> dict:
+def _load_identity(path: Path) -> dict:
     text = path.read_text(encoding="utf-8")
     if yaml:
         return yaml.safe_load(text) or {}
     import json as _json
     return _json.loads(text)
 
-_DEFAULT_IDENTITY = {
+
+_DEFAULT_IDENTITY: dict[str, Any] = {
     "version": 1,
     "name": "User",
     "personality": {
@@ -44,23 +49,28 @@ _DEFAULT_IDENTITY = {
     "relations": [],
 }
 
-_SENSITIVE_PATTERNS = [
-    re.compile(r"\b\d{15,18}\b"),                       # ID numbers
-    re.compile(r"\b(?:sk-|key-|api[_-]?key)[A-Za-z0-9_-]{10,}\b", re.I),  # API keys
-    re.compile(r"(?:密钥|密码|API.?[Kk]ey|password|secret)\s*[:=是]\s*\S+", re.I),
-]
-
 
 class Mindos:
-    """Portable Digital Soul — load from ~/.mindos/ directory."""
+    """Portable Digital Soul — public API backed by the five-layer brain.
 
-    def __init__(self, root: Path, store: MemoryStore, identity: dict[str, Any]) -> None:
+    Usage:
+        soul = Mindos.load("~/.mindos")
+        context = soul.hydrate("Tell me about Python")
+        soul.commit("user: I love Python\\nassistant: Great!", source="claude")
+    """
+
+    def __init__(self, root: Path, store: MemoryStore,
+                 identity: dict[str, Any], config: Optional[MindosConfig] = None) -> None:
         self.root = root
         self.store = store
         self.identity = identity
-        self._embedder: Any = None
+        self.config = config
 
-    # -- factory ---------------------------------------------------------------
+        # Flatten personality for layer consumption
+        flat_identity = self._flatten_identity(identity)
+        self.layers = LayerRouter(store, flat_identity, config)
+
+        self._embedder: Any = None
 
     @classmethod
     def load(cls, path: str | Path = "~/.mindos") -> "Mindos":
@@ -74,18 +84,15 @@ class Mindos:
             identity = dict(_DEFAULT_IDENTITY)
             _dump_identity(identity, id_path)
 
+        config = MindosConfig.load(root)
         store = MemoryStore(root / "memory.db")
-        return cls(root, store, identity)
-
-    def reload_identity(self) -> None:
-        """Reload identity.yaml from disk (after manual edits)."""
-        id_path = self.root / "identity.yaml"
-        if id_path.exists():
-            self.identity = _load_identity(id_path)
+        return cls(root, store, identity, config)
 
     @classmethod
     def init(cls, path: str | Path = "~/.mindos", name: str = "User",
-             traits: Optional[list[str]] = None, style: str = "") -> "Mindos":
+             traits: Optional[list[str]] = None, style: str = "",
+             values: Optional[list[str]] = None,
+             capabilities: Optional[list[dict]] = None) -> "Mindos":
         root = Path(path).expanduser()
         root.mkdir(parents=True, exist_ok=True)
         (root / "journal").mkdir(exist_ok=True)
@@ -96,18 +103,80 @@ class Mindos:
             identity["personality"]["traits"] = traits
         if style:
             identity["personality"]["style"] = style
+        if values:
+            identity["personality"]["values"] = values
+        if capabilities:
+            identity["capabilities"] = capabilities
         identity["created_at"] = time.strftime("%Y-%m-%d")
         identity["updated_at"] = time.strftime("%Y-%m-%d")
 
         id_path = root / "identity.yaml"
         _dump_identity(identity, id_path)
 
+        config = MindosConfig.load(root)
         store = MemoryStore(root / "memory.db")
-        inst = cls(root, store, identity)
+        inst = cls(root, store, identity, config)
         store.record_personality(identity.get("personality", {}), trigger="init")
         return inst
 
-    # -- embedder --------------------------------------------------------------
+    # -- public API (delegates to LayerRouter) ---------------------------------
+
+    def hydrate(self, context: str = "", max_tokens: int = 2000) -> str:
+        """L1→L0: Assemble identity for injection into any AI session."""
+        query_vec = self._embed(context) if context else None
+        return self.layers.hydrate(context, max_tokens, query_vec)
+
+    def commit(self, conversation: str, source: str = "unknown") -> dict[str, Any]:
+        """L2→L0: Digest a conversation into long-term memories."""
+        return self.layers.commit(conversation, source)
+
+    def commit_messages(self, messages: list[dict], source: str = "unknown") -> dict[str, Any]:
+        """Convenience: commit from a list of {role, content} message dicts."""
+        full_text = "\n".join(
+            f"{m.get('role', '?')}: {m.get('content', '')}" for m in messages
+        )
+        return self.commit(full_text, source)
+
+    def recall(self, query: str, top_k: int = 10) -> list[dict[str, Any]]:
+        """L0: Search memories with relevance ranking."""
+        query_vec = self._embed(query) if query else None
+        return self.layers.recall(query, top_k, query_vec)
+
+    def forget(self, pattern: str, scope: str = "all") -> dict[str, Any]:
+        """L0: Physical erasure. GDPR Right to be Forgotten."""
+        scope_val = None if scope == "all" else scope
+        return self.layers.forget(pattern, scope_val)
+
+    def reflect(self) -> Optional[dict[str, Any]]:
+        """L4: Force a reflection cycle."""
+        return self.layers.reflect()
+
+    def reason(self, query: str) -> Optional[str]:
+        """L3: Deep reasoning with identity context."""
+        return self.layers.reason(query)
+
+    def status(self) -> dict[str, Any]:
+        """Full status across all layers."""
+        s = self.layers.status()
+        s["soul_age"] = self.identity.get("created_at", "unknown")
+        return s
+
+    # -- identity management ---------------------------------------------------
+
+    def save_identity(self) -> None:
+        self.identity["updated_at"] = time.strftime("%Y-%m-%d")
+        _dump_identity(self.identity, self.root / "identity.yaml")
+
+    def reload_identity(self) -> None:
+        id_path = self.root / "identity.yaml"
+        if id_path.exists():
+            self.identity = _load_identity(id_path)
+            flat = self._flatten_identity(self.identity)
+            self.layers.identity = flat
+            self.layers.l1.identity = flat
+            self.layers.l4.identity = flat
+
+    # -- embedding (optional) --------------------------------------------------
 
     def _get_embedder(self) -> Any:
         if self._embedder is None:
@@ -115,208 +184,38 @@ class Mindos:
                 from sentence_transformers import SentenceTransformer
                 self._embedder = SentenceTransformer("all-MiniLM-L6-v2")
             except ImportError:
-                self._embedder = False  # sentinel: not available
+                self._embedder = False
         return self._embedder
 
-    def _embed(self, text: str):
+    def _embed(self, text: str) -> Any:
         emb = self._get_embedder()
         if not emb:
             return None
         try:
             import numpy as np
+            vec = emb.encode(text, show_progress_bar=False)
+            return np.array(vec, dtype=np.float32)
         except ImportError:
             return None
-        vec = emb.encode(text, show_progress_bar=False)
-        return np.array(vec, dtype=np.float32)
 
-    # -- hydrate ---------------------------------------------------------------
+    # -- internal helpers ------------------------------------------------------
 
-    def hydrate(self, situation: str = "", recent_messages: Optional[list[dict]] = None,
-                max_tokens: int = 2000) -> str:
-        """Assemble identity context for injection into an AI session's system prompt."""
-        parts: list[str] = []
-
-        # 1. Core identity
-        p = self.identity.get("personality", {})
-        name = self.identity.get("name", "User")
-        parts.append(f"[Mindos Identity] 用户名：{name}")
-        if p.get("traits"):
-            parts.append(f"性格特征：{', '.join(p['traits'])}")
-        if p.get("style"):
-            parts.append(f"沟通风格：{p['style']}")
-        if p.get("values"):
-            parts.append(f"核心价值观：{', '.join(p['values'])}")
-        if p.get("boundaries"):
-            parts.append(f"边界：{', '.join(p['boundaries'])}")
-
-        # 2. Capabilities
-        caps = self.identity.get("capabilities", [])
-        if caps:
-            cap_strs = [f"{c['domain']}({c.get('level', '?')})" for c in caps if isinstance(c, dict)]
-            if cap_strs:
-                parts.append(f"能力：{', '.join(cap_strs)}")
-
-        # 3. Relevant memories via vector search
-        query = situation
-        if recent_messages:
-            last_msgs = [m.get("content", "") for m in recent_messages[-3:]]
-            query = situation + " " + " ".join(last_msgs)
-
-        memories: list[Memory] = []
-        qvec = self._embed(query) if query else None
-        if qvec is not None:
-            memories = self.store.search_vector(qvec, top_k=15)
-        if not memories and query.strip():
-            # Keyword fallback: whole phrase (works for CJK) + first English token
-            q = query.strip()
-            memories = self.store.search_text(q[:64], limit=15)
-            if not memories and q.split():
-                memories = self.store.search_text(q.split()[0], limit=15)
-            # Last resort: recent memories so hydrate is never totally empty when DB has data
-            if not memories and self.store.count() > 0:
-                memories = self.store.list_recent(limit=8)
-
-        # 4. Assemble within budget (rough char estimate: 1 token ≈ 2 chars for CJK)
-        char_budget = max_tokens * 2
-        used = sum(len(p) for p in parts)
-        if memories:
-            parts.append("\n[相关记忆]")
-            used += 10
-            for mem in memories:
-                line = f"- [{mem.type}] {mem.content}"
-                if used + len(line) > char_budget:
-                    break
-                parts.append(line)
-                used += len(line)
-
-        # 5. Relevant relations
-        if query:
-            for word in query.split()[:3]:
-                triples = self.store.triples(subject=word)
-                for t in triples[:5]:
-                    line = f"- {t.subject} {t.predicate} {t.object}"
-                    if used + len(line) > char_budget:
-                        break
-                    parts.append(line)
-                    used += len(line)
-
-        return "\n".join(parts)
-
-    # -- commit ----------------------------------------------------------------
-
-    def commit(self, messages: list[dict], source: str = "unknown",
-               auto_extract: bool = True) -> dict[str, Any]:
-        """Digest a conversation and write new memories."""
-        result: dict[str, Any] = {
-            "memories_added": 0, "facts": [], "skipped_sensitive": 0, "skipped_duplicate": 0,
-        }
-
-        full_text = "\n".join(
-            f"{m.get('role', '?')}: {m.get('content', '')}" for m in messages
-        )
-
-        if auto_extract:
-            facts = self._extract_facts(full_text)
-            for fact in facts:
-                if self._is_sensitive(fact["content"]):
-                    result["skipped_sensitive"] += 1
-                    continue
-                if self.store.content_exists(fact["content"]):
-                    result["skipped_duplicate"] += 1
-                    continue
-                mem = Memory(
-                    id=uuid.uuid4().hex[:12],
-                    type=fact.get("type", "fact"),
-                    content=fact["content"],
-                    source=source,
-                    confidence=fact.get("confidence", 0.8),
-                    embedding=self._embed(fact["content"]),
-                )
-                self.store.add(mem)
-                result["memories_added"] += 1
-                result["facts"].append(fact["content"])
-
-        # Also scan full text for sensitive content
-        if self._is_sensitive(full_text):
-            result["skipped_sensitive"] += 1
-
-        # Store episode summary (skip if sensitive or duplicate)
-        summary = self._summarize(full_text)
-        if summary and not self._is_sensitive(summary) and not self.store.content_exists(summary):
-            ep = Memory(
-                id=uuid.uuid4().hex[:12],
-                type="episode",
-                content=summary,
-                source=source,
-                confidence=1.0,
-                embedding=self._embed(summary),
-            )
-            self.store.add(ep)
-            result["memories_added"] += 1
-
-        return result
-
-    # -- forget ----------------------------------------------------------------
-
-    def forget(self, pattern: str, scope: str = "all", hard_delete: bool = True) -> int:
-        """Physically erase memories matching pattern. GDPR Right to be Forgotten."""
-        mem_type = None if scope == "all" else scope
-        count = self.store.forget(pattern, mem_type=mem_type)
-        return count
-
-    # -- status ----------------------------------------------------------------
-
-    def status(self) -> dict[str, Any]:
-        stats = self.store.stats()
-        identity = self.identity
+    @staticmethod
+    def _flatten_identity(identity: dict[str, Any]) -> dict[str, Any]:
+        """Flatten nested personality into layer-friendly format."""
         p = identity.get("personality", {})
-        age_str = identity.get("created_at", "unknown")
+        caps = identity.get("capabilities", [])
+        cap_strs = []
+        for c in caps:
+            if isinstance(c, dict):
+                cap_strs.append(f"{c.get('domain', '')}({c.get('level', '')})")
+            elif isinstance(c, str):
+                cap_strs.append(c)
         return {
             "name": identity.get("name", "User"),
-            "soul_age": age_str,
-            "personality": p.get("traits", []),
+            "traits": p.get("traits", []),
             "style": p.get("style", ""),
-            **stats,
+            "values": p.get("values", []),
+            "boundaries": p.get("boundaries", []),
+            "capabilities": cap_strs,
         }
-
-    # -- internal extraction (rule-based for v0.1, LLM in v0.2) ----------------
-
-    def _extract_facts(self, text: str) -> list[dict]:
-        """Simple rule-based fact extraction. Will be replaced by LLM in v0.2."""
-        facts = []
-        markers = [
-            ("我住在", "fact"), ("我是", "fact"), ("我喜欢", "preference"),
-            ("我不喜欢", "preference"), ("我擅长", "skill"), ("我在学", "skill"),
-            ("我的工作是", "fact"), ("我叫", "fact"), ("我想", "preference"),
-            ("我计划", "fact"), ("我决定", "fact"),
-        ]
-        for line in text.split("\n"):
-            content = line.split(":", 1)[-1].strip() if ":" in line else line.strip()
-            if not content or len(content) < 4:
-                continue
-            for marker, ftype in markers:
-                if marker in content:
-                    facts.append({"content": content, "type": ftype, "confidence": 0.7})
-                    break
-        return facts
-
-    def _summarize(self, text: str) -> str:
-        """Simple extractive summary. Returns first meaningful assistant message."""
-        lines = text.strip().split("\n")
-        for line in lines:
-            if line.startswith("assistant:") and len(line) > 20:
-                return f"对话摘要：{line[10:].strip()[:200]}"
-        if len(text) > 50:
-            return f"对话摘要：{text[:200].strip()}"
-        return ""
-
-    def _is_sensitive(self, text: str) -> bool:
-        for pat in _SENSITIVE_PATTERNS:
-            if pat.search(text):
-                return True
-        return False
-
-    def save_identity(self) -> None:
-        self.identity["updated_at"] = time.strftime("%Y-%m-%d")
-        path = self.root / "identity.yaml"
-        _dump_identity(self.identity, path)

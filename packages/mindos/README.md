@@ -1,131 +1,213 @@
-# Mindos
+# Mindos — Portable Digital Soul Protocol
 
-**Portable Digital Soul Protocol** — 把记忆、人格与习惯做成可插拔的一层：换模型、换平台，**你**还是你。
+**Multi-layer Intention & Neural Dynamic Operating System**
 
-全称 *Multi-layer Intention & Neural Dynamic Operating System*；当前代码聚焦 **L0 海马体（记忆）** 与三大原语 **`hydrate` / `commit` / `forget`**，与 [`MINDOS_PLAN.md`](./MINDOS_PLAN.md) 中的五层架构、MCP、Proxy 等规划对齐，逐步迭代。
+Mindos is a persistent, portable identity layer that sits between you and any AI.
+It remembers who you are, how you think, and what you care about — across every
+platform, every model, every session.
 
----
-
-## 当前版本完成度（v0.1.x）
-
-| 能力 | 状态 | 说明 |
-|------|------|------|
-| `identity.yaml` + `memory.db` | ✅ | 本地优先，用户拥有数据目录 |
-| `hydrate()` | ✅ | 拼装身份 + 相关记忆注入 system prompt；无向量时回退关键词/最近记忆 |
-| `commit()` | ✅ | 规则抽取事实/偏好/技能 + 对话摘要；**去重**；**敏感信息跳过** |
-| `forget()` | ✅ | 物理删除记忆；**同步清理知识图谱**（即使无匹配记忆行） |
-| 知识图谱（三元组） | ✅ | SQLite 存储，Dashboard 可读 |
-| CLI | ✅ | `init` / `status` / `forget` / `serve --dashboard` / `--version` |
-| Dashboard | ✅ | 本地 Web：状态、记忆浏览、hydrate/commit/forget 试用；**端口占用自动递增**；`/api/config` 显示实际端口与数据路径 |
-| 语义向量检索 | 可选 | 需安装 `semantic` 扩展（见下） |
-| MCP / HTTP Proxy / LLM 消化 | 🔜 | 见 `MINDOS_PLAN.md` 路线图 |
-
-**质量要点**：SQLite WAL；`commit` 返回 `skipped_duplicate` / `skipped_sensitive`；`reload_identity()` 热读配置文件。
-
----
-
-## 安装
-
-```bash
-cd packages/mindos
-pip install -e .
-
-# 语义检索（sentence-transformers + numpy，体积较大，可选）
-pip install -e ".[semantic]"
-# 或一次性：pip install -e ".[all]"
+```
+User ←→ [Any AI Platform] ←→ Mindos Layer ←→ [Any LLM]
+                                    ↕
+                              ~/.mindos/ (your data)
 ```
 
-仅标准能力时只需 **PyYAML**（`identity.yaml`）。无 PyYAML 时会尝试 JSON 兼容路径（不推荐长期使用）。
+## Architecture: Five-Layer Brain
 
----
+```
+┌─────────────────────────────────────────────────┐
+│ L4  Self (Default Mode Network)                 │
+│     Personality model · Reflection loop ·       │
+│     Value alignment · Cross-platform anchor     │
+├─────────────────────────────────────────────────┤
+│ L3  Prefrontal — Decision                       │
+│     Deep reasoning · Planning · Conflict        │
+│     resolution · Behavior orchestration         │
+├─────────────────────────────────────────────────┤
+│ L2  Cortex — Cognition                          │
+│     LLM-powered commit digestion · Fact         │
+│     extraction · Contradiction detection        │
+├─────────────────────────────────────────────────┤
+│ L1  Brainstem — Instinct                        │
+│     Fast routing · hydrate assembly · Emotion   │
+│     state · Token budget · Handles 60%+ fast    │
+├─────────────────────────────────────────────────┤
+│ L0  Hippocampus — Memory                        │
+│     SQLite + vector index · Relevance scoring   │
+│     (recency × importance × frequency × decay)  │
+│     Knowledge graph · Personality history       │
+└─────────────────────────────────────────────────┘
+     ↕           ↕            ↕           ↕
+ LayerRouter  ModelRouter  MCP Server  Dashboard
+```
 
-## 快速开始
+## v0.2.0 Completion Matrix
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| L0 Hippocampus | ✅ | SQLite + WAL, vector search, KG, relevance scoring |
+| L1 Brainstem | ✅ | Request classification, hydrate assembly, emotion state |
+| L2 Cortex | ✅ | LLM-powered commit (DeepSeek/OpenAI), rule-based fallback |
+| L3 Prefrontal | ✅ | Deep reasoning, planning, conflict resolution via ModelRouter |
+| L4 Self | ✅ | Reflection loop, personality drift detection, heuristic fallback |
+| LayerRouter | ✅ | Routes requests to appropriate layer |
+| ModelRouter | ✅ | Multi-provider LLM switching (DeepSeek, OpenAI, Anthropic) |
+| config.yaml | ✅ | Auto-generated, configurable providers and behavior |
+| MCP Server | ✅ | `mindos serve --mcp` for Claude Desktop / Cursor |
+| Dashboard | ✅ | Local web UI with hydrate/commit/recall/forget/reflect |
+| CLI | ✅ | init, status, commit, recall, forget, serve |
+| Relevance Scoring | ✅ | Composite: recency × importance × frequency × decay |
+| Sensitive Filter | ✅ | Regex-based, blocks API keys / ID numbers / passwords |
+| Deduplication | ✅ | Content-exact dedup in commit |
+| Forget (GDPR) | ✅ | Physical erasure from memories + KG |
+| Tests | ✅ | 8 integration tests covering all layers + MCP protocol |
+
+## Quick Start
+
+### Install
 
 ```bash
-# 初始化灵魂目录（默认 ~/.mindos）
-mindos init --name "YourName" --traits "好奇,直接" --style "简洁技术风"
+pip install -e packages/mindos              # core (pyyaml only)
+pip install -e "packages/mindos[llm]"       # + LLM support (openai)
+pip install -e "packages/mindos[all]"       # + semantic search
+```
 
-# 查看状态
-mindos status
+### Create a Soul
 
-# 启动可视化面板（3456 被占用则自动 3457…）
+```bash
+mindos init --name "YourName" --traits "curious,creative" --style "concise"
+```
+
+This creates `~/.mindos/` with:
+- `identity.yaml` — your personality profile
+- `config.yaml` — LLM provider configuration
+- `memory.db` — memory storage (SQLite)
+
+### Configure LLM Providers
+
+Edit `~/.mindos/config.yaml`:
+
+```yaml
+models:
+  - name: deepseek
+    type: openai_compatible
+    base_url: https://api.deepseek.com
+    api_key_env: DEEPSEEK_API_KEY
+    model: deepseek-chat
+    priority: 1
+    for: [commit_digest, reflection, reasoning]
+```
+
+Set environment variables for API keys — never store keys in config files.
+
+### Use as MCP Server (Claude Desktop / Cursor)
+
+```bash
+mindos serve --mcp
+```
+
+Add to Claude Desktop config (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "mindos": {
+      "command": "mindos",
+      "args": ["serve", "--mcp"]
+    }
+  }
+}
+```
+
+MCP tools exposed:
+- `mindos_hydrate` — load identity context into session
+- `mindos_commit` — digest conversation into memories
+- `mindos_recall` — search memories with relevance ranking
+- `mindos_forget` — GDPR-compliant erasure
+- `mindos_status` — current soul state
+- `mindos_reflect` — trigger personality review
+
+### Dashboard
+
+```bash
 mindos serve --dashboard
-
-# 遗忘某类信息（GDPR 式硬删）
-mindos forget "某关键词" --scope all
+# → http://localhost:3456
 ```
 
-**演示脚本**（灌入示例数据后开面板）：
-
-```bash
-PYTHONPATH=src python3 scripts/demo_dashboard.py
-# 仅灌数据：python3 scripts/demo_dashboard.py --no-serve
-# 指定端口：python3 scripts/demo_dashboard.py --port 8765
-```
-
-**开发者入口**：
-
-```bash
-PYTHONPATH=src python3 -m mindos --version
-PYTHONPATH=src python3 -m mindos status --path /path/to/.mindos
-```
-
----
-
-## Python API
+### Python API
 
 ```python
-from pathlib import Path
 from mindos import Mindos
 
-m = Mindos.load("~/.mindos")
+soul = Mindos.load("~/.mindos")
 
-ctx = m.hydrate(situation="讨论下周出差", max_tokens=2000)
-# → 拼进 LLM 的 system prompt
+# Inject identity into any AI session
+context = soul.hydrate(context="discussing travel plans")
 
-m.commit(
-    [
-        {"role": "user", "content": "我下周去东京"},
-        {"role": "assistant", "content": "好的，需要行程建议吗？"},
-    ],
-    source="claude",
+# Digest a conversation
+result = soul.commit(
+    "user: I live in Shanghai\nassistant: Got it!",
+    source="claude"
 )
-# → 返回 memories_added, skipped_duplicate, skipped_sensitive
 
-n = m.forget("东京")  # 删除含该关键词的记忆与图谱边
+# Search memories
+memories = soul.recall("Shanghai", top_k=5)
 
-m.reload_identity()   # 手动改完 identity.yaml 后调用
+# Deep reasoning (uses ModelRouter)
+answer = soul.reason("Should I use Rust or Go for this project?")
+
+# Force reflection cycle
+reflection = soul.reflect()
+
+# Physical erasure
+soul.forget("Tokyo", scope="episode")
 ```
 
----
+### CLI
 
-## 测试
+```bash
+mindos status                          # show soul state
+mindos commit "user: I like Python"    # digest text
+mindos recall "Python"                 # search memories
+mindos forget "Tokyo" --scope episode  # erase memories
+```
+
+## Testing
 
 ```bash
 cd packages/mindos
-PYTHONPATH=src python3 tests/test_soul.py
+python3 tests/test_soul.py    # 8 integration tests
+
+# Demo with dashboard
+python3 scripts/demo_dashboard.py --no-serve
 ```
 
+## File Structure
+
+```
+src/mindos/
+├── __init__.py          # Package entry
+├── core.py              # Mindos facade (public API)
+├── config.py            # config.yaml + ModelRouter
+├── router.py            # LayerRouter (orchestrates L0-L4)
+├── store.py             # SQLite memory store
+├── layers/
+│   ├── l0_memory.py     # Hippocampus: retrieval + relevance scoring
+│   ├── l1_instinct.py   # Brainstem: routing + hydrate + emotion
+│   ├── l2_cognition.py  # Cortex: LLM commit digestion
+│   ├── l3_decision.py   # Prefrontal: reasoning + planning
+│   └── l4_self.py       # Self: reflection + personality drift
+├── mcp_server.py        # MCP Server (stdio JSON-RPC)
+├── dashboard.py         # Web UI
+└── cli.py               # CLI
+```
+
+## Data Ownership
+
+All data stays local in `~/.mindos/`. No cloud, no telemetry.
+You own your soul.
+
 ---
 
-## 故障排除
-
-| 现象 | 处理 |
-|------|------|
-| `ModuleNotFoundError: yaml` | `pip install pyyaml` |
-| `ModuleNotFoundError: numpy` | 仅影响向量与 embedding；可 `pip install numpy` 或装 `.[semantic]` |
-| `Address already in use` | 已自动换端口；或 `mindos serve --dashboard --port 8765`；或 `lsof -i :3456` 后 `kill` |
-
----
-
-## 文档与许可
-
-- 产品与技术规划：[MINDOS_PLAN.md](./MINDOS_PLAN.md)  
-- 仓库总览：[../../README.md](../../README.md)  
-- 许可：与根目录 [LICENSE](../../LICENSE) 一致，**Apache-2.0**。
-
----
-
-## English summary
-
-Mindos v0.1.x ships a **local-first** soul store: SQLite + optional vector recall, **`hydrate` / `commit` / `forget`** primitives, CLI, and a **dark-themed Dashboard** with auto free-port binding. Install optional **`[semantic]`** for embeddings. See **MINDOS_PLAN.md** for the full five-layer brain, MCP, and proxy roadmap.
+*Part of the [Omnity](https://github.com/anthropics/omnity) ecosystem:
+SOAP (Spatial Omnity Agentic Protocol) + Mindos (Digital Soul Protocol).*

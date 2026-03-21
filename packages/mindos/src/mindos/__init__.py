@@ -1,6 +1,10 @@
-"""Mindos — Portable Digital Soul Protocol."""
+"""Mindos — Multi-layer Intention & Neural Dynamic Operating System.
+
+A portable, persistent digital soul protocol.
+"""
+
+__version__ = "0.2.0"
 
 from mindos.core import Mindos
 
-__version__ = "0.1.1"
-__all__ = ["Mindos"]
+__all__ = ["Mindos", "__version__"]
