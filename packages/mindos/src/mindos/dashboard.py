@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import socket
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import TYPE_CHECKING
@@ -313,11 +314,29 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_error(404)
 
 
+def _pick_port(preferred: int = 3456, max_attempts: int = 32) -> int:
+    """Use preferred port if free; otherwise try preferred+1, … (avoids EADDRINUSE)."""
+    for p in range(preferred, preferred + max_attempts):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("127.0.0.1", p))
+                return p
+            except OSError:
+                continue
+    raise OSError(
+        f"无法在 {preferred}–{preferred + max_attempts - 1} 上绑定端口。"
+        f"请关闭占用端口的进程，或指定其他端口：mindos serve --dashboard --port 8765"
+    )
+
+
 def run_dashboard(mindos_instance: "Mindos", port: int = 3456) -> None:
     global _mindos
     _mindos = mindos_instance
-    server = HTTPServer(("127.0.0.1", port), DashboardHandler)
-    print(f"🧠 Mindos Dashboard 运行在 http://localhost:{port}")
+    actual = _pick_port(port)
+    if actual != port:
+        print(f"⚠ 端口 {port} 已被占用，已改用 {actual}")
+    server = HTTPServer(("127.0.0.1", actual), DashboardHandler)
+    print(f"🧠 Mindos Dashboard 运行在 http://localhost:{actual}")
     print(f"   数据目录：{mindos_instance.root}")
     print(f"   按 Ctrl+C 停止")
     try:
