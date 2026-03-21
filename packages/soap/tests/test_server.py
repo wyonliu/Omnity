@@ -973,3 +973,106 @@ class TestV1SpatialEndpoints:
     def test_region_inventory_not_found(self):
         r = self.client.get("/api/v1/regions/nonexistent/inventory")
         assert r.status_code == 404
+
+
+# ── S5: Semantic Layer tests ──────────────────────────────────
+
+class TestSemanticLayer:
+    """S5: Runtime semantic methods."""
+
+    def setup_method(self):
+        self.rt = SOAPRuntime.load(MALL)
+
+    def test_discover_affordances_all(self):
+        result = self.rt.discover_affordances()
+        assert result["affordance_count"] > 0
+        assert result["object_count"] > 0
+        assert "speak" in result["affordances"]
+
+    def test_discover_affordances_by_region(self):
+        result = self.rt.discover_affordances(region_id="atrium")
+        assert result["object_count"] > 0
+        # all objects should be in atrium
+        atrium = self.rt.get_region("atrium")
+        contained = set(atrium.get("contained_object_ids", []))
+        for aff, oids in result["affordances"].items():
+            for oid in oids:
+                assert oid in contained
+
+    def test_discover_affordances_by_position(self):
+        fountain = self.rt.get_object("fountain_center")
+        b = fountain["bounds"]
+        cx = (b["min"][0] + b["max"][0]) / 2
+        cy = (b["min"][1] + b["max"][1]) / 2
+        cz = (b["min"][2] + b["max"][2]) / 2
+        result = self.rt.discover_affordances(near_position=[cx, cy, cz], radius=30.0)
+        assert result["object_count"] > 0
+
+    def test_describe_context_global(self):
+        desc = self.rt.describe_context()
+        assert "Space:" in desc
+        assert self.rt.space_id in desc
+
+    def test_describe_context_region(self):
+        desc = self.rt.describe_context(region_id="atrium")
+        assert "atrium" in desc
+        assert "Objects" in desc
+
+    def test_describe_context_agent(self):
+        self.rt.register_agent("ctx_bot")
+        ar = self.rt.get_registered_agent("ctx_bot")
+        ar.near_target = "cafe_201"
+        desc = self.rt.describe_context(agent_id="ctx_bot")
+        assert "cafe_201" in desc
+
+    def test_spatial_relationships(self):
+        result = self.rt.spatial_relationships("fountain_center")
+        assert result["object_id"] == "fountain_center"
+        assert "region_id" in result
+        assert "same_region" in result
+        assert "nearby" in result
+        assert isinstance(result["nearby"], list)
+
+    def test_spatial_relationships_not_found(self):
+        result = self.rt.spatial_relationships("nonexistent")
+        assert "error" in result
+
+
+@requires_fastapi
+class TestV1SemanticEndpoints:
+    """S5: HTTP semantic endpoints."""
+
+    def setup_method(self):
+        self.app = create_app(MALL)
+        self.client = TestClient(self.app)
+
+    def test_discover_all(self):
+        r = self.client.get("/api/v1/discover")
+        assert r.status_code == 200
+        assert r.json()["affordance_count"] > 0
+
+    def test_discover_by_region(self):
+        r = self.client.get("/api/v1/discover?region_id=atrium")
+        assert r.status_code == 200
+        assert r.json()["object_count"] > 0
+
+    def test_context_global(self):
+        r = self.client.get("/api/v1/context")
+        assert r.status_code == 200
+        assert "Space:" in r.json()["description"]
+
+    def test_context_region(self):
+        r = self.client.get("/api/v1/context?region_id=atrium")
+        assert r.status_code == 200
+        assert "atrium" in r.json()["description"]
+
+    def test_relationships(self):
+        r = self.client.get("/api/v1/objects/fountain_center/relationships?radius=30")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["object_id"] == "fountain_center"
+        assert "nearby" in data
+
+    def test_relationships_not_found(self):
+        r = self.client.get("/api/v1/objects/nonexistent/relationships")
+        assert r.status_code == 404

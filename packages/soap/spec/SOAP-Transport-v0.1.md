@@ -91,7 +91,15 @@ All v1 endpoints are prefixed with `/api/v1`. Legacy endpoints (`/api/scene`, `/
 }
 ```
 
-### 4.5 Events
+### 4.5 Semantic Layer
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/discover` | Affordance discovery (`region_id`, `cx,cy,cz,radius`) |
+| `GET` | `/api/v1/context` | Natural language scene description (`agent_id`, `region_id`) |
+| `GET` | `/api/v1/objects/{id}/relationships` | Spatial relationships (nearby, region, siblings) |
+
+### 4.6 Events
 
 | Method | Path | Description |
 |--------|------|-------------|

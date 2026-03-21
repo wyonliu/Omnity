@@ -527,6 +527,118 @@ class SOAPRuntime:
             "agents": agents_here,
         }
 
+    # ── S5: semantic layer ──────────────────────────────────────
+
+    def discover_affordances(self, region_id: Optional[str] = None,
+                              near_position: Optional[List[float]] = None,
+                              radius: float = 20.0) -> Dict[str, Any]:
+        """What actions are available in a region or near a position?
+
+        Returns a map of affordance → list of objects that support it.
+        """
+        if near_position:
+            objects = self.spatial_query(center=near_position, radius=radius)
+        elif region_id:
+            objects = self.query_objects(region_id=region_id)
+        else:
+            objects = self.list_objects()
+
+        aff_map: Dict[str, List[str]] = {}
+        for obj in objects:
+            for aff in obj.get("affordances", []):
+                aff_map.setdefault(aff, []).append(obj["id"])
+        return {
+            "affordance_count": len(aff_map),
+            "object_count": len(objects),
+            "affordances": aff_map,
+        }
+
+    def describe_context(self, agent_id: Optional[str] = None,
+                         region_id: Optional[str] = None,
+                         max_objects: int = 20) -> str:
+        """Generate a natural language description of the current context.
+
+        Designed for LLM agents that need a textual understanding of the scene.
+        """
+        parts: List[str] = []
+        parts.append(f"Space: {self.raw.get('title', self.space_id)} (id={self.space_id})")
+
+        # determine region
+        if not region_id and agent_id:
+            ar = self._agent_registry.get(agent_id)
+            if ar:
+                region_id = ar.near_target
+
+        if region_id:
+            inv = self.region_inventory(region_id)
+            if inv:
+                parts.append(f"Region: {inv['name']} ({region_id}), tags: {inv.get('purpose_tags', [])}")
+                objs = inv["objects"][:max_objects]
+                if objs:
+                    obj_lines = []
+                    for o in objs:
+                        state_info = ""
+                        if o.get("state"):
+                            state_info = f", state={o['state']}"
+                        obj_lines.append(
+                            f"  - {o['id']} [{o.get('type', '?')}] "
+                            f"reality={o.get('reality', '?')}, "
+                            f"can: {o.get('affordances', [])}{state_info}")
+                    parts.append(f"Objects ({len(inv['objects'])} total):")
+                    parts.extend(obj_lines)
+                if inv["agents"]:
+                    agent_lines = [f"  - {a['id']} ({a.get('agent_type', '?')}) status={a.get('status', '?')}"
+                                   for a in inv["agents"]]
+                    parts.append(f"Agents nearby ({inv['agent_count']}):")
+                    parts.extend(agent_lines)
+        else:
+            s = self.summary()
+            parts.append(f"Objects: {s['object_count']}, Regions: {s['region_count']}, Agents: {s['agent_count']}")
+            regions = self.list_regions()
+            if regions:
+                parts.append("Regions: " + ", ".join(
+                    f"{r.get('name', r['id'])} ({r['id']})" for r in regions))
+
+        return "\n".join(parts)
+
+    def spatial_relationships(self, object_id: str,
+                              radius: float = 10.0) -> Dict[str, Any]:
+        """Infer spatial relationships for an object.
+
+        Returns: nearby objects, containing region, objects in same region.
+        """
+        obj = self.get_object(object_id)
+        if not obj:
+            return {"error": f"Object '{object_id}' not found"}
+
+        result: Dict[str, Any] = {"object_id": object_id}
+
+        # find containing region
+        for region in self.list_regions():
+            if object_id in region.get("contained_object_ids", []):
+                result["region_id"] = region["id"]
+                result["region_name"] = region.get("name")
+                # siblings in same region
+                siblings = [oid for oid in region.get("contained_object_ids", [])
+                            if oid != object_id]
+                result["same_region"] = siblings
+                break
+
+        # spatial proximity
+        bounds = obj.get("bounds", {})
+        obj_min = bounds.get("min")
+        obj_max = bounds.get("max")
+        if obj_min and obj_max and len(obj_min) >= 3 and len(obj_max) >= 3:
+            center = [
+                (obj_min[0] + obj_max[0]) / 2,
+                (obj_min[1] + obj_max[1]) / 2,
+                (obj_min[2] + obj_max[2]) / 2,
+            ]
+            nearby = self.spatial_query(center=center, radius=radius)
+            result["nearby"] = [n["id"] for n in nearby if n["id"] != object_id]
+
+        return result
+
     # ── write: record event ─────────────────────────────────────
 
     def _record(self, agent_id: str, verb: str, target_id: str,

@@ -417,6 +417,38 @@ def create_app(scene_path: Optional[Path] = None):
             raise HTTPException(404, f"Region '{region_id}' not found")
         return JSONResponse(inv)
 
+    # S5: Semantic Layer
+    @app.get("/api/v1/discover")
+    def v1_discover(
+        region_id: Optional[str] = Query(None),
+        cx: Optional[float] = Query(None),
+        cy: Optional[float] = Query(None),
+        cz: Optional[float] = Query(None),
+        radius: float = Query(20.0),
+    ):
+        """Discover available affordances in a region or near a position."""
+        center = [cx, cy, cz] if cx is not None and cy is not None and cz is not None else None
+        return JSONResponse(
+            _get_rt().discover_affordances(
+                region_id=region_id, near_position=center, radius=radius))
+
+    @app.get("/api/v1/context")
+    def v1_context(
+        agent_id: Optional[str] = Query(None),
+        region_id: Optional[str] = Query(None),
+    ):
+        """Get natural language context description for LLM agents."""
+        return JSONResponse({"description": _get_rt().describe_context(
+            agent_id=agent_id, region_id=region_id)})
+
+    @app.get("/api/v1/objects/{obj_id}/relationships")
+    def v1_relationships(obj_id: str, radius: float = Query(10.0)):
+        """Get spatial relationships for an object."""
+        result = _get_rt().spatial_relationships(obj_id, radius)
+        if "error" in result:
+            raise HTTPException(404, result["error"])
+        return JSONResponse(result)
+
     # Actions
     @app.post("/api/v1/actions")
     def v1_action(req: ActionRequest):
