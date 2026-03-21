@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from omnity_soap.paths import default_scene_path, viewer_static_dir, package_root
 from omnity_soap.runtime import SOAPRuntime
@@ -36,13 +36,52 @@ class AgentRegisterRequest(BaseModel):
     position: Optional[List[float]] = None
     meta: Dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator("agent_id")
+    @classmethod
+    def agent_id_not_empty(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("agent_id must not be empty")
+        return v
+
+    @field_validator("position")
+    @classmethod
+    def position_length(cls, v: Optional[List[float]]) -> Optional[List[float]]:
+        if v is not None and len(v) < 3:
+            raise ValueError("position must have at least 3 elements [x, y, z]")
+        return v
+
 class HeartbeatRequest(BaseModel):
     position: Optional[List[float]] = None
     status: str = "active"
 
+    @field_validator("position")
+    @classmethod
+    def position_length(cls, v: Optional[List[float]]) -> Optional[List[float]]:
+        if v is not None and len(v) < 3:
+            raise ValueError("position must have at least 3 elements [x, y, z]")
+        return v
+
 class LockRequest(BaseModel):
     agent_id: str
     ttl_seconds: float = 30.0
+
+    @field_validator("agent_id")
+    @classmethod
+    def agent_id_not_empty(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("agent_id must not be empty")
+        return v
+
+    @field_validator("ttl_seconds")
+    @classmethod
+    def ttl_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("ttl_seconds must be positive")
+        if v > 3600:
+            raise ValueError("ttl_seconds must not exceed 3600")
+        return v
 
 class LegacyActionRequest(BaseModel):
     agent_id: str = "anonymous"
@@ -74,8 +113,10 @@ class ConnectionManager:
             conn = self._connections.pop(ws_id, None)
             return conn["agent_id"] if conn else None
 
-    async def update_topics(self, ws_id: str, add: Set[str] = set(),
-                            remove: Set[str] = set()) -> None:
+    async def update_topics(self, ws_id: str, add: Optional[Set[str]] = None,
+                            remove: Optional[Set[str]] = None) -> None:
+        add = add or set()
+        remove = remove or set()
         async with self._lock:
             conn = self._connections.get(ws_id)
             if conn:
@@ -223,6 +264,8 @@ def create_app(scene_path: Optional[Path] = None):
             code = 400
         elif result.code == "NOT_AFFORDED":
             code = 403
+        elif result.code == "INVALID_URI":
+            code = 400
         elif result.code == "NOT_IMPLEMENTED":
             code = 501
         elif result.code == "LOCK_HELD":
@@ -261,6 +304,17 @@ def create_app(scene_path: Optional[Path] = None):
             "agents": _get_rt().nearby_agents(agent_id, radius),
         })
 
+    @app.get("/api/v1/agents/query")
+    def v1_query_agents(
+        agent_type: Optional[str] = Query(None),
+        capability: Optional[str] = Query(None),
+        region_id: Optional[str] = Query(None),
+        status: Optional[str] = Query(None),
+    ):
+        return JSONResponse({
+            "agents": _get_rt().query_agents(agent_type, capability, region_id, status),
+        })
+
     @app.get("/api/v1/agents/{agent_id}")
     def v1_agent(agent_id: str):
         ag = _get_rt().get_agent(agent_id)
@@ -270,10 +324,13 @@ def create_app(scene_path: Optional[Path] = None):
 
     @app.put("/api/v1/agents/{agent_id}/heartbeat")
     def v1_heartbeat(agent_id: str, req: HeartbeatRequest):
-        ok = _get_rt().heartbeat(agent_id, req.position, req.status)
+        r = _get_rt()
+        ok = r.heartbeat(agent_id, req.position, req.status)
         if not ok:
             raise HTTPException(404, f"Agent '{agent_id}' not registered")
-        return JSONResponse({"ok": True})
+        # return updated agent info including resolved region
+        ag = r.get_agent(agent_id)
+        return JSONResponse({"ok": True, "agent": ag})
 
     @app.delete("/api/v1/agents/{agent_id}")
     def v1_deregister(agent_id: str):

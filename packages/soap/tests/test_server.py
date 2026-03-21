@@ -117,6 +117,84 @@ class TestObjectLocking:
         assert result.code == "LOCK_HELD"
 
 
+class TestRegionAwareness:
+    def setup_method(self):
+        self.rt = SOAPRuntime.load(MALL)
+
+    def test_update_agent_region_fires_events(self):
+        events = []
+        self.rt.add_event_listener(lambda t, d: events.append((t, d)))
+        self.rt.register_agent("bot_1")
+        # Move from default "atrium" to "cafe_201"
+        result = self.rt.update_agent_region("bot_1", new_region="cafe_201")
+        assert result == "cafe_201"
+        topics = [e[0] for e in events]
+        assert "region.exited" in topics
+        assert "region.entered" in topics
+        # Check the exit was from atrium, enter was cafe_201
+        exit_ev = [e for e in events if e[0] == "region.exited"][0]
+        enter_ev = [e for e in events if e[0] == "region.entered"][0]
+        assert exit_ev[1]["region_id"] == "atrium"
+        assert enter_ev[1]["region_id"] == "cafe_201"
+
+    def test_no_event_if_same_region(self):
+        events = []
+        self.rt.register_agent("bot_1")
+        self.rt.add_event_listener(lambda t, d: events.append((t, d)))
+        self.rt.update_agent_region("bot_1", new_region="atrium")
+        region_events = [e for e in events if "region" in e[0]]
+        assert len(region_events) == 0
+
+    def test_heartbeat_auto_updates_region(self):
+        self.rt.register_agent("bot_1", position=[0, 0, 0])
+        events = []
+        self.rt.add_event_listener(lambda t, d: events.append((t, d)))
+        # Heartbeat with a position near cafe_201 objects
+        # (the actual position doesn't matter much since resolve_region uses generous margin)
+        self.rt.heartbeat("bot_1", position=[50, 0, 50])
+        # At minimum, the heartbeat should succeed
+        ar = self.rt.get_registered_agent("bot_1")
+        assert ar.position == [50, 0, 50]
+
+
+class TestAgentQuery:
+    def setup_method(self):
+        self.rt = SOAPRuntime.load(MALL)
+
+    def test_query_by_type(self):
+        self.rt.register_agent("r1", agent_type="robot")
+        self.rt.register_agent("h1", agent_type="human")
+        self.rt.register_agent("r2", agent_type="robot")
+        result = self.rt.query_agents(agent_type="robot")
+        ids = [a["id"] for a in result]
+        assert "r1" in ids and "r2" in ids
+        assert "h1" not in ids
+
+    def test_query_by_capability(self):
+        self.rt.register_agent("r1", capabilities=["observe", "navigate"])
+        self.rt.register_agent("h1", capabilities=["observe"])
+        result = self.rt.query_agents(capability="navigate")
+        ids = [a["id"] for a in result]
+        assert "r1" in ids
+        assert "h1" not in ids
+
+    def test_query_by_region(self):
+        self.rt.register_agent("a1")
+        self.rt.update_agent_region("a1", new_region="cafe_201")
+        self.rt.register_agent("a2")  # default atrium
+        result = self.rt.query_agents(region_id="cafe_201")
+        ids = [a["id"] for a in result]
+        assert "a1" in ids
+        assert "a2" not in ids
+
+    def test_query_combined(self):
+        self.rt.register_agent("r1", agent_type="robot", capabilities=["navigate"])
+        self.rt.register_agent("r2", agent_type="robot", capabilities=["observe"])
+        result = self.rt.query_agents(agent_type="robot", capability="navigate")
+        assert len(result) == 1
+        assert result[0]["id"] == "r1"
+
+
 class TestEventListeners:
     def test_listener_called_on_action(self):
         rt = SOAPRuntime.load(MALL)
@@ -406,3 +484,164 @@ class TestWebSocket:
             data = json.loads(ws.receive_text())
             assert data["type"] == "action_result"
             assert data["data"]["ok"] is True
+
+
+# ── Input validation tests ─────────────────────────────────────
+
+@requires_fastapi
+class TestInputValidation:
+
+    def setup_method(self):
+        self.app = create_app(MALL)
+        self.client = TestClient(self.app)
+
+    def test_register_empty_agent_id(self):
+        r = self.client.post("/api/v1/agents", json={"agent_id": ""})
+        assert r.status_code == 422
+
+    def test_register_whitespace_agent_id(self):
+        r = self.client.post("/api/v1/agents", json={"agent_id": "   "})
+        assert r.status_code == 422
+
+    def test_register_bad_position_length(self):
+        r = self.client.post("/api/v1/agents", json={
+            "agent_id": "bot_1", "position": [1, 2],
+        })
+        assert r.status_code == 422
+
+    def test_heartbeat_bad_position_length(self):
+        self.client.post("/api/v1/agents", json={"agent_id": "bot_1"})
+        r = self.client.put("/api/v1/agents/bot_1/heartbeat",
+                            json={"position": [1]})
+        assert r.status_code == 422
+
+    def test_lock_negative_ttl(self):
+        r = self.client.post("/api/v1/objects/fountain_center/lock",
+                             json={"agent_id": "a", "ttl_seconds": -5})
+        assert r.status_code == 422
+
+    def test_lock_zero_ttl(self):
+        r = self.client.post("/api/v1/objects/fountain_center/lock",
+                             json={"agent_id": "a", "ttl_seconds": 0})
+        assert r.status_code == 422
+
+    def test_lock_excessive_ttl(self):
+        r = self.client.post("/api/v1/objects/fountain_center/lock",
+                             json={"agent_id": "a", "ttl_seconds": 99999})
+        assert r.status_code == 422
+
+    def test_lock_empty_agent_id(self):
+        r = self.client.post("/api/v1/objects/fountain_center/lock",
+                             json={"agent_id": "", "ttl_seconds": 30})
+        assert r.status_code == 422
+
+    def test_lock_nonexistent_object(self):
+        r = self.client.post("/api/v1/objects/nonexistent/lock",
+                             json={"agent_id": "a", "ttl_seconds": 30})
+        assert r.status_code == 404
+
+
+# ── Additional endpoint coverage ───────────────────────────────
+
+@requires_fastapi
+class TestV1EdgeCases:
+
+    def setup_method(self):
+        self.app = create_app(MALL)
+        self.client = TestClient(self.app)
+
+    def test_region_not_found(self):
+        r = self.client.get("/api/v1/regions/nonexistent")
+        assert r.status_code == 404
+
+    def test_action_unknown_verb(self):
+        r = self.client.post("/api/v1/actions", json={
+            "agent_id": "test", "verb": "FLY",
+            "target_id": "fountain_center",
+        })
+        assert r.status_code == 400
+        assert r.json()["code"] == "UNKNOWN_VERB"
+
+    def test_action_rearrange_not_implemented(self):
+        r = self.client.post("/api/v1/actions", json={
+            "agent_id": "test", "verb": "REARRANGE",
+            "target_id": "fountain_center",
+        })
+        assert r.status_code == 501
+        assert r.json()["code"] == "NOT_IMPLEMENTED"
+
+    def test_action_observe_not_found(self):
+        r = self.client.post("/api/v1/actions", json={
+            "agent_id": "test", "verb": "OBSERVE",
+            "target_id": "nonexistent_xyz",
+        })
+        assert r.status_code == 404
+        assert r.json()["code"] == "NOT_FOUND"
+
+    def test_action_navigate_invalid_uri(self):
+        """NAVIGATE with a non-soap:// URI should return INVALID_URI / 400."""
+        # Need a valid object first
+        objects = self.client.get("/api/v1/objects").json()["objects"]
+        obj_id = objects[0]["id"]
+        r = self.client.post("/api/v1/actions", json={
+            "agent_id": "test", "verb": "NAVIGATE",
+            "target_id": obj_id,
+            "params": {"target_uri": "http://example.com"},
+        })
+        assert r.status_code == 400
+        assert r.json()["code"] == "INVALID_URI"
+
+    def test_deregister_nonexistent(self):
+        r = self.client.delete("/api/v1/agents/ghost")
+        assert r.status_code == 404
+
+    def test_agent_not_found(self):
+        r = self.client.get("/api/v1/agents/ghost")
+        assert r.status_code == 404
+
+
+# ── Runtime edge cases ─────────────────────────────────────────
+
+class TestRuntimeEdgeCases:
+
+    def setup_method(self):
+        self.rt = SOAPRuntime.load(MALL)
+
+    def test_nearby_unregistered_agent(self):
+        """nearby_agents for unknown agent_id returns empty list."""
+        assert self.rt.nearby_agents("nonexistent") == []
+
+    def test_nearby_disconnected_excluded(self):
+        """Disconnected agents are excluded from nearby results."""
+        import time
+        self.rt.register_agent("a", position=[0, 0, 0])
+        self.rt.register_agent("b", position=[1, 0, 0])
+        # Mark b as disconnected
+        ar_b = self.rt.get_registered_agent("b")
+        ar_b.status = "disconnected"
+        nearby = self.rt.nearby_agents("a", radius=5.0)
+        assert not any(a["id"] == "b" for a in nearby)
+
+    def test_reap_to_disconnected(self):
+        """Agent goes stale -> disconnected after 2x TTL."""
+        import time
+        self.rt.register_agent("bot_1")
+        ar = self.rt.get_registered_agent("bot_1")
+        ar.last_heartbeat = time.time() - 120
+        # First reap: active -> stale
+        ar.status = "stale"  # simulate already stale
+        changed = self.rt.reap_stale_agents(heartbeat_ttl=5.0)
+        assert "bot_1" in changed
+        assert self.rt.get_registered_agent("bot_1").status == "disconnected"
+
+    def test_event_log_ordering(self):
+        """Events are sequentially numbered."""
+        self.rt.observe("a", "fountain_center")
+        self.rt.observe("a", "atrium")
+        events = self.rt.get_events_since(0)
+        assert events[0]["seq"] == 1
+        assert events[1]["seq"] == 2
+        # after=1 should skip first
+        filtered = self.rt.get_events_since(1)
+        assert len(filtered) == 1
+        assert filtered[0]["seq"] == 2

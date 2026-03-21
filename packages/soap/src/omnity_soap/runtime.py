@@ -190,7 +190,8 @@ class SOAPRuntime:
 
     def heartbeat(self, agent_id: str, position: Optional[List[float]] = None,
                   status: str = "active") -> bool:
-        """Update agent heartbeat. Returns False if not registered."""
+        """Update agent heartbeat. Returns False if not registered.
+        Auto-updates region if position changed."""
         ar = self._agent_registry.get(agent_id)
         if not ar:
             return False
@@ -198,6 +199,8 @@ class SOAPRuntime:
         ar.status = status
         if position:
             ar.position = position
+            # auto-resolve region from new position
+            self.update_agent_region(agent_id, position=position)
         # sync legacy
         self._agents[agent_id] = ar.to_dict()
         return True
@@ -226,6 +229,67 @@ class SOAPRuntime:
             # fallback: same near_target
             if me.near_target and me.near_target == ar.near_target:
                 results.append(ar.to_dict())
+        return results
+
+    def resolve_region_for_position(self, position: List[float]) -> Optional[str]:
+        """Find which region contains the given position (by checking object bounds in region)."""
+        if not position or len(position) < 3:
+            return None
+        x, y, z = position[0], position[1], position[2]
+        for region in self.list_regions():
+            for oid in region.get("contained_object_ids", []):
+                obj = self.get_object(oid)
+                if obj and "bounds" in obj:
+                    b = obj["bounds"]
+                    mn, mx = b.get("min", []), b.get("max", [])
+                    if len(mn) >= 3 and len(mx) >= 3:
+                        # expand region check by generous margin (20m around any object in region)
+                        margin = 20.0
+                        if (mn[0] - margin <= x <= mx[0] + margin and
+                            mn[2] - margin <= z <= mx[2] + margin):
+                            return region["id"]
+        return None
+
+    def update_agent_region(self, agent_id: str, new_region: Optional[str] = None,
+                            position: Optional[List[float]] = None) -> Optional[str]:
+        """Update agent's region. Auto-resolves from position if new_region not given.
+        Fires region.entered/region.exited events on change. Returns new region_id."""
+        ar = self._agent_registry.get(agent_id)
+        if not ar:
+            return None
+        if not new_region and position:
+            new_region = self.resolve_region_for_position(position)
+        if not new_region:
+            return ar.near_target
+        old_region = ar.near_target
+        if old_region != new_region:
+            ar.near_target = new_region
+            self._agents[agent_id] = ar.to_dict()
+            if old_region:
+                self._notify_listeners("region.exited", {
+                    "agent_id": agent_id, "region_id": old_region,
+                })
+            self._notify_listeners("region.entered", {
+                "agent_id": agent_id, "region_id": new_region,
+            })
+        return new_region
+
+    def query_agents(self, agent_type: Optional[str] = None,
+                     capability: Optional[str] = None,
+                     region_id: Optional[str] = None,
+                     status: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Query agents by type, capability, region, or status."""
+        results = []
+        for ar in self._agent_registry.values():
+            if agent_type and ar.agent_type != agent_type:
+                continue
+            if capability and capability not in ar.capabilities:
+                continue
+            if region_id and ar.near_target != region_id:
+                continue
+            if status and ar.status != status:
+                continue
+            results.append(ar.to_dict())
         return results
 
     def reap_stale_agents(self, heartbeat_ttl: float = 30.0) -> List[str]:
@@ -263,8 +327,9 @@ class SOAPRuntime:
                 ttl=ttl, expires_at=now + ttl,
             )
             self._object_locks[object_id] = lr
-            self._notify_listeners("lock.acquired", lr.to_dict())
-            return lr
+        # notify outside lock to avoid deadlocks
+        self._notify_listeners("lock.acquired", lr.to_dict())
+        return lr
 
     def release_lock(self, object_id: str, agent_id: str) -> bool:
         """Release lock. Only the holder can release."""
@@ -275,17 +340,23 @@ class SOAPRuntime:
             if lr.agent_id != agent_id and not lr.is_expired():
                 return False
             self._object_locks.pop(object_id, None)
-            self._notify_listeners("lock.released",
-                                   {"object_id": object_id, "agent_id": agent_id})
-            return True
+        # notify outside lock to avoid deadlocks
+        self._notify_listeners("lock.released",
+                               {"object_id": object_id, "agent_id": agent_id})
+        return True
 
     def check_lock(self, object_id: str) -> Optional[LockRecord]:
         """Check lock status. Auto-clears expired locks."""
-        lr = self._object_locks.get(object_id)
-        if lr and lr.is_expired():
-            self._object_locks.pop(object_id, None)
-            self._notify_listeners("lock.expired", lr.to_dict())
-            return None
+        expired_data = None
+        with self._lock:
+            lr = self._object_locks.get(object_id)
+            if lr and lr.is_expired():
+                self._object_locks.pop(object_id, None)
+                expired_data = lr.to_dict()
+                lr = None  # cleared
+        # notify outside lock to avoid deadlocks
+        if expired_data is not None:
+            self._notify_listeners("lock.expired", expired_data)
         return lr
 
     def _check_lock_for_manipulate(self, object_id: str, agent_id: str) -> Optional[ActionResult]:

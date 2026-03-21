@@ -153,13 +153,22 @@ POST /api/v1/objects/{id}/lock
 ```json
 {
   "ok": true,
+  "object_id": "fountain_center",
+  "agent_id": "explorer_01",
   "lock_id": "uuid",
-  "holder": "explorer_01",
-  "expires_at": 1711036830.0
+  "acquired_at": 1711036800.0,
+  "ttl": 30,
+  "expires_at": 1711036830.0,
+  "expired": false
 }
 ```
 
 Locking is **advisory** in v0.1: only MANIPULATE checks locks. OBSERVE and NAVIGATE are unrestricted.
+
+**Constraints**:
+- `agent_id` MUST be a non-empty, non-whitespace string.
+- `ttl_seconds` MUST be positive and MUST NOT exceed 3600 (1 hour).
+- `position` arrays, when provided, MUST have at least 3 elements `[x, y, z]`.
 
 ---
 
