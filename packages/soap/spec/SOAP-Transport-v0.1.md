@@ -105,16 +105,17 @@ All v1 endpoints are prefixed with `/api/v1`. Legacy endpoints (`/api/scene`, `/
 |--------|------|-------------|
 | `GET` | `/api/v1/events?after={seq}` | Event log (all events with seq > after) |
 
-### 4.6 Agents
+### 4.7 Agents
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/v1/agents` | Register agent |
 | `GET` | `/api/v1/agents` | List all agents |
 | `GET` | `/api/v1/agents/{id}` | Get agent detail |
-| `PUT` | `/api/v1/agents/{id}/heartbeat` | Presence heartbeat |
+| `PUT` | `/api/v1/agents/{id}/heartbeat` | Presence heartbeat (auto-resolves region) |
 | `DELETE` | `/api/v1/agents/{id}` | Deregister agent |
 | `GET` | `/api/v1/agents/nearby?agent_id={id}&radius={m}` | Nearby agents |
+| `GET` | `/api/v1/agents/query?agent_type=&capability=&region_id=&status=` | Query agents by filters |
 
 **Agent Registration Request**:
 ```json
@@ -143,7 +144,7 @@ PUT /api/v1/agents/{id}/heartbeat
 
 Default heartbeat TTL: 30 seconds. Agent marked `stale` after 1x TTL, `disconnected` after 2x TTL.
 
-### 4.7 Object Locking
+### 4.8 Object Locking
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -364,13 +365,47 @@ Access-Control-Allow-Headers: Content-Type
 
 ---
 
-## 9. Future Extensions (v0.2+)
+## 9. SDK Support
+
+### 9.1 TypeScript SDK (`soap-ts`)
+
+```ts
+import { SOAPClient, SOAPWebSocket } from "soap-sdk";
+
+const client = new SOAPClient({
+  baseUrl: "http://localhost:8765",
+  agentId: "my_bot",
+});
+
+// REST
+const objects = await client.searchObjects({ type: "npc.store_clerk" });
+const result = await client.observe("fountain_center");
+const context = await client.getContext({ regionId: "atrium" });
+
+// WebSocket
+const ws = new SOAPWebSocket({
+  url: "ws://localhost:8765/ws",
+  agentId: "my_bot",
+  subscribe: ["events", "agents", "regions"],
+});
+ws.on("event", (e) => console.log(e.topic, e.data));
+ws.connect();
+```
+
+### 9.2 Python (built-in)
+
+The reference server (`soap-server`) and runtime (`SOAPRuntime`) are the Python SDK. Install via `pip install omnity-soap[server]`.
+
+---
+
+## 10. Future Extensions (v0.2+)
 
 - **Space Registry**: DNS-like discovery of SOAP servers by space_id
 - **Federation**: Cross-server agent roaming (agent walks from space A to space B)
-- **Spatial Queries**: `GET /api/v1/objects?bbox=x1,y1,z1,x2,y2,z2` — query by bounding box
 - **LOD (Level of Detail)**: `?detail=low|medium|high` for bandwidth-constrained devices
 - **Conformance Test Suite**: Standardized test set for third-party implementations
+- **Standard Bridges**: gRPC, MQTT, ROS2 transport adapters
+- **CDN Integration**: Static asset delivery for large scenes
 
 ---
 
