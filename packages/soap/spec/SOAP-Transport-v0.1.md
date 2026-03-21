@@ -181,6 +181,29 @@ Locking is **advisory** in v0.1: only MANIPULATE checks locks. OBSERVE and NAVIG
 - `ttl_seconds` MUST be positive and MUST NOT exceed 3600 (1 hour).
 - `position` arrays, when provided, MUST have at least 3 elements `[x, y, z]`.
 
+### 4.9 Permissions
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/permissions` | Add permission rule |
+| `GET` | `/api/v1/permissions` | List permissions (optional `?agent_id=`) |
+| `DELETE` | `/api/v1/permissions/{agent_id}` | Remove agent's permissions |
+| `PUT` | `/api/v1/permissions/enable?enabled=true` | Enable/disable permission checking |
+
+Permissions are **opt-in** (disabled by default for backward compatibility). When enabled, access is **default-deny**: only explicitly granted actions are allowed.
+
+**Permission Rule**:
+```json
+{
+  "agent_id": "robot_01",
+  "verbs": ["OBSERVE", "NAVIGATE"],
+  "target_ids": ["*"],
+  "region_ids": ["atrium", "cafe_201"]
+}
+```
+
+Use `"*"` as wildcard for any agent, verb, target, or region.
+
 ---
 
 ## 5. SOAP Status Codes
@@ -192,6 +215,7 @@ Locking is **advisory** in v0.1: only MANIPULATE checks locks. OBSERVE and NAVIG
 | `UNKNOWN_OBJECT` | 404 | Object ID not in scene |
 | `UNKNOWN_VERB` | 400 | Invalid action verb |
 | `NOT_AFFORDED` | 403 | Action not in object's affordances |
+| `FORBIDDEN` | 403 | Permission denied (when permissions enabled) |
 | `NOT_IMPLEMENTED` | 501 | Verb not yet supported (e.g. REARRANGE) |
 | `INVALID_URI` | 400 | Malformed soap:// URI |
 | `LOCK_HELD` | 409 | Object locked by another agent |

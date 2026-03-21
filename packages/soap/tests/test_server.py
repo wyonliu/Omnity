@@ -1076,3 +1076,112 @@ class TestV1SemanticEndpoints:
     def test_relationships_not_found(self):
         r = self.client.get("/api/v1/objects/nonexistent/relationships")
         assert r.status_code == 404
+
+
+# ── S6: Permissions & Access Control tests ────────────────────
+
+class TestPermissions:
+    """S6: Runtime permission system."""
+
+    def setup_method(self):
+        self.rt = SOAPRuntime.load(MALL)
+
+    def test_permissions_disabled_by_default(self):
+        """With permissions disabled, everything is allowed."""
+        assert self.rt.check_permission("anyone", "OBSERVE", "fountain_center") is True
+
+    def test_permissions_default_deny(self):
+        """With permissions enabled but no rules, everything is denied."""
+        self.rt.enable_permissions(True)
+        assert self.rt.check_permission("bot_1", "OBSERVE", "fountain_center") is False
+
+    def test_wildcard_permission(self):
+        self.rt.enable_permissions(True)
+        self.rt.add_permission("*", verbs=["*"], target_ids=["*"])
+        assert self.rt.check_permission("anyone", "OBSERVE", "fountain_center") is True
+
+    def test_agent_specific_permission(self):
+        self.rt.enable_permissions(True)
+        self.rt.add_permission("bot_1", verbs=["OBSERVE"], target_ids=["*"])
+        assert self.rt.check_permission("bot_1", "OBSERVE", "fountain_center") is True
+        assert self.rt.check_permission("bot_1", "MANIPULATE", "fountain_center") is False
+        assert self.rt.check_permission("bot_2", "OBSERVE", "fountain_center") is False
+
+    def test_target_specific_permission(self):
+        self.rt.enable_permissions(True)
+        self.rt.add_permission("bot_1", verbs=["*"], target_ids=["fountain_center"])
+        assert self.rt.check_permission("bot_1", "OBSERVE", "fountain_center") is True
+        assert self.rt.check_permission("bot_1", "OBSERVE", "game_portal_alpha") is False
+
+    def test_region_permission(self):
+        self.rt.enable_permissions(True)
+        self.rt.add_permission("bot_1", verbs=["*"], target_ids=["*"], region_ids=["atrium"])
+        # fountain_center is in atrium
+        assert self.rt.check_permission("bot_1", "OBSERVE", "fountain_center") is True
+
+    def test_execute_action_forbidden(self):
+        self.rt.enable_permissions(True)
+        # no permissions → denied
+        result = self.rt.execute_action("bot_1", "OBSERVE", "fountain_center")
+        assert result.ok is False
+        assert result.code == "FORBIDDEN"
+
+    def test_remove_permissions(self):
+        self.rt.add_permission("bot_1", verbs=["OBSERVE"])
+        self.rt.add_permission("bot_1", verbs=["MANIPULATE"])
+        self.rt.add_permission("bot_2", verbs=["OBSERVE"])
+        removed = self.rt.remove_permissions("bot_1")
+        assert removed == 2
+        perms = self.rt.list_permissions()
+        assert len(perms) == 1
+        assert perms[0]["agent_id"] == "bot_2"
+
+    def test_list_permissions_filtered(self):
+        self.rt.add_permission("bot_1", verbs=["OBSERVE"])
+        self.rt.add_permission("*", verbs=["OBSERVE"])
+        perms = self.rt.list_permissions(agent_id="bot_1")
+        # should include bot_1's own + wildcard
+        assert len(perms) == 2
+
+
+@requires_fastapi
+class TestV1Permissions:
+    """S6: HTTP permission endpoints."""
+
+    def setup_method(self):
+        self.app = create_app(MALL)
+        self.client = TestClient(self.app)
+
+    def test_add_and_list_permissions(self):
+        r = self.client.post("/api/v1/permissions", json={
+            "agent_id": "bot_1", "verbs": ["OBSERVE", "NAVIGATE"],
+        })
+        assert r.status_code == 201
+        r2 = self.client.get("/api/v1/permissions")
+        assert len(r2.json()["permissions"]) >= 1
+
+    def test_enable_permissions_blocks_action(self):
+        # enable permissions (default-deny)
+        self.client.put("/api/v1/permissions/enable?enabled=true")
+        r = self.client.post("/api/v1/actions", json={
+            "agent_id": "bot_1", "verb": "OBSERVE", "target_id": "fountain_center",
+        })
+        assert r.status_code == 403
+        assert r.json()["code"] == "FORBIDDEN"
+
+    def test_permission_allows_action(self):
+        self.client.put("/api/v1/permissions/enable?enabled=true")
+        self.client.post("/api/v1/permissions", json={
+            "agent_id": "bot_1", "verbs": ["OBSERVE"], "target_ids": ["*"],
+        })
+        r = self.client.post("/api/v1/actions", json={
+            "agent_id": "bot_1", "verb": "OBSERVE", "target_id": "fountain_center",
+        })
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+
+    def test_remove_permissions(self):
+        self.client.post("/api/v1/permissions", json={"agent_id": "bot_1"})
+        r = self.client.delete("/api/v1/permissions/bot_1")
+        assert r.status_code == 200
+        assert r.json()["removed"] >= 1

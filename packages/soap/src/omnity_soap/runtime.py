@@ -112,6 +112,25 @@ class LockRecord:
 
 
 @dataclass
+class Permission:
+    """Agent permission rule."""
+    agent_id: str  # "*" means all agents
+    verbs: List[str]  # allowed verbs, ["*"] means all
+    target_ids: List[str]  # allowed targets, ["*"] means all
+    region_ids: List[str]  # allowed regions, ["*"] means all
+
+    def allows(self, verb: str, target_id: str, region_id: Optional[str] = None) -> bool:
+        """Check if this permission allows the given action."""
+        if "*" not in self.verbs and verb.upper() not in [v.upper() for v in self.verbs]:
+            return False
+        if "*" not in self.target_ids and target_id not in self.target_ids:
+            return False
+        if region_id and "*" not in self.region_ids and region_id not in self.region_ids:
+            return False
+        return True
+
+
+@dataclass
 class SOAPRuntime:
     """Mutable in-memory scene graph with action execution and event log."""
 
@@ -124,6 +143,8 @@ class SOAPRuntime:
     _agent_registry: Dict[str, AgentRecord] = field(default_factory=dict, repr=False)
     _object_locks: Dict[str, LockRecord] = field(default_factory=dict, repr=False)
     _event_listeners: List[Callable] = field(default_factory=list, repr=False)
+    _permissions: List[Permission] = field(default_factory=list, repr=False)
+    _permissions_enabled: bool = False
 
     @classmethod
     def load(cls, path: Path) -> SOAPRuntime:
@@ -368,6 +389,66 @@ class SOAPRuntime:
                 detail=f"Object '{object_id}' is locked by agent '{lr.agent_id}' until {lr.expires_at}",
             )
         return None
+
+    # ── permissions ─────────────────────────────────────────────
+
+    def enable_permissions(self, enabled: bool = True) -> None:
+        """Enable or disable permission checking. Disabled by default for backward compat."""
+        self._permissions_enabled = enabled
+
+    def add_permission(self, agent_id: str = "*",
+                       verbs: Optional[List[str]] = None,
+                       target_ids: Optional[List[str]] = None,
+                       region_ids: Optional[List[str]] = None) -> Permission:
+        """Add a permission rule. Returns the created Permission."""
+        p = Permission(
+            agent_id=agent_id,
+            verbs=verbs or ["*"],
+            target_ids=target_ids or ["*"],
+            region_ids=region_ids or ["*"],
+        )
+        self._permissions.append(p)
+        return p
+
+    def remove_permissions(self, agent_id: str) -> int:
+        """Remove all permissions for an agent. Returns count removed."""
+        before = len(self._permissions)
+        self._permissions = [p for p in self._permissions if p.agent_id != agent_id]
+        return before - len(self._permissions)
+
+    def check_permission(self, agent_id: str, verb: str,
+                         target_id: str) -> bool:
+        """Check if agent is permitted to perform action.
+
+        If permissions are disabled, always returns True.
+        If enabled but no rules match, access is denied (default-deny).
+        """
+        if not self._permissions_enabled:
+            return True
+        # resolve target's region for region-based permissions
+        region_id = None
+        for region in self.list_regions():
+            if target_id in region.get("contained_object_ids", []):
+                region_id = region["id"]
+                break
+        for p in self._permissions:
+            if p.agent_id != "*" and p.agent_id != agent_id:
+                continue
+            if p.allows(verb, target_id, region_id):
+                return True
+        return False
+
+    def list_permissions(self, agent_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List permissions, optionally filtered by agent."""
+        results = []
+        for p in self._permissions:
+            if agent_id and p.agent_id != agent_id and p.agent_id != "*":
+                continue
+            results.append({
+                "agent_id": p.agent_id, "verbs": p.verbs,
+                "target_ids": p.target_ids, "region_ids": p.region_ids,
+            })
+        return results
 
     # ── event listeners ───────────────────────────────────────
 
@@ -926,6 +1007,13 @@ class SOAPRuntime:
         """统一入口：根据 verb 分发到具体方法。"""
         params = params or {}
         v = verb.upper()
+        # S6: permission check
+        if not self.check_permission(agent_id, v, target_id):
+            res = ActionResult(
+                ok=False, verb=v, code="FORBIDDEN",
+                detail=f"Agent '{agent_id}' is not permitted to {v} on '{target_id}'")
+            self._record(agent_id, v, target_id, params, res)
+            return res
         if v == "OBSERVE":
             return self.observe(agent_id, target_id)
         elif v == "NAVIGATE":

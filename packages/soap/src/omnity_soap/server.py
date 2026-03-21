@@ -83,6 +83,12 @@ class LockRequest(BaseModel):
             raise ValueError("ttl_seconds must not exceed 3600")
         return v
 
+class PermissionRequest(BaseModel):
+    agent_id: str = "*"
+    verbs: List[str] = Field(default_factory=lambda: ["*"])
+    target_ids: List[str] = Field(default_factory=lambda: ["*"])
+    region_ids: List[str] = Field(default_factory=lambda: ["*"])
+
 class LegacyActionRequest(BaseModel):
     agent_id: str = "anonymous"
     verb: str = ""
@@ -467,6 +473,8 @@ def create_app(scene_path: Optional[Path] = None):
             code = 501
         elif result.code == "LOCK_HELD":
             code = 409
+        elif result.code == "FORBIDDEN":
+            code = 403
         return JSONResponse(result.to_dict(), status_code=code)
 
     # Events
@@ -535,6 +543,30 @@ def create_app(scene_path: Optional[Path] = None):
         if not ok:
             raise HTTPException(404, f"Agent '{agent_id}' not found")
         return JSONResponse({"ok": True})
+
+    # S6: Permissions
+    @app.post("/api/v1/permissions")
+    def v1_add_permission(req: PermissionRequest):
+        r = _get_rt()
+        p = r.add_permission(req.agent_id, req.verbs, req.target_ids, req.region_ids)
+        return JSONResponse({"ok": True, "permission": {
+            "agent_id": p.agent_id, "verbs": p.verbs,
+            "target_ids": p.target_ids, "region_ids": p.region_ids,
+        }}, status_code=201)
+
+    @app.get("/api/v1/permissions")
+    def v1_list_permissions(agent_id: Optional[str] = Query(None)):
+        return JSONResponse({"permissions": _get_rt().list_permissions(agent_id)})
+
+    @app.delete("/api/v1/permissions/{agent_id}")
+    def v1_remove_permissions(agent_id: str):
+        count = _get_rt().remove_permissions(agent_id)
+        return JSONResponse({"ok": True, "removed": count})
+
+    @app.put("/api/v1/permissions/enable")
+    def v1_enable_permissions(enabled: bool = Query(True)):
+        _get_rt().enable_permissions(enabled)
+        return JSONResponse({"ok": True, "permissions_enabled": enabled})
 
     # Locking
     @app.post("/api/v1/objects/{obj_id}/lock")
