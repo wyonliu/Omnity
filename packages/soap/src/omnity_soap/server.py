@@ -92,19 +92,40 @@ class LegacyActionRequest(BaseModel):
 # ── WebSocket Manager ──────────────────────────────────────────
 
 class ConnectionManager:
-    """Track WebSocket connections and their topic subscriptions."""
+    """Track WebSocket connections and their topic subscriptions.
+
+    Supports:
+    - Topic-based pub/sub (events, agents, locks, state, regions)
+    - Event sequencing for reconnection catch-up
+    - Region-scoped filtering (only events in agent's region)
+    """
+
+    # Map internal runtime event prefixes → WS subscription topics
+    TOPIC_MAP: Dict[str, str] = {
+        "events": "events",
+        "agent.": "agents",
+        "agents.": "agents",
+        "lock.": "locks",
+        "region.": "regions",
+        "state.": "state",
+    }
 
     def __init__(self) -> None:
-        self._connections: Dict[str, Any] = {}  # ws_id -> {"ws": ws, "agent_id": str, "topics": set}
+        self._connections: Dict[str, Any] = {}  # ws_id -> connection info
         self._lock = asyncio.Lock()
         self._counter = 0
+        self._ws_seq = 0  # monotonic sequence for WS events
+        self._recent_events: List[Dict[str, Any]] = []  # ring buffer for catch-up
+        self._max_recent = 500  # keep last 500 events for reconnection
 
-    async def connect(self, ws: Any, agent_id: str, topics: Set[str]) -> str:
+    async def connect(self, ws: Any, agent_id: str, topics: Set[str],
+                      region_filter: Optional[str] = None) -> str:
         async with self._lock:
             self._counter += 1
             ws_id = f"ws_{self._counter}"
             self._connections[ws_id] = {
                 "ws": ws, "agent_id": agent_id, "topics": topics,
+                "region_filter": region_filter,
             }
             return ws_id
 
@@ -123,18 +144,85 @@ class ConnectionManager:
                 conn["topics"] |= add
                 conn["topics"] -= remove
 
-    async def broadcast(self, topic: str, data: Any) -> None:
-        """Send to all connections subscribed to this topic."""
-        msg = json.dumps({"type": "event", "topic": topic, "data": data},
-                         ensure_ascii=False)
+    async def set_region_filter(self, ws_id: str, region_id: Optional[str]) -> None:
+        """Set region filter for a connection. None = receive all regions."""
         async with self._lock:
-            targets = [c["ws"] for c in self._connections.values()
-                       if topic in c["topics"]]
+            conn = self._connections.get(ws_id)
+            if conn:
+                conn["region_filter"] = region_id
+
+    @classmethod
+    def resolve_ws_topic(cls, runtime_topic: str) -> Optional[str]:
+        """Map a runtime event topic to a WS subscription topic."""
+        # exact match first
+        if runtime_topic in cls.TOPIC_MAP:
+            return cls.TOPIC_MAP[runtime_topic]
+        # prefix match
+        for prefix, ws_topic in cls.TOPIC_MAP.items():
+            if prefix.endswith(".") and runtime_topic.startswith(prefix):
+                return ws_topic
+        return None
+
+    async def broadcast(self, runtime_topic: str, data: Any,
+                        region_id: Optional[str] = None) -> None:
+        """Send to all connections subscribed to this topic.
+
+        Args:
+            runtime_topic: Internal event topic (e.g. "lock.acquired", "events")
+            data: Event payload
+            region_id: If set, only send to connections filtering this region (or unfiltered)
+        """
+        ws_topic = self.resolve_ws_topic(runtime_topic)
+        if ws_topic is None:
+            ws_topic = runtime_topic  # fallback: use raw topic
+
+        async with self._lock:
+            self._ws_seq += 1
+            seq = self._ws_seq
+            envelope = {
+                "type": "event", "topic": ws_topic,
+                "runtime_topic": runtime_topic,
+                "seq": seq, "data": data,
+            }
+            # store in ring buffer for catch-up
+            self._recent_events.append(envelope)
+            if len(self._recent_events) > self._max_recent:
+                self._recent_events = self._recent_events[-self._max_recent:]
+
+            targets = []
+            for c in self._connections.values():
+                if ws_topic not in c["topics"]:
+                    continue
+                # region filter: if connection has a filter, only send matching events
+                cf = c.get("region_filter")
+                if cf and region_id and cf != region_id:
+                    continue
+                targets.append(c["ws"])
+
+        msg = json.dumps(envelope, ensure_ascii=False)
         for ws in targets:
             try:
                 await ws.send_text(msg)
             except Exception:
                 pass
+
+    async def catch_up(self, ws_id: str, after_seq: int) -> None:
+        """Send missed events since after_seq to a specific connection."""
+        async with self._lock:
+            conn = self._connections.get(ws_id)
+            if not conn:
+                return
+            ws = conn["ws"]
+            topics = conn["topics"]
+            cf = conn.get("region_filter")
+            missed = [e for e in self._recent_events
+                      if e["seq"] > after_seq and e["topic"] in topics]
+
+        for ev in missed:
+            try:
+                await ws.send_text(json.dumps(ev, ensure_ascii=False))
+            except Exception:
+                break
 
     async def send_to(self, ws_id: str, data: Any) -> None:
         async with self._lock:
@@ -145,6 +233,9 @@ class ConnectionManager:
                     json.dumps(data, ensure_ascii=False))
             except Exception:
                 pass
+
+    def get_latest_seq(self) -> int:
+        return self._ws_seq
 
 
 # ── App Factory ────────────────────────────────────────────────
@@ -170,10 +261,29 @@ def create_app(scene_path: Optional[Path] = None):
         return rt
 
     def _on_runtime_event(topic: str, data: Any) -> None:
-        """Bridge sync runtime events to async WebSocket broadcast."""
+        """Bridge sync runtime events to async WebSocket broadcast.
+
+        Extracts region_id from event data for region-scoped filtering.
+        Also broadcasts state changes from MANIPULATE on the 'state' topic.
+        """
+        # extract region for scoped filtering
+        region_id = None
+        if isinstance(data, dict):
+            region_id = data.get("region_id")
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(mgr.broadcast(topic, data))
+            loop.create_task(mgr.broadcast(topic, data, region_id=region_id))
+            # if this is a MANIPULATE event with state changes, also broadcast on state topic
+            if (topic == "events" and isinstance(data, dict)
+                    and data.get("verb") == "MANIPULATE"
+                    and data.get("result", {}).get("ok")):
+                state_data = {
+                    "object_id": data.get("target_id"),
+                    "agent_id": data.get("agent_id"),
+                    "action": data.get("params", {}).get("action"),
+                    "result": data.get("result", {}).get("data"),
+                }
+                loop.create_task(mgr.broadcast("state.changed", state_data))
         except RuntimeError:
             pass  # no event loop (e.g. in tests without async)
 
@@ -378,7 +488,10 @@ def create_app(scene_path: Optional[Path] = None):
             hello = json.loads(hello_raw)
             agent_id = hello.get("agent_id", "anonymous")
             topics = set(hello.get("subscribe", []))
-            ws_id = await mgr.connect(websocket, agent_id, topics)
+            region_filter = hello.get("region_filter")  # optional region scope
+            last_seq = hello.get("last_seq", 0)  # for reconnection catch-up
+            ws_id = await mgr.connect(websocket, agent_id, topics,
+                                      region_filter=region_filter)
 
             # send welcome
             r = _get_rt()
@@ -388,18 +501,33 @@ def create_app(scene_path: Optional[Path] = None):
                 "space_id": r.space_id,
                 "server_version": "0.1.0",
                 "ws_id": ws_id,
+                "latest_seq": mgr.get_latest_seq(),
             }))
+
+            # catch-up: replay missed events since last_seq
+            if last_seq > 0:
+                await mgr.catch_up(ws_id, last_seq)
 
             # message loop
             while True:
                 raw = await websocket.receive_text()
-                msg = json.loads(raw)
+                try:
+                    msg = json.loads(raw)
+                except json.JSONDecodeError:
+                    await mgr.send_to(ws_id, {
+                        "type": "error", "code": "INVALID_JSON",
+                        "detail": "Message is not valid JSON",
+                    })
+                    continue
+
                 msg_type = msg.get("type", "")
 
                 if msg_type == "subscribe":
                     await mgr.update_topics(ws_id, add=set(msg.get("topics", [])))
                 elif msg_type == "unsubscribe":
                     await mgr.update_topics(ws_id, remove=set(msg.get("topics", [])))
+                elif msg_type == "set_region_filter":
+                    await mgr.set_region_filter(ws_id, msg.get("region_id"))
                 elif msg_type == "heartbeat":
                     r.heartbeat(agent_id)
                 elif msg_type == "action":
@@ -412,6 +540,11 @@ def create_app(scene_path: Optional[Path] = None):
                     await mgr.send_to(ws_id, {
                         "type": "action_result",
                         "data": result.to_dict(),
+                    })
+                else:
+                    await mgr.send_to(ws_id, {
+                        "type": "error", "code": "UNKNOWN_MESSAGE_TYPE",
+                        "detail": f"Unknown message type '{msg_type}'",
                     })
 
         except (WebSocketDisconnect, Exception):

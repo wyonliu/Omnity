@@ -202,9 +202,14 @@ On connect, client sends a **hello** message:
 {
   "type": "hello",
   "agent_id": "explorer_01",
-  "subscribe": ["events", "agents", "locks"]
+  "subscribe": ["events", "agents", "locks"],
+  "region_filter": "atrium",
+  "last_seq": 0
 }
 ```
+
+- `region_filter` (optional): Only receive events from this region. Omit or `null` for all regions.
+- `last_seq` (optional): Last received WebSocket sequence number. Server will replay missed events.
 
 Server responds:
 ```json
@@ -212,7 +217,8 @@ Server responds:
   "type": "welcome",
   "agent_id": "explorer_01",
   "space_id": "mall_01",
-  "server_version": "0.1.0"
+  "server_version": "0.1.0",
+  "latest_seq": 42
 }
 ```
 
@@ -221,16 +227,20 @@ Server responds:
 | Topic | Events pushed |
 |-------|-------------|
 | `events` | All action events (OBSERVE, NAVIGATE, MANIPULATE) |
-| `agents` | Agent registered, deregistered, heartbeat timeout |
+| `agents` | Agent registered, deregistered, heartbeat timeout, status changes |
 | `locks` | Lock acquired, released, expired |
-| `state` | Object state changes (from MANIPULATE) |
+| `state` | Object state changes (auto-derived from MANIPULATE results) |
+| `regions` | Agent entered/exited region |
 
 ### 6.3 Server → Client Messages
 
+All server→client event messages include a monotonic `seq` for reconnection tracking:
 ```json
 {
   "type": "event",
   "topic": "events",
+  "runtime_topic": "events",
+  "seq": 42,
   "data": {
     "seq": 42,
     "ts": 1711036800.123,
@@ -243,12 +253,24 @@ Server responds:
 }
 ```
 
+**Error messages** (sent on malformed input):
+```json
+{"type": "error", "code": "INVALID_JSON", "detail": "Message is not valid JSON"}
+{"type": "error", "code": "UNKNOWN_MESSAGE_TYPE", "detail": "Unknown message type 'foo'"}
+```
+
 ### 6.4 Client → Server Messages
 
 **Subscribe/Unsubscribe** (dynamic topic management):
 ```json
-{"type": "subscribe", "topics": ["state"]}
+{"type": "subscribe", "topics": ["state", "regions"]}
 {"type": "unsubscribe", "topics": ["locks"]}
+```
+
+**Set Region Filter** (scope events to a specific region):
+```json
+{"type": "set_region_filter", "region_id": "food_court"}
+{"type": "set_region_filter", "region_id": null}
 ```
 
 **Inline Action** (execute via WebSocket instead of REST):

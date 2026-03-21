@@ -645,3 +645,200 @@ class TestRuntimeEdgeCases:
         filtered = self.rt.get_events_since(1)
         assert len(filtered) == 1
         assert filtered[0]["seq"] == 2
+
+
+# ── S3: WebSocket Event Bus tests ─────────────────────────────
+
+@requires_fastapi
+class TestWebSocketEventBus:
+    """S3: Enhanced WebSocket event bus — topic routing, sequencing,
+    reconnection catch-up, region filtering, error handling."""
+
+    def setup_method(self):
+        self.app = create_app(MALL)
+        self.client = TestClient(self.app)
+
+    def test_welcome_includes_latest_seq(self):
+        """Welcome message includes latest_seq for reconnection tracking."""
+        with self.client.websocket_connect("/ws") as ws:
+            ws.send_text(json.dumps({
+                "type": "hello", "agent_id": "t1", "subscribe": [],
+            }))
+            welcome = json.loads(ws.receive_text())
+            assert "latest_seq" in welcome
+
+    def test_error_on_invalid_json(self):
+        """Server returns error on malformed JSON."""
+        with self.client.websocket_connect("/ws") as ws:
+            ws.send_text(json.dumps({
+                "type": "hello", "agent_id": "t1", "subscribe": [],
+            }))
+            ws.receive_text()  # welcome
+            ws.send_text("not json {{{")
+            data = json.loads(ws.receive_text())
+            assert data["type"] == "error"
+            assert data["code"] == "INVALID_JSON"
+
+    def test_error_on_unknown_message_type(self):
+        """Server returns error on unknown message type."""
+        with self.client.websocket_connect("/ws") as ws:
+            ws.send_text(json.dumps({
+                "type": "hello", "agent_id": "t1", "subscribe": [],
+            }))
+            ws.receive_text()  # welcome
+            ws.send_text(json.dumps({"type": "foobar"}))
+            data = json.loads(ws.receive_text())
+            assert data["type"] == "error"
+            assert data["code"] == "UNKNOWN_MESSAGE_TYPE"
+
+    def test_set_region_filter(self):
+        """Client can dynamically set region filter."""
+        with self.client.websocket_connect("/ws") as ws:
+            ws.send_text(json.dumps({
+                "type": "hello", "agent_id": "t1", "subscribe": ["events"],
+            }))
+            ws.receive_text()  # welcome
+            # set region filter (should not error)
+            ws.send_text(json.dumps({
+                "type": "set_region_filter", "region_id": "atrium",
+            }))
+            # now send an action — should still work
+            ws.send_text(json.dumps({
+                "type": "action", "verb": "OBSERVE", "target_id": "fountain_center",
+            }))
+            data = json.loads(ws.receive_text())
+            assert data["type"] == "action_result"
+
+    def test_topic_map_resolution(self):
+        """ConnectionManager.resolve_ws_topic correctly maps runtime topics."""
+        from omnity_soap.server import ConnectionManager
+        assert ConnectionManager.resolve_ws_topic("events") == "events"
+        assert ConnectionManager.resolve_ws_topic("agent.registered") == "agents"
+        assert ConnectionManager.resolve_ws_topic("agents.status_changed") == "agents"
+        assert ConnectionManager.resolve_ws_topic("lock.acquired") == "locks"
+        assert ConnectionManager.resolve_ws_topic("lock.released") == "locks"
+        assert ConnectionManager.resolve_ws_topic("lock.expired") == "locks"
+        assert ConnectionManager.resolve_ws_topic("region.entered") == "regions"
+        assert ConnectionManager.resolve_ws_topic("region.exited") == "regions"
+        assert ConnectionManager.resolve_ws_topic("state.changed") == "state"
+
+    def test_regions_topic_added(self):
+        """Regions topic is documented and subscribable."""
+        with self.client.websocket_connect("/ws") as ws:
+            ws.send_text(json.dumps({
+                "type": "hello", "agent_id": "t1",
+                "subscribe": ["events", "regions"],
+            }))
+            welcome = json.loads(ws.receive_text())
+            assert welcome["type"] == "welcome"
+            # dynamically add state topic
+            ws.send_text(json.dumps({
+                "type": "subscribe", "topics": ["state"],
+            }))
+            # should not get an error back — verify with a follow-up action
+            ws.send_text(json.dumps({
+                "type": "action", "verb": "OBSERVE", "target_id": "atrium",
+            }))
+            data = json.loads(ws.receive_text())
+            assert data["type"] == "action_result"
+
+
+class TestConnectionManagerCatchUp:
+    """S3: Unit test for ConnectionManager catch-up and sequencing."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self):
+        try:
+            from omnity_soap.server import ConnectionManager
+            self._CM = ConnectionManager
+            self.skip = False
+        except ImportError:
+            self.skip = True
+
+    def test_recent_events_buffer(self):
+        """Broadcast stores events in ring buffer for catch-up."""
+        if self.skip:
+            pytest.skip("fastapi not available")
+        import asyncio
+
+        async def _run():
+            mgr = self._CM()  # create inside event loop for Python 3.9
+
+            # simulate: connect a client
+            class FakeWS:
+                def __init__(self):
+                    self.sent = []
+                async def send_text(self, msg):
+                    self.sent.append(msg)
+
+            ws = FakeWS()
+            ws_id = await mgr.connect(ws, "agent_1", {"events"})
+
+            # broadcast 3 events (no subscribers at broadcast time besides agent_1)
+            await mgr.broadcast("events", {"verb": "OBSERVE", "seq": 1})
+            await mgr.broadcast("events", {"verb": "OBSERVE", "seq": 2})
+            await mgr.broadcast("events", {"verb": "NAVIGATE", "seq": 3})
+
+            # agent_1 should have received all 3
+            assert len(ws.sent) == 3
+
+            # now connect a second client with catch-up
+            ws2 = FakeWS()
+            ws_id2 = await mgr.connect(ws2, "agent_2", {"events"})
+            # catch up from seq 1 (should get seq 2 and 3)
+            await mgr.catch_up(ws_id2, after_seq=1)
+            assert len(ws2.sent) == 2
+            msgs = [json.loads(m) for m in ws2.sent]
+            assert msgs[0]["seq"] == 2
+            assert msgs[1]["seq"] == 3
+
+        asyncio.run(_run())
+
+    def test_ring_buffer_limit(self):
+        """Ring buffer respects max_recent limit."""
+        if self.skip:
+            pytest.skip("fastapi not available")
+        import asyncio
+
+        async def _run():
+            mgr = self._CM()
+            mgr._max_recent = 5
+            # no subscribers — just fill the buffer
+            for i in range(10):
+                await mgr.broadcast("events", {"i": i})
+            assert len(mgr._recent_events) == 5
+            # should keep the last 5 (seq 6-10)
+            seqs = [e["seq"] for e in mgr._recent_events]
+            assert seqs == [6, 7, 8, 9, 10]
+
+        asyncio.run(_run())
+
+    def test_catch_up_respects_topic_filter(self):
+        """Catch-up only sends events matching client's subscribed topics."""
+        if self.skip:
+            pytest.skip("fastapi not available")
+        import asyncio
+
+        async def _run():
+            mgr = self._CM()
+            # broadcast mix of topics
+            await mgr.broadcast("events", {"a": 1})
+            await mgr.broadcast("lock.acquired", {"b": 2})
+            await mgr.broadcast("events", {"c": 3})
+
+            class FakeWS:
+                def __init__(self):
+                    self.sent = []
+                async def send_text(self, msg):
+                    self.sent.append(msg)
+
+            # client subscribes only to "locks"
+            ws = FakeWS()
+            ws_id = await mgr.connect(ws, "a1", {"locks"})
+            await mgr.catch_up(ws_id, after_seq=0)
+            # should only get the lock event
+            assert len(ws.sent) == 1
+            msg = json.loads(ws.sent[0])
+            assert msg["topic"] == "locks"
+
+        asyncio.run(_run())
