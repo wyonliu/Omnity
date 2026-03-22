@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ome"
+version = "0.1.0"
+description = "Your AI twin — remembers everything, works for you 24/7."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.9"
+keywords = ["ai", "agent", "persona", "twin", "digital-life", "memory", "mcp"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "mindos>=0.3.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/wyonliu/Omnity"
+Repository = "https://github.com/wyonliu/Omnity/tree/main/packages/ome"
+Issues = "https://github.com/wyonliu/Omnity/issues"
+
+[project.optional-dependencies]
+llm = ["openai>=1.0"]
+anthropic = ["anthropic>=0.30"]
+all = ["openai>=1.0", "anthropic>=0.30"]
+
+[project.scripts]
+ome = "ome.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ome"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
