@@ -394,11 +394,13 @@ def run_server(mindos_instance: "Mindos", port: int = 3456) -> None:
     _write_lockfile(mindos_instance.root, actual)
     atexit.register(lambda: _remove_lockfile(mindos_instance.root))
 
-    def _signal_handler(sig, frame):
-        _remove_lockfile(mindos_instance.root)
-        sys.exit(0)
-    signal.signal(signal.SIGTERM, _signal_handler)
-    signal.signal(signal.SIGINT, _signal_handler)
+    import threading
+    if threading.current_thread() is threading.main_thread():
+        def _signal_handler(sig, frame):
+            _remove_lockfile(mindos_instance.root)
+            sys.exit(0)
+        signal.signal(signal.SIGTERM, _signal_handler)
+        signal.signal(signal.SIGINT, _signal_handler)
 
     if actual != port:
         print(f"Port {port} busy, using {actual}")
