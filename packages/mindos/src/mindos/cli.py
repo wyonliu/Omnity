@@ -341,10 +341,45 @@ def cmd_quickstart(args: argparse.Namespace) -> None:
     print()
 
 
+def cmd_sync(args: argparse.Namespace) -> None:
+    """Sync local soul with remote hub."""
+    if args.hub:
+        # Start a sync hub server
+        from mindos.sync import run_sync_hub
+        run_sync_hub(port=args.port, persist_dir=args.path)
+        return
+
+    from mindos.sync import SyncClient
+    m = _get_mindos(args.path)
+    client = SyncClient(m.store, hub_url=args.url)
+
+    if not client.hub_url:
+        print("No sync hub URL. Set MINDOS_SYNC_URL or use --url")
+        sys.exit(1)
+
+    if args.push:
+        result = client.push()
+        print(f"Push: {result.get('pushed', 0)} events → hub")
+    elif args.pull:
+        result = client.pull()
+        print(f"Pull: {result.get('applied', 0)} applied, {result.get('skipped', 0)} skipped")
+    else:
+        result = client.sync()
+        push_r = result.get("push", {})
+        pull_r = result.get("pull", {})
+        print(f"Sync: pushed {push_r.get('pushed', 0)}, "
+              f"pulled {pull_r.get('applied', 0)} (skipped {pull_r.get('skipped', 0)})")
+        print(f"  Device: {result.get('device_id', '?')}")
+        print(f"  Hub seq: {pull_r.get('hub_seq', '?')}")
+
+
 def cmd_serve(args: argparse.Namespace) -> None:
     if args.mcp:
         from mindos.mcp_server import run_mcp_server
         run_mcp_server(args.path)
+    elif args.sync:
+        from mindos.sync import run_sync_hub
+        run_sync_hub(port=args.port, persist_dir=args.path)
     else:
         from mindos.core import Mindos
         from mindos.server import run_server
@@ -409,9 +444,18 @@ def main() -> None:
     # quickstart
     sub.add_parser("quickstart", help="Interactive guided setup (start here!)", parents=[path_parent])
 
+    # sync
+    p_sync = sub.add_parser("sync", help="Sync soul across devices", parents=[path_parent])
+    p_sync.add_argument("--url", default="", help="Sync hub URL (or set MINDOS_SYNC_URL)")
+    p_sync.add_argument("--push", action="store_true", help="Push only")
+    p_sync.add_argument("--pull", action="store_true", help="Pull only")
+    p_sync.add_argument("--hub", action="store_true", help="Start a sync hub server")
+    p_sync.add_argument("--port", type=int, default=3457, help="Sync hub port")
+
     # serve
     p_serve = sub.add_parser("serve", help="Start Mindos server", parents=[path_parent])
     p_serve.add_argument("--mcp", action="store_true", help="MCP Server (stdio)")
+    p_serve.add_argument("--sync", action="store_true", help="Sync Hub server")
     p_serve.add_argument("--port", type=int, default=3456, help="HTTP port")
 
     args = parser.parse_args()
@@ -426,7 +470,7 @@ def main() -> None:
     cmds = {
         "init": cmd_init, "quickstart": cmd_quickstart, "status": cmd_status,
         "recall": cmd_recall, "commit": cmd_commit, "forget": cmd_forget,
-        "memories": cmd_memories, "serve": cmd_serve,
+        "memories": cmd_memories, "sync": cmd_sync, "serve": cmd_serve,
     }
     cmds[args.command](args)
 

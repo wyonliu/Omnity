@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from mindos.core import Mindos
 from mindos.store import Triple
+from mindos.sync import SyncHub
 
 
 def test_full_lifecycle():
@@ -270,6 +271,244 @@ def test_consolidate():
     print("  PASSED")
 
 
+def test_export_ome():
+    """Ome export produces a valid persona package."""
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="OmeTest", traits=["creative", "bold"],
+                        style="direct", values=["truth", "beauty"])
+        m.commit("user: 我住在火星\nassistant: 酷！", source="test")
+        m.store.add_triple(Triple("OmeTest", "lives_on", "Mars"))
+
+        ome = m.export_ome(context="火星")
+        assert ome["ome_version"] == "0.1.0"
+        assert ome["identity"]["name"] == "OmeTest"
+        assert "creative" in ome["identity"]["traits"]
+        assert "OmeTest" in ome["anchor"]
+        assert isinstance(ome["hydrated_context"], str)
+        assert len(ome["hydrated_context"]) > 0
+        assert isinstance(ome["memories"], list)
+        assert isinstance(ome["knowledge_graph"], list)
+        assert ome["emotion"]["mood"] is not None
+    print("  PASSED")
+
+
+def test_content_hash_dedup():
+    """Content-hash dedup catches minor variations."""
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="Hash")
+        m.commit("user: 我住在上海", source="t1")
+        r = m.commit("user: 我住在 上海。", source="t2")
+        # The hash-normalized version should catch this as duplicate
+        assert r.get("skipped_duplicate", 0) >= 1 or r.get("facts_added", 0) == 0
+    print("  PASSED")
+
+
+def test_fts_search():
+    """FTS5 full-text search works."""
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="FTS")
+        from mindos.store import Memory
+        m.store.add(Memory(id="", type="fact", content="我喜欢在北京三里屯喝咖啡"))
+        m.store.add(Memory(id="", type="fact", content="上海外滩的夜景很美"))
+        m.store.add(Memory(id="", type="fact", content="杭州西湖是世界文化遗产"))
+
+        results = m.store.search_text("北京")
+        assert len(results) >= 1
+        assert "北京" in results[0].content
+    print("  PASSED")
+
+
+def test_soul_state_persistence():
+    """Soul state (emotion) persists across reloads."""
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="Emotion")
+        m.layers.l1.emotion.boost(0.5)
+        m.layers.l1.save_emotion()
+
+        # Reload
+        m2 = Mindos.load(tmp)
+        assert m2.layers.l1.emotion.mood.value == "engaged"
+        assert m2.layers.l1.emotion.energy > 0.5
+    print("  PASSED")
+
+
+def test_mcp_ome_tool():
+    """MCP server exposes mindos_ome tool."""
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="McpOme", traits=["wise"])
+        from mindos.mcp_server import McpServer
+        server = McpServer(m.layers, mindos=m)
+
+        tools_resp = server._handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})
+        tool_names = {t["name"] for t in tools_resp["result"]["tools"]}
+        assert "mindos_ome" in tool_names
+
+        ome_resp = server._handle({
+            "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+            "params": {"name": "mindos_ome", "arguments": {"context": ""}}
+        })
+        ome = json.loads(ome_resp["result"]["content"][0]["text"])
+        assert ome["identity"]["name"] == "McpOme"
+    print("  PASSED")
+
+
+def test_sync_journal():
+    """Sync journal records mutations and supports push/pull."""
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="SyncTest")
+        store = m.store
+
+        # Commit should auto-journal
+        m.commit("user: 我喜欢火锅", source="test")
+        events = store.journal_since(0)
+        assert len(events) >= 1
+        # At least one add_memory event
+        ops = [e["op"] for e in events]
+        assert "add_memory" in ops
+
+        # Journal tracks sequence
+        latest = store.journal_latest_seq()
+        assert latest > 0
+
+        # Unsynced events
+        unsynced = store.journal_unsynced()
+        assert len(unsynced) >= 1
+
+        # Mark synced
+        store.journal_mark_synced(latest)
+        unsynced_after = store.journal_unsynced()
+        assert len(unsynced_after) == 0
+
+        # Device ID was set
+        assert len(store.device_id) == 8
+    print("  PASSED")
+
+
+def test_sync_hub_push_pull():
+    """Sync Hub accepts pushes and serves pulls to other devices."""
+    from mindos.sync import SyncHub
+
+    hub = SyncHub()
+
+    # Device A pushes events
+    push_result = hub.push([
+        {"event_id": "evt1", "device_id": "dev_a", "op": "add_memory",
+         "payload": {"type": "fact", "content": "我住在北京"}, "created_at": time.time()},
+        {"event_id": "evt2", "device_id": "dev_a", "op": "add_triple",
+         "payload": {"subject": "User", "predicate": "lives_in", "object": "Beijing"},
+         "created_at": time.time()},
+    ], device_id="dev_a")
+    assert push_result["accepted"] == 2
+
+    # Dedup — push same events again
+    push_result2 = hub.push([
+        {"event_id": "evt1", "device_id": "dev_a", "op": "add_memory",
+         "payload": {"type": "fact", "content": "我住在北京"}, "created_at": time.time()},
+    ], device_id="dev_a")
+    assert push_result2["accepted"] == 0
+
+    # Device B pulls — should get Device A's events
+    pull_result = hub.pull("dev_b", after_seq=0)
+    assert len(pull_result["events"]) == 2
+    assert pull_result["events"][0]["op"] == "add_memory"
+
+    # Device A pulls — should NOT get its own events
+    pull_a = hub.pull("dev_a", after_seq=0)
+    assert len(pull_a["events"]) == 0
+
+    # Status
+    status = hub.status()
+    assert status["total_events"] == 2
+    print("  PASSED")
+
+
+def test_sync_apply_remote():
+    """Applying remote events to local store creates memories."""
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="RemoteApply")
+        store = m.store
+
+        # Apply a remote add_memory event
+        applied = store.journal_apply_remote({
+            "event_id": "remote_evt_1",
+            "device_id": "phone_01",
+            "op": "add_memory",
+            "payload": {"type": "fact", "content": "我在手机上说过这句话"},
+            "created_at": time.time(),
+        })
+        assert applied is True
+
+        # Memory should exist
+        results = store.search_text("手机")
+        assert len(results) >= 1
+
+        # Applying same event again should be deduped
+        applied2 = store.journal_apply_remote({
+            "event_id": "remote_evt_1",
+            "device_id": "phone_01",
+            "op": "add_memory",
+            "payload": {"type": "fact", "content": "我在手机上说过这句话"},
+            "created_at": time.time(),
+        })
+        assert applied2 is False
+
+        # Apply a remote forget
+        store.journal_apply_remote({
+            "event_id": "remote_evt_2",
+            "device_id": "phone_01",
+            "op": "forget",
+            "payload": {"pattern": "手机", "mem_type": None},
+            "created_at": time.time(),
+        })
+        assert len(store.search_text("手机")) == 0
+    print("  PASSED")
+
+
+def test_sync_hub_persistence():
+    """Sync Hub persists and reloads state."""
+    with tempfile.TemporaryDirectory() as tmp:
+        persist_path = Path(tmp) / "hub.json"
+        hub1 = SyncHub(persist_path=persist_path)
+        hub1.push([
+            {"event_id": "p1", "device_id": "d1", "op": "add_memory",
+             "payload": {"type": "fact", "content": "test"}, "created_at": time.time()},
+        ], device_id="d1")
+        assert persist_path.exists()
+
+        # Reload
+        hub2 = SyncHub(persist_path=persist_path)
+        assert hub2.status()["total_events"] == 1
+        pull = hub2.pull("d2", after_seq=0)
+        assert len(pull["events"]) == 1
+    print("  PASSED")
+
+
+def test_anthropic_router_selection():
+    """ModelRouter correctly selects Anthropic provider type."""
+    from mindos.config import MindosConfig, ModelRouter, ModelProvider
+    import os
+
+    config_data = {
+        "models": [
+            {"name": "claude", "type": "anthropic", "api_key_env": "TEST_ANTHROPIC_KEY",
+             "model": "claude-sonnet-4-20250514", "priority": 1, "for": ["reasoning"]},
+        ],
+        "fallback": "claude",
+    }
+    # Set fake key
+    os.environ["TEST_ANTHROPIC_KEY"] = "test-key-123"
+    try:
+        config = MindosConfig(config_data)
+        router = ModelRouter(config)
+        provider = router.select("reasoning")
+        assert provider is not None
+        assert provider.type == "anthropic"
+        assert provider.name == "claude"
+    finally:
+        del os.environ["TEST_ANTHROPIC_KEY"]
+    print("  PASSED")
+
+
 if __name__ == "__main__":
     tests = [
         ("full_lifecycle", test_full_lifecycle),
@@ -284,6 +523,16 @@ if __name__ == "__main__":
         ("memory_export_import", test_memory_export_import),
         ("lockfile", test_lockfile),
         ("consolidate", test_consolidate),
+        ("export_ome", test_export_ome),
+        ("content_hash_dedup", test_content_hash_dedup),
+        ("fts_search", test_fts_search),
+        ("soul_state_persistence", test_soul_state_persistence),
+        ("mcp_ome_tool", test_mcp_ome_tool),
+        ("anthropic_router_selection", test_anthropic_router_selection),
+        ("sync_journal", test_sync_journal),
+        ("sync_hub_push_pull", test_sync_hub_push_pull),
+        ("sync_apply_remote", test_sync_apply_remote),
+        ("sync_hub_persistence", test_sync_hub_persistence),
     ]
     failed = 0
     for name, fn in tests:

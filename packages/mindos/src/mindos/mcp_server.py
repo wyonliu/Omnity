@@ -2,15 +2,27 @@
 
 Protocol: JSON-RPC 2.0 over stdio (stdin/stdout).
 Implements MCP 2024-11-05 spec.
+
+Tools:
+  - mindos_hydrate: Load identity context for current session
+  - mindos_commit: Digest conversation into long-term memories
+  - mindos_recall: Search memories with relevance ranking
+  - mindos_forget: GDPR-compliant hard delete
+  - mindos_status: Identity, memory stats, emotion
+  - mindos_reflect: Personality drift detection
+  - mindos_ome: Generate portable Ome persona package
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from typing import Any, Optional
 
 from mindos.router import LayerRouter
+
+log = logging.getLogger("mindos.mcp")
 
 PROTOCOL_VERSION = "2024-11-05"
 
@@ -106,6 +118,41 @@ _TOOLS = [
         ),
         "inputSchema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "mindos_sync",
+        "description": (
+            "Sync this Mindos soul with the remote hub. Pushes local changes and "
+            "pulls remote changes from other devices. Requires MINDOS_SYNC_URL to be set."
+        ),
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "mindos_ome",
+        "description": (
+            "Generate an Ome (portable digital persona) from the current Mindos soul. "
+            "Returns a complete persona package with identity, memories, knowledge graph, "
+            "and hydrated context — ready to inject into any AI platform."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "context": {
+                    "type": "string",
+                    "description": "Optional topic to bias memory selection for the Ome",
+                },
+                "include_memories": {
+                    "type": "boolean",
+                    "description": "Include relevant memories (default true)",
+                    "default": True,
+                },
+                "include_kg": {
+                    "type": "boolean",
+                    "description": "Include knowledge graph (default true)",
+                    "default": True,
+                },
+            },
+        },
+    },
 ]
 
 _RESOURCES = [
@@ -133,8 +180,9 @@ _RESOURCES = [
 class McpServer:
     """MCP server that wraps LayerRouter over JSON-RPC stdio."""
 
-    def __init__(self, layer_router: LayerRouter) -> None:
+    def __init__(self, layer_router: LayerRouter, mindos: Any = None) -> None:
         self.router = layer_router
+        self._mindos = mindos  # Optional Mindos instance for Ome generation
 
     def run(self) -> None:
         """Main loop: read JSON-RPC from stdin, write responses to stdout."""
@@ -239,6 +287,17 @@ class McpServer:
                 text = json.dumps(result, ensure_ascii=False) if result else '{"message": "No episodes to reflect on"}'
                 return {"content": [{"type": "text", "text": text}]}
 
+            elif name == "mindos_sync":
+                if self._mindos is not None:
+                    result = self._mindos.sync()
+                else:
+                    result = {"error": "Mindos instance not available for sync"}
+                return {"content": [{"type": "text", "text": json.dumps(result, ensure_ascii=False)}]}
+
+            elif name == "mindos_ome":
+                ome = self._export_ome(args)
+                return {"content": [{"type": "text", "text": json.dumps(ome, ensure_ascii=False)}]}
+
             else:
                 return {"content": [{"type": "text", "text": f"Unknown tool: {name}"}], "isError": True}
 
@@ -270,6 +329,23 @@ class McpServer:
 
         return {"contents": []}
 
+    def _export_ome(self, args: dict) -> dict:
+        """Generate Ome from Mindos soul."""
+        if self._mindos is not None:
+            return self._mindos.export_ome(
+                context=args.get("context", ""),
+                include_memories=args.get("include_memories", True),
+                include_kg=args.get("include_kg", True),
+            )
+        # Fallback: assemble from router
+        return {
+            "ome_version": "0.1.0",
+            "identity": self.router.l4.personality_snapshot(),
+            "anchor": self.router.l4.cross_platform_anchor(),
+            "hydrated_context": self.router.hydrate(args.get("context", "")),
+            "emotion": self.router.l1.emotion.to_dict(),
+        }
+
     def _send(self, msg: dict) -> None:
         sys.stdout.write(json.dumps(msg) + "\n")
         sys.stdout.flush()
@@ -281,28 +357,15 @@ class McpServer:
 def run_mcp_server(soul_dir: str) -> None:
     """Entry point for `mindos serve --mcp`."""
     from pathlib import Path
-    from mindos.config import MindosConfig
-    from mindos.store import MemoryStore
+    from mindos.core import Mindos
 
     root = Path(soul_dir).expanduser()
     if not root.exists():
         print(f"Soul directory not found: {root}", file=sys.stderr)
         sys.exit(1)
 
-    config = MindosConfig.load(root)
-    store = MemoryStore(root / "memory.db")
-
-    identity_path = root / "identity.yaml"
-    identity: dict[str, Any] = {}
-    if identity_path.exists():
-        try:
-            import yaml
-            identity = yaml.safe_load(identity_path.read_text(encoding="utf-8")) or {}
-        except ImportError:
-            identity = json.loads(identity_path.read_text(encoding="utf-8"))
-
-    router = LayerRouter(store, identity, config)
-    server = McpServer(router)
+    mindos = Mindos.load(root)
+    server = McpServer(mindos.layers, mindos=mindos)
 
     print("Mindos MCP server started", file=sys.stderr)
     server.run()

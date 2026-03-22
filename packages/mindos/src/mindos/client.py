@@ -20,6 +20,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Optional
 from urllib.request import Request, urlopen
@@ -29,8 +30,9 @@ from urllib.error import URLError
 class MindosClient:
     """HTTP client for a running Mindos server."""
 
-    def __init__(self, base_url: str) -> None:
+    def __init__(self, base_url: str, auth_token: str = "") -> None:
         self.base_url = base_url.rstrip("/")
+        self._auth_token = auth_token or os.environ.get("MINDOS_AUTH_TOKEN", "")
 
     @classmethod
     def discover(cls, soul_dir: str | Path = "~/.mindos") -> Optional["MindosClient"]:
@@ -46,10 +48,12 @@ class MindosClient:
     def _request(self, method: str, path: str, body: dict | None = None) -> dict:
         url = f"{self.base_url}{path}"
         data = None
-        headers = {}
+        headers: dict[str, str] = {}
         if body is not None:
             data = json.dumps(body).encode()
             headers["Content-Type"] = "application/json"
+        if self._auth_token:
+            headers["Authorization"] = f"Bearer {self._auth_token}"
 
         req = Request(url, data=data, headers=headers, method=method)
         try:
@@ -109,3 +113,8 @@ class MindosClient:
 
     def config(self) -> dict[str, Any]:
         return self._request("GET", "/api/config")
+
+    def ome(self, context: str = "") -> dict[str, Any]:
+        """Generate an Ome persona package."""
+        qs = f"?context={context}" if context else ""
+        return self._request("GET", f"/api/ome{qs}")

@@ -32,7 +32,7 @@ class LayerRouter:
         router = ModelRouter(config) if config else None
 
         self.l0 = Hippocampus(store)
-        self.l1 = Brainstem(self.l0, identity)
+        self.l1 = Brainstem(self.l0, identity, store)
         self.l2 = Cortex(store, router)
         self.l3 = Prefrontal(router)
         self.l4 = Self(store, identity, router)

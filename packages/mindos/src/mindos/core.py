@@ -1,11 +1,12 @@
 """Mindos core — the digital soul facade over the five-layer brain.
 
-Provides the public API: hydrate / commit / forget / recall / status / reflect.
+Provides the public API: hydrate / commit / forget / recall / status / reflect / export_ome.
 Internally delegates to LayerRouter → L0-L4.
 """
 
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -18,6 +19,8 @@ except ImportError:
 from mindos.config import MindosConfig
 from mindos.router import LayerRouter
 from mindos.store import MemoryStore
+
+log = logging.getLogger("mindos.core")
 
 
 def _dump_identity(data: dict, path: Path) -> None:
@@ -163,7 +166,71 @@ class Mindos:
         """Full status across all layers."""
         s = self.layers.status()
         s["soul_age"] = self.identity.get("created_at", "unknown")
+        s["device_id"] = self.store.device_id
         return s
+
+    # -- sync ------------------------------------------------------------------
+
+    def sync(self, hub_url: str = "") -> dict[str, Any]:
+        """Push local events to hub and pull remote events. Full round-trip."""
+        from mindos.sync import SyncClient
+        client = SyncClient(self.store, hub_url=hub_url)
+        return client.sync()
+
+    # -- Ome generation --------------------------------------------------------
+
+    def export_ome(self, context: str = "", include_memories: bool = True,
+                   include_kg: bool = True, max_memories: int = 50) -> dict[str, Any]:
+        """Generate an Ome-compatible persona package from this Mindos soul.
+
+        An Ome is a lightweight, portable digital identity that can be injected
+        into any AI platform. It contains:
+          - identity: name, traits, style, values, capabilities
+          - anchor: cross-platform identity anchor text
+          - hydrated_context: pre-assembled identity prompt
+          - memories: relevant memories (optional)
+          - knowledge_graph: key relationships (optional)
+          - emotion: current emotion state
+          - metadata: version, exported_at, source_soul
+
+        This is the bridge from Mindos (persistent soul) to Ome (instantiated persona).
+        """
+        p = self.identity.get("personality", {})
+        ome: dict[str, Any] = {
+            "ome_version": "0.1.0",
+            "exported_at": time.time(),
+            "source_soul": str(self.root),
+
+            "identity": {
+                "name": self.identity.get("name", "User"),
+                "traits": p.get("traits", []),
+                "style": p.get("style", ""),
+                "values": p.get("values", []),
+                "boundaries": p.get("boundaries", []),
+                "capabilities": self.identity.get("capabilities", []),
+            },
+
+            "anchor": self.layers.l4.cross_platform_anchor(),
+            "hydrated_context": self.hydrate(context=context, max_tokens=2000),
+            "emotion": self.layers.l1.emotion.to_dict(),
+        }
+
+        if include_memories:
+            memories = self.layers.l0.recall(context or "", top_k=max_memories)
+            ome["memories"] = [
+                {"type": m.type, "content": m.content,
+                 "confidence": m.confidence, "source": m.source}
+                for m in memories
+            ]
+
+        if include_kg:
+            triples = self.store.triples()
+            ome["knowledge_graph"] = [
+                {"subject": t.subject, "predicate": t.predicate, "object": t.object}
+                for t in triples[:100]
+            ]
+
+        return ome
 
     # -- identity management ---------------------------------------------------
 

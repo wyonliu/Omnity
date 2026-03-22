@@ -2,9 +2,7 @@
 
 **Your AI forgets you after every conversation. Mindos fixes that.**
 
-Mindos is a portable identity layer that sits between you and every AI you use.
-Install once, and every AI — Claude, ChatGPT, Cursor, local models, OpenClaw agents —
-remembers who you are, what you know, and how you think.
+Mindos is a portable digital soul protocol. Install once, and every AI — Claude, ChatGPT, Cursor, Gemini, local models, OpenClaw agents — remembers who you are, what you know, and how you think. Across devices. Forever.
 
 ```bash
 pip install mindos
@@ -21,15 +19,16 @@ You use 3-5 AI tools daily. Each one starts with zero context every time.
 You re-explain your tech stack, your preferences, your project context,
 your communication style — over and over. That's hundreds of hours wasted per year.
 
+Worse: your identity is locked inside each platform. Your Claude memories don't follow you to ChatGPT. Your Cursor context doesn't exist in Gemini. You are fragmented across AI silos.
+
 ## The Solution
 
 ```
-You ←→ [Any AI] ←→ Mindos ←→ ~/.mindos/
+You ←→ [Any AI] ←→ Mindos ←→ ~/.mindos/ ←→ Sync Hub ←→ Other Devices
 ```
 
 Mindos stores your identity, memories, knowledge graph, and personality locally.
-Any AI can read it (hydrate) and write back (commit). The more you use AI,
-the more Mindos knows you. The more Mindos knows you, the better every AI works.
+Any AI can read it (hydrate) and write back (commit). Changes sync across all your devices. The more you use AI, the more Mindos knows you. The more Mindos knows you, the better every AI works.
 
 ## 30-Second Demo
 
@@ -63,19 +62,7 @@ mindos serve
 }
 ```
 
-Now Claude and Cursor automatically know your name, skills, preferences,
-and past conversation context.
-
-### OpenClaw / Any Agent Framework
-
-```python
-from mindos_plugin import MindosPlugin
-
-plugin = MindosPlugin()
-context = plugin.before_run("code review")
-# → inject into system prompt
-plugin.after_run(conversation_text)
-```
+MCP tools: `mindos_hydrate`, `mindos_commit`, `mindos_recall`, `mindos_forget`, `mindos_reflect`, `mindos_ome`, `mindos_sync`.
 
 ### Python SDK
 
@@ -86,153 +73,206 @@ soul = Mindos.load()
 context = soul.hydrate(context="travel planning")
 result = soul.commit("user: I love hiking\nassistant: Great!", source="myapp")
 memories = soul.recall("hiking", top_k=5)
+
+# Generate a portable persona for any platform
+ome = soul.export_ome(context="hiking")
 ```
 
-### Any Terminal (multi-terminal)
+### HTTP API
 
 ```bash
-# Terminal 1: start server
+# Start server
 mindos serve
 
-# Terminal 2, 3, 4: all auto-discover the server
-mindos recall "Python"          # → "via server"
-mindos commit "user: learned Kubernetes today"
-mindos memories --stats
+# Any app can call
+curl localhost:3456/api/hydrate -d '{"context": "coding"}'
+curl localhost:3456/api/commit -d '{"conversation": "user: I learned Rust today", "source": "api"}'
+curl localhost:3456/api/recall -d '{"query": "Rust"}'
+curl localhost:3456/api/ome       # Generate Ome persona package
+curl localhost:3456/api/status    # Identity, memories, emotion, sync state
 ```
+
+### OpenClaw / Any Agent Framework
+
+```python
+from mindos import Mindos
+
+soul = Mindos.load()
+
+# Before agent run: inject identity
+system_prompt = soul.hydrate(context="code review") + "\n" + your_system_prompt
+
+# After agent run: persist what happened
+soul.commit(conversation_text, source="openclaw")
+```
+
+## Cross-Device Sync
+
+Your soul lives on all your devices. Mac, phone, browser — all in sync.
+
+```
+Mac (Claude Code + Cursor)           Phone (Ome App)
+┌──────────────┐                     ┌──────────────┐
+│ SQLite (local)│  ← push/pull →    │ SQLite (local)│
+│ sync_journal  │       ↕            │ sync_journal  │
+└───────────────┘  ┌─────────┐      └───────────────┘
+                   │Sync Hub │
+                   │ (relay) │
+                   └────┬────┘
+                        │
+                   Chrome Extension
+                   (Gemini / Doubao)
+```
+
+### How it works
+
+Every mutation (commit, forget, reflect) is recorded in a local `sync_journal`. The Sync Hub is a lightweight event relay — it doesn't store your soul, just forwards events between devices.
+
+```bash
+# Start a Sync Hub on your VPS
+mindos serve --sync --port 3457
+
+# On each device
+export MINDOS_SYNC_URL=http://your-vps:3457
+mindos sync                # push + pull in one step
+mindos sync --push         # push only
+mindos sync --pull         # pull only
+```
+
+Conflict resolution:
+- **Memories**: append-only + content-hash dedup (no conflicts)
+- **Knowledge graph**: idempotent upsert (no conflicts)
+- **Forget**: propagates to all devices (GDPR)
+- **Identity edits**: last-writer-wins (rare, low-frequency)
+
+## Ome Generation
+
+An **Ome** is a lightweight persona snapshot exported from your Mindos soul. It contains your identity, relevant memories, knowledge graph, and hydrated context — ready to inject into any AI platform.
+
+```python
+soul = Mindos.load()
+ome = soul.export_ome(context="customer support")
+# → { identity, anchor, hydrated_context, memories, knowledge_graph, emotion }
+
+# Send to any platform that accepts persona JSON
+```
+
+Also available via CLI (`mindos ome`), HTTP (`GET /api/ome`), and MCP (`mindos_ome` tool).
 
 ## Architecture
 
 Five-layer brain inspired by neuroscience:
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                           Mindos                                  │
-│                                                                  │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │ L0 海马体 (Hippocampus) —— 记忆                             │  │
-│  │ 长期记忆 · 知识图谱 · 向量索引 · 遗忘曲线 · 情景记忆          │  │
-│  │ ★ 灵魂的根基：用的越久越厚重，不可替代                      │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                  │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │ L1 脑干 (Brainstem) —— 本能                                 │  │
-│  │ 情绪状态机 · 作息节律 · 安全边界 · 条件反射式行为             │  │
-│  │ hydrate 组装 · Token 预算 · 0 成本处理 60% 请求              │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                  │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │ L2 皮层 (Cortex) —— 认知                                    │  │
-│  │ commit 消化 · 事实/偏好/关系提取 · 日常对话 · 社交判断        │  │
-│  │ 知识图谱更新 · 本地 7B 模型或宿主 LLM                        │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                  │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │ L3 前额叶 (Prefrontal) —— 决策                              │  │
-│  │ 深度推理 · 创作 · 战略规划 · 行为编排                         │  │
-│  │ 冲突解决 · 优先级排序 · 通过 ModelRouter 调用最优 LLM         │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                  │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │ L4 自我 (Self / Default Mode Network) —— 人格               │  │
-│  │ 人格模型维护 · 反思循环 · 价值观守护 · 跨平台身份锚           │  │
-│  │ ★ 从"大脑"到"灵魂"的涌现层                               │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                  │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │ LayerRouter · ModelRouter · OmeFactory                      │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                  │
-│  对外接口：MCP Server · HTTP API · Python SDK · Ome Factory      │
-└──────────────────────────────────────────────────────────────────┘
-```
+| Layer | Brain Region | What it does | Latency | Cost |
+|-------|-------------|--------------|---------|------|
+| **L0** | Hippocampus | What you **remember** — FTS5 search, vector index, forgetting curve | < 50ms | ~0 |
+| **L1** | Brainstem | Your **instinct** — hydrate assembly, emotion state, request routing | < 100ms | ~0 |
+| **L2** | Cortex | How you **understand** — LLM commit digestion, fact extraction, sensitive filter | < 2s | Low |
+| **L3** | Prefrontal | How you **decide** — deep reasoning, planning, conflict resolution | 1-10s | On demand |
+| **L4** | Self (DMN) | Who you **are** — reflection loop, drift detection, value alignment | Async | ~0 |
 
-| 层 | 脑区 | 职责 | 延迟 | 成本 |
-|----|------|------|------|------|
-| **L0** 海马体 | Hippocampus | 你**记得**什么 | < 50ms | ≈ 0 |
-| **L1** 脑干 | Brainstem | 你**本能**的反应 | < 100ms | ≈ 0 |
-| **L2** 皮层 | Cortex | 你如何**理解**世界 | < 2s | 极低 |
-| **L3** 前额叶 | Prefrontal | 你如何**决策** | 1-10s | 按需 |
-| **L4** 自我 | DMN | 你**是谁** | 异步 | 极低 |
+### LLM Providers
+
+ModelRouter selects the best available provider per task:
+
+| Provider | Type | Use case |
+|----------|------|----------|
+| DeepSeek | openai_compatible | commit, reflection, reasoning (default) |
+| OpenAI | openai_compatible | commit, reasoning, creation |
+| Anthropic | **native SDK** | deep reasoning, complex creation |
+| Ollama | local | privacy-first, offline capable |
+
+All providers are optional. Without any LLM, Mindos falls back to rule-based extraction.
 
 ## Memory Management
 
 ```bash
-mindos memories                     # browse
-mindos memories --stats             # breakdown by type and source
-mindos memories --export -o soul.json   # backup
-mindos memories --import-file soul.json # restore
-mindos memories --consolidate       # merge similar memories
-mindos forget "sensitive_topic"     # GDPR hard delete
+mindos memories                          # browse
+mindos memories --stats                  # breakdown by type and source
+mindos memories --export -o soul.json    # backup
+mindos memories --import-file soul.json  # restore
+mindos memories --consolidate            # merge similar memories
+mindos forget "sensitive_topic"          # GDPR hard delete
 ```
 
-## Privacy
+## Privacy & Security
 
-- All data in `~/.mindos/` — local SQLite, no cloud
-- No telemetry, no accounts, no network calls (unless you configure LLM providers)
-- Sensitive data (API keys, passwords, ID numbers) auto-filtered on commit
-- Physical erasure via `mindos forget` — gone from DB and knowledge graph
+- **Local-first**: all data in `~/.mindos/` — SQLite, no cloud dependency
+- **Auth**: `MINDOS_AUTH_TOKEN` env var enables Bearer token on HTTP API
+- **No telemetry**: no accounts, no tracking, no network calls unless you configure LLM providers
+- **Sensitive filter**: API keys, passwords, ID numbers auto-blocked on commit
+- **GDPR forget**: `mindos forget` does physical erasure from DB and knowledge graph
+- **Sync is optional**: Hub only relays events, never stores your soul data
 
 ## Install
 
 ```bash
-pip install mindos                    # core (just pyyaml)
-pip install "mindos[llm]"             # + LLM-powered commit (openai)
-pip install "mindos[all]"             # + semantic vector search
+pip install mindos                       # core (just pyyaml)
+pip install "mindos[llm]"                # + LLM-powered commit (openai)
+pip install "mindos[anthropic]"          # + native Anthropic support
+pip install "mindos[all]"                # + semantic vector search + all LLMs
 ```
+
+Requires Python 3.10+.
 
 ## Status
 
-v0.2.0 — alpha. Core architecture is solid, actively iterating.
+v0.3.0 — alpha. Core architecture is solid, actively iterating.
 
 | Feature | Status |
 |---------|--------|
-| Five-layer brain (L0-L4) | ✅ |
-| MCP Server | ✅ |
-| HTTP Server + multi-terminal | ✅ |
-| ModelRouter (DeepSeek/OpenAI/Anthropic) | ✅ |
-| Memory management (export/import/consolidate) | ✅ |
-| Interactive quickstart | ✅ |
-| Cursor Skill | ✅ |
-| OpenClaw plugin | ✅ |
-| LLM-powered commit + rule fallback | ✅ |
-| Reflection loop + drift detection | ✅ |
-| GDPR forget | ✅ |
-| PyPI package | 🔜 |
-| Browser extension | planned |
-| Mobile SDK | planned |
+| Five-layer brain (L0-L4) | Done |
+| MCP Server (8 tools + 3 resources) | Done |
+| HTTP Server + multi-terminal auto-discovery | Done |
+| ModelRouter (DeepSeek/OpenAI/Anthropic/Ollama) | Done |
+| Cross-device sync (Sync Hub + Journal) | Done |
+| Ome generation (export_ome) | Done |
+| FTS5 full-text search | Done |
+| Content-hash fuzzy dedup | Done |
+| Emotion state persistence | Done |
+| Bearer token auth | Done |
+| LLM response caching | Done |
+| Memory management (export/import/consolidate) | Done |
+| Interactive quickstart | Done |
+| GDPR forget | Done |
+| 22 integration tests | Done |
+| Chrome extension | Planned |
+| TypeScript SDK | Planned |
+| Mobile SDK | Planned |
+| PyPI package | Soon |
 
 ## File Structure
 
 ```
 src/mindos/
-├── core.py              Mindos facade (public API)
+├── core.py              Mindos facade (hydrate/commit/recall/forget/reflect/sync/export_ome)
 ├── config.py            config.yaml + ModelRouter (DeepSeek/OpenAI/Anthropic/Ollama)
 ├── router.py            LayerRouter (orchestrates L0-L4)
-├── server.py            HTTP server + lockfile auto-discovery
-├── client.py            MindosClient (Python SDK + CLI proxy)
-├── mcp_server.py        MCP Server (stdio JSON-RPC 2024-11-05)
-├── store.py             SQLite memory store (WAL mode)
-├── layers/
-│   ├── l0_memory.py     Hippocampus: retrieval + relevance scoring
-│   ├── l1_instinct.py   Brainstem: routing + hydrate + emotion state
-│   ├── l2_cognition.py  Cortex: LLM commit digestion + rule fallback
-│   ├── l3_decision.py   Prefrontal: reasoning + planning
-│   └── l4_self.py       Self: reflection loop + drift detection
+├── store.py             SQLite store (FTS5, content-hash dedup, sync journal)
+├── sync.py              SyncHub (relay server) + SyncClient (push/pull)
+├── server.py            HTTP server + lockfile auto-discovery + auth
+├── client.py            MindosClient (HTTP SDK + auto-discovery)
+├── mcp_server.py        MCP Server (stdio JSON-RPC, 8 tools)
 ├── dashboard.py         Web UI
-└── cli.py               CLI (auto-proxies to server)
+├── cli.py               CLI (auto-proxies to server when running)
+└── layers/
+    ├── l0_memory.py     Hippocampus: retrieval + relevance scoring
+    ├── l1_instinct.py   Brainstem: routing + hydrate + emotion state (persistent)
+    ├── l2_cognition.py  Cortex: LLM commit digestion + rule fallback
+    ├── l3_decision.py   Prefrontal: reasoning + planning
+    └── l4_self.py       Self: reflection loop + drift detection + Ome anchor
 
 ~/.mindos/
 ├── identity.yaml        who you are
-├── config.yaml          LLM providers
-├── memory.db            SQLite (memories + KG + personality history)
-├── server.lock          auto-created when server runs
-└── journal/             future: raw conversation logs
+├── config.yaml          LLM providers + sync config
+├── memory.db            SQLite (memories, KG, personality history, sync journal, soul state)
+└── server.lock          auto-created when server runs
 ```
 
 ## Contributing
 
-Apache-2.0. PRs welcome. See `integrations/` for plugin examples.
+Apache-2.0. PRs welcome.
 
 ---
 
-*Part of [Omnity](https://github.com/wyonliu/Omnity) — SOAP (spatial AI protocol) + Mindos (digital soul protocol).*
+*Part of [Omnity](https://github.com/wyonliu/Omnity) — an open-source stack for spatial AI agents.*

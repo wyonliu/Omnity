@@ -84,6 +84,20 @@ CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
 );
 """
 
+_SYNC_SCHEMA = """
+CREATE TABLE IF NOT EXISTS sync_journal (
+    seq        INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id   TEXT UNIQUE NOT NULL,
+    device_id  TEXT NOT NULL,
+    op         TEXT NOT NULL,
+    payload    TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    synced_at  REAL
+);
+CREATE INDEX IF NOT EXISTS idx_sync_unsynced ON sync_journal(synced_at) WHERE synced_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_sync_device ON sync_journal(device_id);
+"""
+
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -118,9 +132,9 @@ class Triple:
 # ---------------------------------------------------------------------------
 
 class MemoryStore:
-    """SQLite-backed memory store with in-process vector search."""
+    """SQLite-backed memory store with FTS5 + in-process vector search."""
 
-    def __init__(self, db_path: str | Path) -> None:
+    def __init__(self, db_path: str | Path, sync_enabled: bool = True) -> None:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
@@ -128,8 +142,70 @@ class MemoryStore:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.executescript(_SCHEMA)
+        self._sync_enabled = sync_enabled
+        self._applying_remote = False  # Prevent re-journaling during remote apply
+        self._migrate()
+        self._init_fts()
         self._embeddings_cache: dict[str, Any] = {}
         self._load_embeddings()
+
+    def _migrate(self) -> None:
+        """Add columns introduced after v0.2.0."""
+        cols = {r[1] for r in self._conn.execute("PRAGMA table_info(memories)").fetchall()}
+        if "content_hash" not in cols:
+            self._conn.execute("ALTER TABLE memories ADD COLUMN content_hash TEXT")
+            # Backfill hashes
+            for row in self._conn.execute("SELECT id, content FROM memories").fetchall():
+                h = self._content_hash(row["content"])
+                self._conn.execute("UPDATE memories SET content_hash=? WHERE id=?", (h, row["id"]))
+            self._conn.commit()
+            log.info("Migrated: added content_hash column")
+        # Ensure soul_state table exists (for emotion persistence)
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS soul_state (key TEXT PRIMARY KEY, value TEXT)"
+        )
+        # Sync journal
+        self._conn.executescript(_SYNC_SCHEMA)
+        self._conn.commit()
+        # Initialize device_id if not set
+        if not self.get_state("device_id"):
+            self.set_state("device_id", uuid.uuid4().hex[:8])
+
+    def _init_fts(self) -> None:
+        """Initialize FTS5 full-text search index."""
+        try:
+            self._conn.executescript(_FTS_SCHEMA)
+            # Rebuild FTS if empty but memories exist
+            fts_count = self._conn.execute(
+                "SELECT COUNT(*) FROM memories_fts"
+            ).fetchone()[0]
+            mem_count = self.count()
+            if mem_count > 0 and fts_count == 0:
+                self._rebuild_fts()
+            self._fts_available = True
+        except Exception:
+            self._fts_available = False
+            log.debug("FTS5 not available, falling back to LIKE queries")
+
+    def _rebuild_fts(self) -> None:
+        """Rebuild FTS index from memories table."""
+        self._conn.execute("DELETE FROM memories_fts")
+        self._conn.execute(
+            "INSERT INTO memories_fts(rowid, content) "
+            "SELECT rowid, content FROM memories"
+        )
+        self._conn.commit()
+
+    @staticmethod
+    def _content_hash(content: str) -> str:
+        """Normalized content hash for fuzzy dedup.
+
+        Strips whitespace and punctuation variations so
+        '我住在上海' and '我住在 上海。' hash the same.
+        """
+        import re
+        normalized = re.sub(r'[\s\u3000,.;:!?。，；：！？、\-—\'"\"\"\'\']+', '', content.lower())
+        return hashlib.md5(normalized.encode()).hexdigest()[:16]
 
     # -- write -----------------------------------------------------------------
 
@@ -140,19 +216,41 @@ class MemoryStore:
         if not mem.created_at:
             mem.created_at = now
         mem.accessed_at = now
+        content_hash = self._content_hash(mem.content)
         emb_blob = mem.embedding.tobytes() if mem.embedding is not None else None
         self._conn.execute(
             "INSERT OR REPLACE INTO memories "
-            "(id, type, content, source, confidence, created_at, accessed_at, "
+            "(id, type, content, content_hash, source, confidence, created_at, accessed_at, "
             " access_count, decay_weight, embedding, meta) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (mem.id, mem.type, mem.content, mem.source, mem.confidence,
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (mem.id, mem.type, mem.content, content_hash, mem.source, mem.confidence,
              mem.created_at, mem.accessed_at, mem.access_count,
              mem.decay_weight, emb_blob, json.dumps(mem.meta, ensure_ascii=False)),
         )
         self._conn.commit()
+        # Sync FTS index
+        if self._fts_available:
+            try:
+                rowid = self._conn.execute(
+                    "SELECT rowid FROM memories WHERE id=?", (mem.id,)
+                ).fetchone()
+                if rowid:
+                    self._conn.execute(
+                        "INSERT OR REPLACE INTO memories_fts(rowid, content) VALUES (?, ?)",
+                        (rowid[0], mem.content),
+                    )
+                    self._conn.commit()
+            except Exception:
+                pass  # FTS sync failure is non-fatal
         if mem.embedding is not None:
             self._embeddings_cache[mem.id] = mem.embedding
+        # Auto-journal for sync
+        if self._sync_enabled and not self._applying_remote:
+            self.journal_append("add_memory", {
+                "id": mem.id, "type": mem.type, "content": mem.content,
+                "source": mem.source, "confidence": mem.confidence,
+                "decay_weight": mem.decay_weight,
+            })
         return mem.id
 
     def add_triple(self, t: Triple) -> None:
@@ -163,6 +261,11 @@ class MemoryStore:
             (t.subject, t.predicate, t.object, t.source, t.confidence, time.time()),
         )
         self._conn.commit()
+        if self._sync_enabled and not self._applying_remote:
+            self.journal_append("add_triple", {
+                "subject": t.subject, "predicate": t.predicate,
+                "object": t.object, "source": t.source, "confidence": t.confidence,
+            })
 
     def record_personality(self, snapshot: dict, trigger: str, diff: str = "") -> None:
         self._conn.execute(
@@ -183,7 +286,22 @@ class MemoryStore:
         return self._row_to_memory(row)
 
     def search_text(self, query: str, limit: int = 20) -> list[Memory]:
-        """Keyword search (LIKE)."""
+        """Full-text search via FTS5, with LIKE fallback."""
+        if self._fts_available and query.strip():
+            try:
+                # FTS5 match query — escape special chars
+                safe_q = query.replace('"', '""')
+                rows = self._conn.execute(
+                    "SELECT m.* FROM memories m "
+                    "JOIN memories_fts f ON m.rowid = f.rowid "
+                    "WHERE memories_fts MATCH ? "
+                    "ORDER BY rank LIMIT ?",
+                    (f'"{safe_q}"', limit),
+                ).fetchall()
+                if rows:
+                    return [self._row_to_memory(r) for r in rows]
+            except Exception:
+                pass  # Fall through to LIKE
         rows = self._conn.execute(
             "SELECT * FROM memories WHERE content LIKE ? ORDER BY accessed_at DESC LIMIT ?",
             (f"%{query}%", limit),
@@ -274,6 +392,8 @@ class MemoryStore:
             (f"%{pattern}%", f"%{pattern}%", f"%{pattern}%"),
         )
         self._conn.commit()
+        if self._sync_enabled and not self._applying_remote and len(ids) > 0:
+            self.journal_append("forget", {"pattern": pattern, "mem_type": mem_type})
         return len(ids)
 
     def consolidate(self, similarity_threshold: float = 0.75) -> dict[str, int]:
@@ -346,11 +466,151 @@ class MemoryStore:
         return intersection / union if union > 0 else 0.0
 
     def content_exists(self, content: str) -> bool:
-        """True if an identical memory body already exists."""
+        """True if a semantically similar memory already exists (hash-based fuzzy match)."""
+        h = self._content_hash(content)
+        row = self._conn.execute(
+            "SELECT 1 FROM memories WHERE content_hash = ? LIMIT 1", (h,),
+        ).fetchone()
+        if row:
+            return True
+        # Fallback: exact match (for pre-hash records)
         row = self._conn.execute(
             "SELECT 1 FROM memories WHERE content = ? LIMIT 1", (content,),
         ).fetchone()
         return row is not None
+
+    # -- sync journal -----------------------------------------------------------
+
+    @property
+    def device_id(self) -> str:
+        return self.get_state("device_id") or "unknown"
+
+    def journal_append(self, op: str, payload: dict) -> int:
+        """Append a mutation event to the sync journal. Returns the seq number."""
+        event_id = uuid.uuid4().hex
+        now = time.time()
+        self._conn.execute(
+            "INSERT INTO sync_journal (event_id, device_id, op, payload, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (event_id, self.device_id, op, json.dumps(payload, ensure_ascii=False), now),
+        )
+        self._conn.commit()
+        seq = self._conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        return seq
+
+    def journal_since(self, after_seq: int = 0, limit: int = 1000) -> list[dict]:
+        """Get journal events after a given sequence number."""
+        rows = self._conn.execute(
+            "SELECT seq, event_id, device_id, op, payload, created_at, synced_at "
+            "FROM sync_journal WHERE seq > ? ORDER BY seq ASC LIMIT ?",
+            (after_seq, limit),
+        ).fetchall()
+        return [
+            {"seq": r["seq"], "event_id": r["event_id"], "device_id": r["device_id"],
+             "op": r["op"], "payload": json.loads(r["payload"]),
+             "created_at": r["created_at"], "synced_at": r["synced_at"]}
+            for r in rows
+        ]
+
+    def journal_unsynced(self, limit: int = 500) -> list[dict]:
+        """Get events that haven't been synced yet."""
+        rows = self._conn.execute(
+            "SELECT seq, event_id, device_id, op, payload, created_at "
+            "FROM sync_journal WHERE synced_at IS NULL ORDER BY seq ASC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [
+            {"seq": r["seq"], "event_id": r["event_id"], "device_id": r["device_id"],
+             "op": r["op"], "payload": json.loads(r["payload"]),
+             "created_at": r["created_at"]}
+            for r in rows
+        ]
+
+    def journal_mark_synced(self, up_to_seq: int) -> int:
+        """Mark events as synced up to a given sequence number."""
+        now = time.time()
+        cur = self._conn.execute(
+            "UPDATE sync_journal SET synced_at=? WHERE seq <= ? AND synced_at IS NULL",
+            (now, up_to_seq),
+        )
+        self._conn.commit()
+        return cur.rowcount
+
+    def journal_apply_remote(self, event: dict) -> bool:
+        """Apply a remote event to the local store. Returns True if applied (not duplicate)."""
+        # Check for duplicate event_id
+        row = self._conn.execute(
+            "SELECT 1 FROM sync_journal WHERE event_id=?", (event["event_id"],)
+        ).fetchone()
+        if row:
+            return False  # Already applied
+
+        self._applying_remote = True  # Prevent re-journaling
+        op = event["op"]
+        payload = event["payload"]
+
+        if op == "add_memory":
+            mem = Memory(
+                id=payload.get("id", ""), type=payload["type"],
+                content=payload["content"], source=payload.get("source", "sync"),
+                confidence=payload.get("confidence", 0.8),
+                decay_weight=payload.get("decay_weight", 1.0),
+            )
+            if not self.content_exists(mem.content):
+                self.add(mem)
+
+        elif op == "add_triple":
+            self.add_triple(Triple(
+                subject=payload["subject"], predicate=payload["predicate"],
+                object=payload["object"], source=payload.get("source", "sync"),
+                confidence=payload.get("confidence", 1.0),
+            ))
+
+        elif op == "forget":
+            self.forget(payload["pattern"], payload.get("mem_type"))
+
+        elif op == "update_identity":
+            # Identity updates are stored as soul_state for the caller to apply
+            self.set_state("pending_identity_update", json.dumps(payload))
+
+        elif op == "reflect":
+            if "snapshot" in payload:
+                self.record_personality(
+                    payload["snapshot"], trigger="sync_reflect",
+                    diff=payload.get("diff", ""),
+                )
+
+        self._applying_remote = False  # Re-enable journaling
+
+        # Record in local journal (with remote device_id)
+        self._conn.execute(
+            "INSERT OR IGNORE INTO sync_journal (event_id, device_id, op, payload, created_at, synced_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (event["event_id"], event["device_id"], op,
+             json.dumps(payload, ensure_ascii=False),
+             event["created_at"], time.time()),
+        )
+        self._conn.commit()
+        return True
+
+    def journal_latest_seq(self) -> int:
+        """Get the latest sequence number in the journal."""
+        row = self._conn.execute("SELECT MAX(seq) FROM sync_journal").fetchone()
+        return row[0] or 0
+
+    # -- soul state (key-value persistence) ------------------------------------
+
+    def get_state(self, key: str) -> Optional[str]:
+        """Read a soul state value."""
+        row = self._conn.execute("SELECT value FROM soul_state WHERE key=?", (key,)).fetchone()
+        return row["value"] if row else None
+
+    def set_state(self, key: str, value: str) -> None:
+        """Write a soul state value."""
+        self._conn.execute(
+            "INSERT OR REPLACE INTO soul_state (key, value) VALUES (?, ?)", (key, value)
+        )
+        self._conn.commit()
 
     # -- internal --------------------------------------------------------------
 

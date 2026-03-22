@@ -6,6 +6,8 @@ L2/L3 processing or can be answered from cached identity + recent memories.
 
 from __future__ import annotations
 
+import json
+import logging
 import re
 import time
 from dataclasses import dataclass, field
@@ -13,7 +15,29 @@ from enum import Enum
 from typing import Any, Optional
 
 from mindos.layers.l0_memory import Hippocampus, relevance_score
-from mindos.store import Memory
+from mindos.store import Memory, MemoryStore
+
+log = logging.getLogger("mindos.l1")
+
+
+def _estimate_tokens(text: str) -> int:
+    """Better token estimation that accounts for CJK vs ASCII.
+
+    CJK characters are roughly 1.5 tokens each (BPE splits them more).
+    ASCII words average ~1.3 tokens (subword tokenization).
+    """
+    cjk_count = 0
+    ascii_count = 0
+    for ch in text:
+        cp = ord(ch)
+        if (0x4E00 <= cp <= 0x9FFF or 0x3400 <= cp <= 0x4DBF or
+                0xF900 <= cp <= 0xFAFF or 0x2E80 <= cp <= 0x2FFF or
+                0x3000 <= cp <= 0x303F):
+            cjk_count += 1
+        else:
+            ascii_count += 1
+    # CJK: ~1.5 tokens/char, ASCII: ~0.25 tokens/char (4 chars ≈ 1 token)
+    return int(cjk_count * 1.5 + ascii_count * 0.25)
 
 
 class Mood(Enum):
@@ -49,10 +73,37 @@ class EmotionState:
 class Brainstem:
     """L1: fast routing and context assembly."""
 
-    def __init__(self, hippocampus: Hippocampus, identity: dict[str, Any]) -> None:
+    def __init__(self, hippocampus: Hippocampus, identity: dict[str, Any],
+                 store: Optional[MemoryStore] = None) -> None:
         self.hippocampus = hippocampus
         self.identity = identity
-        self.emotion = EmotionState(last_update=time.time())
+        self._store = store
+        self.emotion = self._load_emotion()
+
+    def _load_emotion(self) -> EmotionState:
+        """Restore emotion state from persistent storage."""
+        if self._store:
+            raw = self._store.get_state("emotion")
+            if raw:
+                try:
+                    d = json.loads(raw)
+                    return EmotionState(
+                        mood=Mood(d.get("mood", "neutral")),
+                        energy=d.get("energy", 1.0),
+                        last_update=d.get("last_update", time.time()),
+                    )
+                except Exception:
+                    pass
+        return EmotionState(last_update=time.time())
+
+    def save_emotion(self) -> None:
+        """Persist current emotion state."""
+        if self._store:
+            self._store.set_state("emotion", json.dumps({
+                "mood": self.emotion.mood.value,
+                "energy": self.emotion.energy,
+                "last_update": self.emotion.last_update,
+            }))
 
     def hydrate(self, context: str = "", max_tokens: int = 2000,
                 query_vec: Any = None) -> str:
@@ -103,13 +154,15 @@ class Brainstem:
 
         assembled = "\n".join(blocks)
 
-        # Rough token estimate (1 token ≈ 1.5 CJK chars or 0.75 English words)
-        est_tokens = len(assembled) // 2
+        # Token estimation: CJK chars ≈ 1.5 tokens each, ASCII ≈ 0.25 tokens per char
+        est_tokens = _estimate_tokens(assembled)
         if est_tokens > max_tokens:
             ratio = max_tokens / est_tokens
             lines = assembled.split("\n")
             assembled = "\n".join(lines[: int(len(lines) * ratio)])
 
+        # Persist emotion after hydrate
+        self.save_emotion()
         return assembled
 
     def classify_request(self, text: str) -> str:

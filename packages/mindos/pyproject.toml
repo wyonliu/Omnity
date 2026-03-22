@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mindos"
-version = "0.2.0"
+version = "0.3.0"
 description = "Portable Digital Soul Protocol — your AI knows you, everywhere."
 readme = "README.md"
 license = "Apache-2.0"
@@ -30,9 +30,10 @@ Issues = "https://github.com/wyonliu/Omnity/issues"
 
 [project.optional-dependencies]
 llm = ["openai>=1.0"]
+anthropic = ["anthropic>=0.30"]
 semantic = ["numpy>=1.24", "sentence-transformers>=2.2"]
 dev = ["pytest>=7.0"]
-all = ["pyyaml>=6.0", "numpy>=1.24", "sentence-transformers>=2.2", "openai>=1.0"]
+all = ["pyyaml>=6.0", "numpy>=1.24", "sentence-transformers>=2.2", "openai>=1.0", "anthropic>=0.30"]
 
 [project.scripts]
 mindos = "mindos.cli:main"

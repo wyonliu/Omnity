@@ -7,12 +7,15 @@ Falls back to rule-based extraction when no LLM is available.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 from typing import Any, Optional
 
 from mindos.config import ModelRouter
 from mindos.store import Memory, MemoryStore, Triple
+
+log = logging.getLogger("mindos.l2")
 
 _COMMIT_SYSTEM = """You are a memory extraction engine for a personal AI identity system.
 Given a conversation, extract structured information. Output JSON with:
@@ -31,11 +34,11 @@ Rules:
 - Output valid JSON only, no markdown."""
 
 _SENSITIVE_PATTERNS = [
-    r"\b\d{15,18}\b",                      # ID numbers
-    r"\b[A-Za-z0-9]{20,}\b",               # long tokens / API keys
-    r"(sk-|ak-|pk-)[A-Za-z0-9]+",          # API key prefixes
-    r"\b\d{16}\b",                          # credit card numbers
-    r"密[码钥]|password|secret|token|credential|private.?key",
+    r"\b\d{15,18}\b",                           # ID numbers (Chinese ID card etc.)
+    r"(sk-|ak-|pk-|api-|key-)[A-Za-z0-9]{10,}", # API key prefixes with suffix
+    r"\b[A-Za-z0-9_\-]{32,}\b",                 # Long tokens (32+ chars, stricter)
+    r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b",  # Credit card (16 digits, grouped)
+    r"密[码钥]|password|secret\s*[:=]|credential|private.?key",  # Keywords with context
 ]
 
 

@@ -1,9 +1,10 @@
 """Mindos HTTP Server — unified entry point for multi-terminal access.
 
 Serves:
-  - REST API (hydrate, commit, recall, forget, reflect, status, memories, KG)
+  - REST API (hydrate, commit, recall, forget, reflect, status, memories, KG, ome)
   - Dashboard web UI (served at /)
   - Lockfile for automatic client discovery
+  - Optional bearer token auth (via MINDOS_AUTH_TOKEN env var)
 
 Usage:
   mindos serve                  # HTTP server (default port 3456)
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 import atexit
 import json
+import logging
 import os
 import signal
 import socket
@@ -32,9 +34,12 @@ from urllib.parse import urlparse, parse_qs
 if TYPE_CHECKING:
     from mindos.core import Mindos
 
+log = logging.getLogger("mindos.server")
+
 _mindos: "Mindos | None" = None
 _serve_port: int = 3456
 _start_time: float = 0.0
+_auth_token: str = os.environ.get("MINDOS_AUTH_TOKEN", "")
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +113,16 @@ class MindosHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *a):
         pass
 
+    def _check_auth(self) -> bool:
+        """Check bearer token if MINDOS_AUTH_TOKEN is set."""
+        if not _auth_token:
+            return True
+        auth = self.headers.get("Authorization", "")
+        if auth == f"Bearer {_auth_token}":
+            return True
+        self._json({"error": "Unauthorized", "detail": "Invalid or missing Bearer token"}, 401)
+        return False
+
     def _json(self, data: dict, code: int = 200) -> None:
         body = json.dumps(data, ensure_ascii=False).encode()
         self.send_response(code)
@@ -136,6 +151,7 @@ class MindosHandler(BaseHTTPRequestHandler):
         path = parsed.path
         qs = parse_qs(parsed.query)
 
+        # Auth-free endpoints: dashboard, health
         if path in ("/", "/index.html"):
             body = _get_dashboard_html().encode("utf-8")
             self.send_response(200)
@@ -160,8 +176,18 @@ class MindosHandler(BaseHTTPRequestHandler):
             self._json({"status": "ok", "pid": os.getpid()})
             return
 
+        # All other endpoints require auth
+        if not self._check_auth():
+            return
+
         if path == "/api/status":
-            self._json(_mindos.status())
+            status = _mindos.status()
+            status["device_id"] = _mindos.store.device_id
+            status["sync"] = {
+                "journal_seq": _mindos.store.journal_latest_seq(),
+                "unsynced": len(_mindos.store.journal_unsynced(limit=1)),
+            }
+            self._json(status)
             return
 
         if path == "/api/memories":
@@ -222,10 +248,18 @@ class MindosHandler(BaseHTTPRequestHandler):
             ]})
             return
 
+        if path == "/api/ome":
+            context = qs.get("context", [""])[0]
+            ome = _mindos.export_ome(context=context)
+            self._json(ome)
+            return
+
         self.send_error(404)
 
     def do_POST(self) -> None:
         assert _mindos is not None
+        if not self._check_auth():
+            return
         parsed = urlparse(self.path)
         path = parsed.path
         body = self._read_body()
@@ -277,6 +311,27 @@ class MindosHandler(BaseHTTPRequestHandler):
 
         if path == "/api/memories/consolidate":
             result = _mindos.consolidate()
+            self._json(result)
+            return
+
+        if path == "/api/sync":
+            from mindos.sync import SyncClient
+            sync = SyncClient(_mindos.store)
+            result = sync.sync()
+            self._json(result)
+            return
+
+        if path == "/api/sync/push":
+            from mindos.sync import SyncClient
+            sync = SyncClient(_mindos.store)
+            result = sync.push()
+            self._json(result)
+            return
+
+        if path == "/api/sync/pull":
+            from mindos.sync import SyncClient
+            sync = SyncClient(_mindos.store)
+            result = sync.pull()
             self._json(result)
             return
 

@@ -932,3 +932,169 @@ mindos status
 ```
 
 **开干。**
+
+---
+
+## 十六、v0.3 架构升级日志（2026-03-22）
+
+### 修复的致命 Bug
+
+| # | 问题 | 修复 |
+|---|------|------|
+| 1 | ModelRouter 把 Anthropic 当 OpenAI 调 | 新增 `_call_anthropic()` 走原生 anthropic SDK |
+| 2 | Ollama 类型声明了但永远返回 None | 新增 `_call_ollama()` 走 OpenAI 兼容接口 |
+
+### 核心升级
+
+| # | 功能 | 文件 | 说明 |
+|---|------|------|------|
+| 3 | FTS5 全文搜索 | store.py | 中文/英文混合搜索，万级记忆毫秒级响应 |
+| 4 | Content-hash 模糊去重 | store.py | 「我住上海」vs「我住在 上海。」不再重复存 |
+| 5 | 情绪状态持久化 | l1_instinct.py, store.py | soul_state 表，重启后保持情绪 |
+| 6 | Bearer Token 鉴权 | server.py, client.py | MINDOS_AUTH_TOKEN 环境变量，保护灵魂数据 |
+| 7 | LLM 响应缓存 | config.py | ModelRouter 内置 5 分钟 TTL 缓存 |
+| 8 | Token 估算升级 | l1_instinct.py | 区分 CJK（1.5 tokens/char）和 ASCII（0.25 tokens/char）|
+| 9 | Sensitive 检测优化 | l2_cognition.py | 减少误杀（32+ 字符门槛，API key 前缀更精确）|
+| 10 | 全局 logging | 所有模块 | `logging.getLogger("mindos.*")`，替代 print |
+
+### Ome 生成
+
+| # | 功能 | 接入点 |
+|---|------|--------|
+| 11 | `export_ome()` | Mindos.export_ome() / HTTP GET /api/ome / MCP mindos_ome |
+| 12 | Ome 格式 v0.1 | identity + anchor + hydrated_context + memories + KG + emotion |
+
+**Ome = Mindos 的轻量快照**，是从"持久灵魂"到"实例化人格"的桥梁。任何平台只需读入一个 Ome JSON，即可让 AI 以你的身份说话。
+
+### 测试覆盖
+
+| 版本 | 测试数 |
+|------|--------|
+| v0.2 | 12 |
+| v0.3 | 18（+6：export_ome, content_hash_dedup, fts_search, soul_state, mcp_ome, anthropic_router）|
+
+### 依赖变更
+
+- 新增可选依赖：`anthropic>=0.30`（`pip install mindos[anthropic]`）
+- Ollama 不需要额外依赖（复用 openai SDK 的 compatible 接口）
+
+---
+
+## 十七、跨端同步架构（2026-03-22）
+
+### 设计目标
+
+| 场景 | 设备 | 接入方式 |
+|------|------|---------|
+| 开发 | Mac | Claude Code (MCP) / Cursor (MCP) → 本地 `~/.mindos/` |
+| 咨询 | Chrome | Gemini / 豆包网页版 → Chrome Extension → Sync Hub |
+| 移动 | 手机 | 豆包 App / Ome App → Sync SDK → Sync Hub |
+
+### 架构：Event Sourcing + Sync Hub
+
+```
+Device A (Mac)                    Device B (Phone)
+┌──────────────┐                  ┌──────────────┐
+│ SQLite (本地) │  ← push/pull → │ SQLite (本地) │
+│ sync_journal │      ↕          │ sync_journal │
+└──────┬───────┘      │          └──────┬───────┘
+       │         ┌────┴────┐           │
+  MCP/CLI        │Sync Hub │      Ome SDK
+                 │ REST API│
+                 └────┬────┘
+                      │
+                Chrome Extension
+```
+
+### 核心设计
+
+**1. Sync Journal（每设备本地）**
+```sql
+CREATE TABLE sync_journal (
+    seq        INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id   TEXT UNIQUE,      -- UUID, 全局唯一
+    device_id  TEXT,             -- 哪个设备产生的
+    op         TEXT,             -- add_memory | add_triple | forget | update_identity | reflect
+    payload    TEXT,             -- 变更 JSON
+    created_at REAL,
+    synced_at  REAL              -- NULL = 尚未同步
+);
+```
+
+**2. 自动记录**：`add()` / `add_triple()` / `forget()` 自动写 journal，零代码侵入。
+
+**3. 防重入**：`_applying_remote` 标志位，远程事件回放时不会再次写入 journal。
+
+**4. Sync Hub**：无状态事件中继
+- `POST /sync/push` — 设备推送事件到 Hub
+- `POST /sync/pull` — 设备从 Hub 拉取其他设备的事件
+- Hub 不存灵魂数据，只存事件流
+- Hub 持久化到 JSON 文件（自托管场景可用 SQLite 或 Redis 替换）
+
+**5. 冲突策略**
+| 操作 | 策略 | 原因 |
+|------|------|------|
+| add_memory | 无冲突（append-only + hash dedup）| 记忆天然只增不减 |
+| add_triple | 无冲突（幂等 upsert）| KG 三元组是集合操作 |
+| forget | 传播到所有设备 | GDPR 要求全局删除 |
+| identity | last-writer-wins（timestamp）| 人格编辑频率低 |
+
+### 使用方式
+
+```bash
+# 在你的 VPS 上启动 Sync Hub
+mindos serve --sync --port 3457
+
+# 在 Mac 上配置
+export MINDOS_SYNC_URL=http://your-vps:3457
+mindos sync            # push + pull 一步到位
+
+# 在 Claude Code MCP 里
+mindos_sync            # 一键同步
+
+# 在 Ome App 里（TypeScript SDK）
+const sync = new SyncClient({ hubUrl: "http://your-vps:3457" });
+await sync.sync();
+```
+
+### 测试覆盖
+
+| 版本 | 测试数 |
+|------|--------|
+| v0.2 | 12 |
+| v0.3 sync | 22（+10：ome 3, sync_journal, sync_hub, sync_apply, sync_persist, anthropic_router, hash_dedup, fts）|
+
+---
+
+## 十八、OpenClaw 社区发布清单
+
+要让 Mindos 在 OpenClaw 社区一键爆火，需要的工作：
+
+### 必须做（MVP）
+
+| # | 工作 | 状态 | 说明 |
+|---|------|------|------|
+| 1 | `pip install mindos` 零报错 | ✅ | 纯 Python，仅依赖 pyyaml |
+| 2 | `mindos quickstart` 30 秒上手 | ✅ | 交互式引导 + 即时展示 |
+| 3 | MCP Server 一键接入 Claude/Cursor | ✅ | `mindos serve --mcp` |
+| 4 | 跨端同步 | ✅ | Sync Hub + Journal |
+| 5 | Ome 生成 | ✅ | 灵魂 → 人格快照 |
+| 6 | Chrome Extension | ⏳ | 拦截 Gemini/豆包对话，auto-commit 到 Mindos |
+| 7 | TypeScript SDK | ⏳ | 给 Ome App / Web 前端用 |
+| 8 | OpenClaw Agent 集成示例 | ⏳ | 在 Claw 里 `import mindos; soul = mindos.load()` |
+| 9 | 文档站 | ⏳ | GitHub Pages，含交互 demo |
+
+### 应该做（增长飞轮）
+
+| # | 工作 | 说明 |
+|---|------|------|
+| 10 | Soul Marketplace | 用户分享匿名化人格模板（如"AI 工程师人格"、"创意作家人格"）|
+| 11 | One-click Deploy | `mindos deploy` 一键部署 Sync Hub 到 Railway/Vercel |
+| 12 | Grafana Dashboard | 记忆增长、人格漂移、情绪曲线可视化 |
+| 13 | React 组件 | `<MindosProvider>` + `useMindos()` hook |
+
+### 爆火三板斧
+
+1. **30 秒 Demo Video**：`pip install mindos && mindos quickstart` → 30 秒后 Claude 记住你是谁
+2. **"AI 终于记住我了"** Reddit/HN 帖子标题
+3. **OpenClaw 生态集成**：任何 Claw Agent 加一行 `soul = mindos.load()` 就有记忆
