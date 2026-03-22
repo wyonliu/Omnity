@@ -105,14 +105,54 @@ mindos memories --stats
 Five-layer brain inspired by neuroscience:
 
 ```
-L4  Self          Personality drift detection, reflection, value alignment
-L3  Prefrontal    Deep reasoning, planning, conflict resolution
-L2  Cortex        LLM-powered fact extraction, contradiction detection
-L1  Brainstem     Fast routing, context assembly, emotion state
-L0  Hippocampus   Memory storage, relevance scoring, knowledge graph
+┌──────────────────────────────────────────────────────────────────┐
+│                           Mindos                                  │
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │ L0 海马体 (Hippocampus) —— 记忆                             │  │
+│  │ 长期记忆 · 知识图谱 · 向量索引 · 遗忘曲线 · 情景记忆          │  │
+│  │ ★ 灵魂的根基：用的越久越厚重，不可替代                      │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │ L1 脑干 (Brainstem) —— 本能                                 │  │
+│  │ 情绪状态机 · 作息节律 · 安全边界 · 条件反射式行为             │  │
+│  │ hydrate 组装 · Token 预算 · 0 成本处理 60% 请求              │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │ L2 皮层 (Cortex) —— 认知                                    │  │
+│  │ commit 消化 · 事实/偏好/关系提取 · 日常对话 · 社交判断        │  │
+│  │ 知识图谱更新 · 本地 7B 模型或宿主 LLM                        │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │ L3 前额叶 (Prefrontal) —— 决策                              │  │
+│  │ 深度推理 · 创作 · 战略规划 · 行为编排                         │  │
+│  │ 冲突解决 · 优先级排序 · 通过 ModelRouter 调用最优 LLM         │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │ L4 自我 (Self / Default Mode Network) —— 人格               │  │
+│  │ 人格模型维护 · 反思循环 · 价值观守护 · 跨平台身份锚           │  │
+│  │ ★ 从"大脑"到"灵魂"的涌现层                               │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │ LayerRouter · ModelRouter · OmeFactory                      │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│  对外接口：MCP Server · HTTP API · Python SDK · Ome Factory      │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-+ ModelRouter (multi-LLM switching) + LayerRouter + HTTP Server + MCP Server
+| 层 | 脑区 | 职责 | 延迟 | 成本 |
+|----|------|------|------|------|
+| **L0** 海马体 | Hippocampus | 你**记得**什么 | < 50ms | ≈ 0 |
+| **L1** 脑干 | Brainstem | 你**本能**的反应 | < 100ms | ≈ 0 |
+| **L2** 皮层 | Cortex | 你如何**理解**世界 | < 2s | 极低 |
+| **L3** 前额叶 | Prefrontal | 你如何**决策** | 1-10s | 按需 |
+| **L4** 自我 | DMN | 你**是谁** | 异步 | 极低 |
 
 ## Memory Management
 
@@ -160,6 +200,34 @@ v0.2.0 — alpha. Core architecture is solid, actively iterating.
 | PyPI package | 🔜 |
 | Browser extension | planned |
 | Mobile SDK | planned |
+
+## File Structure
+
+```
+src/mindos/
+├── core.py              Mindos facade (public API)
+├── config.py            config.yaml + ModelRouter (DeepSeek/OpenAI/Anthropic/Ollama)
+├── router.py            LayerRouter (orchestrates L0-L4)
+├── server.py            HTTP server + lockfile auto-discovery
+├── client.py            MindosClient (Python SDK + CLI proxy)
+├── mcp_server.py        MCP Server (stdio JSON-RPC 2024-11-05)
+├── store.py             SQLite memory store (WAL mode)
+├── layers/
+│   ├── l0_memory.py     Hippocampus: retrieval + relevance scoring
+│   ├── l1_instinct.py   Brainstem: routing + hydrate + emotion state
+│   ├── l2_cognition.py  Cortex: LLM commit digestion + rule fallback
+│   ├── l3_decision.py   Prefrontal: reasoning + planning
+│   └── l4_self.py       Self: reflection loop + drift detection
+├── dashboard.py         Web UI
+└── cli.py               CLI (auto-proxies to server)
+
+~/.mindos/
+├── identity.yaml        who you are
+├── config.yaml          LLM providers
+├── memory.db            SQLite (memories + KG + personality history)
+├── server.lock          auto-created when server runs
+└── journal/             future: raw conversation logs
+```
 
 ## Contributing
 
