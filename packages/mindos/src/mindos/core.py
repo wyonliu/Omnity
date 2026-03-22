@@ -17,6 +17,7 @@ except ImportError:
     yaml = None
 
 from mindos.config import MindosConfig
+from mindos.event_bus import EventBus, MEMORY_COMMITTED, REFLECT_COMPLETED, PERSONALITY_CHANGED
 from mindos.router import LayerRouter
 from mindos.store import MemoryStore
 
@@ -40,13 +41,16 @@ def _load_identity(path: Path) -> dict:
 
 
 _DEFAULT_IDENTITY: dict[str, Any] = {
-    "version": 1,
+    "version": 2,
     "name": "User",
     "personality": {
+        "anchors": [],
         "traits": [],
         "style": "",
         "values": [],
         "boundaries": [],
+        "catchphrases": [],
+        "emoji_habits": [],
     },
     "capabilities": [],
     "relations": [],
@@ -74,6 +78,9 @@ class Mindos:
         self.layers = LayerRouter(store, flat_identity, config)
 
         self._embedder: Any = None
+        self.event_bus = EventBus()
+        self._scheduler = None  # Lazy init
+        self._setup_writeback()
 
     @classmethod
     def load(cls, path: str | Path = "~/.mindos") -> "Mindos":
@@ -124,14 +131,57 @@ class Mindos:
 
     # -- public API (delegates to LayerRouter) ---------------------------------
 
+    def process(self, text: str, **kwargs: Any) -> dict[str, Any]:
+        """Unified entry point — L1 classifies and auto-routes to L1-L4.
+
+        This is THE preferred API for Ome and all external systems.
+        """
+        return self.layers.process(text, **kwargs)
+
     def hydrate(self, context: str = "", max_tokens: int = 2000) -> str:
         """L1→L0: Assemble identity for injection into any AI session."""
         query_vec = self._embed(context) if context else None
         return self.layers.hydrate(context, max_tokens, query_vec)
 
     def commit(self, conversation: str, source: str = "unknown") -> dict[str, Any]:
-        """L2→L0: Digest a conversation into long-term memories."""
-        return self.layers.commit(conversation, source)
+        """L2→L0: Digest a conversation into long-term memories.
+
+        Auto-embeds new facts if an embedding model is available.
+        Emits MEMORY_COMMITTED event on success.
+        """
+        result = self.layers.commit(conversation, source)
+
+        # Auto-embed newly added facts
+        if result.get("facts_added", 0) > 0:
+            self._auto_embed_recent(result.get("facts_added", 0))
+
+        # Emit event
+        self.event_bus.emit(MEMORY_COMMITTED, {
+            "facts_added": result.get("facts_added", 0),
+            "source": source,
+        })
+
+        # Check if reflection was triggered
+        if result.get("reflection"):
+            self.event_bus.emit(REFLECT_COMPLETED, result["reflection"])
+
+        return result
+
+    def _auto_embed_recent(self, count: int) -> None:
+        """Generate embeddings for the most recent memories that lack them."""
+        emb = self._get_embedder()
+        if not emb:
+            return
+        try:
+            recent = self.store.list_recent(limit=count)
+            for mem in recent:
+                if mem.embedding is not None:
+                    continue
+                vec = self._embed(mem.content)
+                if vec is not None:
+                    self.store.update_embedding(mem.id, vec.tolist())
+        except Exception as e:
+            log.debug("Auto-embed failed: %s", e)
 
     def commit_messages(self, messages: list[dict], source: str = "unknown") -> dict[str, Any]:
         """Convenience: commit from a list of {role, content} message dicts."""
@@ -151,8 +201,15 @@ class Mindos:
         return self.layers.forget(pattern, scope_val)
 
     def reflect(self) -> Optional[dict[str, Any]]:
-        """L4: Force a reflection cycle."""
-        return self.layers.reflect()
+        """L4: Force a reflection cycle. Emits REFLECT_COMPLETED event."""
+        result = self.layers.reflect()
+        if result:
+            self.event_bus.emit(REFLECT_COMPLETED, result)
+            if result.get("identity_updated"):
+                self.event_bus.emit(PERSONALITY_CHANGED, {
+                    "traits": self.identity.get("personality", {}).get("traits", []),
+                })
+        return result
 
     def reason(self, query: str) -> Optional[str]:
         """L3: Deep reasoning with identity context."""
@@ -168,6 +225,34 @@ class Mindos:
         s["soul_age"] = self.identity.get("created_at", "unknown")
         s["device_id"] = self.store.device_id
         return s
+
+    # -- scheduler & insights --------------------------------------------------
+
+    def get_scheduler(self):
+        """Lazy-init scheduler."""
+        if self._scheduler is None:
+            from mindos.scheduler import MindosScheduler
+            self._scheduler = MindosScheduler(self, self.event_bus)
+        return self._scheduler
+
+    def maintenance(self) -> list[dict[str, Any]]:
+        """Run all due maintenance jobs. Returns list of job results."""
+        scheduler = self.get_scheduler()
+        results = scheduler.check_and_run()
+        return [{"name": r.name, "success": r.success, "data": r.data,
+                 "duration_ms": r.duration_ms} for r in results]
+
+    def insights(self, hours: int = 24) -> dict[str, Any]:
+        """Get daily digest from InsightEngine."""
+        from mindos.insight import InsightEngine
+        engine = InsightEngine(self.store)
+        return engine.daily_digest(hours=hours)
+
+    def weekly_report(self) -> dict[str, Any]:
+        """Get comprehensive weekly report."""
+        from mindos.insight import InsightEngine
+        engine = InsightEngine(self.store)
+        return engine.weekly_summary()
 
     # -- sync ------------------------------------------------------------------
 
@@ -271,6 +356,18 @@ class Mindos:
 
     # -- internal helpers ------------------------------------------------------
 
+    def _setup_writeback(self) -> None:
+        """Wire L4 identity writeback so reflect() changes persist to disk."""
+        def _on_identity_changed():
+            # Sync flat identity back to nested identity and save
+            flat = self.layers.identity
+            p = self.identity.setdefault("personality", {})
+            p["traits"] = flat.get("traits", [])
+            p["style"] = flat.get("style", "")
+            self.save_identity()
+            log.info("Identity updated by L4 reflection and saved to disk.")
+        self.layers.l4._on_identity_changed = _on_identity_changed
+
     @staticmethod
     def _flatten_identity(identity: dict[str, Any]) -> dict[str, Any]:
         """Flatten nested personality into layer-friendly format."""
@@ -284,9 +381,12 @@ class Mindos:
                 cap_strs.append(c)
         return {
             "name": identity.get("name", "User"),
+            "anchors": p.get("anchors", []),
             "traits": p.get("traits", []),
             "style": p.get("style", ""),
             "values": p.get("values", []),
             "boundaries": p.get("boundaries", []),
             "capabilities": cap_strs,
+            "catchphrases": p.get("catchphrases", []),
+            "emoji_habits": p.get("emoji_habits", []),
         }

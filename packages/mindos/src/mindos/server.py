@@ -254,6 +254,20 @@ class MindosHandler(BaseHTTPRequestHandler):
             self._json(ome)
             return
 
+        if path == "/api/insights":
+            hours = int(qs.get("hours", ["24"])[0])
+            self._json(_mindos.insights(hours=hours))
+            return
+
+        if path == "/api/insights/weekly":
+            self._json(_mindos.weekly_report())
+            return
+
+        if path == "/api/scheduler":
+            scheduler = _mindos.get_scheduler()
+            self._json({"jobs": scheduler.job_status()})
+            return
+
         self.send_error(404)
 
     def do_POST(self) -> None:
@@ -263,6 +277,20 @@ class MindosHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         body = self._read_body()
+
+        if path == "/api/process":
+            text = body.get("text", "")
+            if not text:
+                self._json({"error": "text is required"}, 400)
+                return
+            result = _mindos.process(text)
+            self._json(result)
+            return
+
+        if path == "/api/maintenance":
+            results = _mindos.maintenance()
+            self._json({"jobs_run": len(results), "results": results})
+            return
 
         if path == "/api/hydrate":
             ctx = _mindos.hydrate(

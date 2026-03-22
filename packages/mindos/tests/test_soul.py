@@ -509,6 +509,310 @@ def test_anthropic_router_selection():
     print("  PASSED")
 
 
+def test_process_unified_entry():
+    """process() routes L1 requests through quick_reply, L2/L3/L4 through layers."""
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="ProcessTest", traits=["smart"])
+        # L1: greeting
+        r = m.process("你好")
+        assert r["layer"] == "l1"
+        assert "你好" in r["response"]
+        assert r.get("cost", 0) == 0
+
+        # L1: thanks
+        r = m.process("谢谢")
+        assert r["layer"] == "l1"
+
+        # L1: status
+        r = m.process("状态")
+        assert r["layer"] == "l1"
+        assert "记忆" in r["response"]
+
+        # L2: general conversation (no LLM, fallback)
+        r = m.process("今天学了Python")
+        assert r["layer"] == "l2"
+
+        # L3: planning
+        r = m.process("帮我分析一下这个问题")
+        assert r["layer"] == "l3"
+
+        # L4: reflection
+        r = m.process("你是谁")
+        assert r["layer"] == "l4"
+    print("  PASSED")
+
+
+def test_l1_quick_reply():
+    """L1 quick_reply handles various simple queries."""
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="QuickTest")
+        b = m.layers.l1
+
+        assert "你好" in b.quick_reply("你好")
+        assert "不客气" in b.quick_reply("谢谢")
+        assert "记忆" in b.quick_reply("状态")
+        assert "还没有记忆" in b.quick_reply("你记得吗")
+    print("  PASSED")
+
+
+def test_event_bus():
+    """EventBus on/emit/off work correctly."""
+    from mindos.event_bus import EventBus, MEMORY_COMMITTED
+    bus = EventBus()
+    received = []
+    handler = lambda e: received.append(e)
+    bus.on(MEMORY_COMMITTED, handler)
+
+    bus.emit(MEMORY_COMMITTED, {"facts_added": 3})
+    assert len(received) == 1
+    assert received[0].data["facts_added"] == 3
+
+    bus.off(MEMORY_COMMITTED, handler)
+    bus.emit(MEMORY_COMMITTED, {"facts_added": 1})
+    assert len(received) == 1  # handler removed, not called
+
+    # History
+    events = bus.recent_events(MEMORY_COMMITTED)
+    assert len(events) == 2
+    print("  PASSED")
+
+
+def test_commit_emits_event():
+    """commit() emits MEMORY_COMMITTED event."""
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="EventTest")
+        received = []
+        m.event_bus.on("memory.committed", lambda e: received.append(e))
+
+        m.commit("user: 我住在上海\nassistant: 好的", source="test")
+        assert len(received) == 1
+        assert received[0].data["source"] == "test"
+    print("  PASSED")
+
+
+def test_l4_writeback_anchors():
+    """L4 reflect with trait_updates respects anchors and writes back."""
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="AnchorTest", traits=["curious"])
+        # Set anchors
+        m.identity["personality"]["anchors"] = ["说话简洁直接"]
+        m.save_identity()
+        m.reload_identity()
+
+        l4 = m.layers.l4
+        # Simulate trait update (what reflect() would return)
+        changed = l4._apply_trait_updates(["creative", "verbose"])
+        assert changed
+        assert "creative" in l4.identity["traits"]
+        # "verbose" contradicts anchor "简洁" — should be dropped
+        assert "verbose" not in l4.identity["traits"]
+    print("  PASSED")
+
+
+def test_insight_daily_digest():
+    """InsightEngine daily_digest produces correct structure."""
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="InsightTest")
+        from mindos.store import Memory
+        m.store.add(Memory(id="", type="fact", content="我喜欢喝咖啡", source="claude"))
+        m.store.add(Memory(id="", type="fact", content="我住在上海浦东", source="cursor"))
+        m.store.add(Memory(id="", type="episode", content="讨论了Python项目架构", source="claude"))
+
+        from mindos.insight import InsightEngine
+        engine = InsightEngine(m.store)
+        digest = engine.daily_digest(hours=24)
+
+        assert digest["total_memories"] == 3
+        assert "claude" in digest["by_source"]
+        assert len(digest["highlights"]) >= 1
+        assert len(digest["top_topics"]) >= 1
+    print("  PASSED")
+
+
+def test_insight_contradiction():
+    """InsightEngine detects contradictory facts."""
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="ContraTest")
+        from mindos.store import Memory
+        m.store.add(Memory(id="", type="fact", content="我住在上海"))
+        m.store.add(Memory(id="", type="fact", content="我住在北京"))
+
+        from mindos.insight import InsightEngine
+        engine = InsightEngine(m.store)
+        contradictions = engine.contradiction_alert()
+        assert len(contradictions) >= 1
+        assert "地点矛盾" in contradictions[0]["reason"]
+    print("  PASSED")
+
+
+def test_insight_patterns():
+    """InsightEngine pattern_discovery finds source dominance."""
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="PatternTest")
+        from mindos.store import Memory
+        # Add 10 memories from claude, 2 from cursor
+        for i in range(10):
+            m.store.add(Memory(id="", type="fact", content=f"事实{i}", source="claude"))
+        for i in range(2):
+            m.store.add(Memory(id="", type="fact", content=f"代码{i}", source="cursor"))
+
+        from mindos.insight import InsightEngine
+        engine = InsightEngine(m.store)
+        patterns = engine.pattern_discovery()
+        # Should detect claude as dominant source
+        source_patterns = [p for p in patterns if "claude" in p.get("pattern", "")]
+        assert len(source_patterns) >= 1
+    print("  PASSED")
+
+
+def test_memory_compressor():
+    """MemoryCompressor compress/merge/archive work."""
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="CompressTest")
+        from mindos.store import Memory
+
+        # compress_old_episodes: add old episodes
+        old_time = time.time() - 100 * 86400  # 100 days ago
+        m.store.add(Memory(id="", type="episode", content="A" * 200,
+                           created_at=old_time, confidence=0.5))
+        m.store.add(Memory(id="", type="episode", content="B" * 200,
+                           created_at=old_time, confidence=0.95))  # high confidence, should be preserved
+
+        result = m.store.compress_old_episodes(older_than_days=90)
+        assert result["compressed"] >= 1
+        assert result["preserved"] >= 1
+
+        # merge_redundant_facts
+        m.store.add(Memory(id="", type="fact", content="我喜欢喝咖啡"))
+        m.store.add(Memory(id="", type="fact", content="我喜欢喝咖啡呢"))
+        result = m.store.merge_redundant_facts(similarity_threshold=0.7)
+        assert result["merged"] >= 1
+
+        # archive_stale
+        stale_time = time.time() - 200 * 86400
+        m.store.add(Memory(id="", type="fact", content="很久以前的事",
+                           created_at=stale_time, confidence=0.5))
+        # Manually set accessed_at to be old
+        m.store._conn.execute(
+            "UPDATE memories SET accessed_at=? WHERE content=?",
+            (stale_time, "很久以前的事")
+        )
+        m.store._conn.commit()
+        result = m.store.archive_stale(inactive_days=180, min_access=2)
+        assert result["archived"] >= 1
+    print("  PASSED")
+
+
+def test_scheduler():
+    """Scheduler check_and_run executes due jobs."""
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="SchedTest")
+        from mindos.store import Memory
+        m.store.add(Memory(id="", type="fact", content="测试数据", source="test"))
+
+        scheduler = m.get_scheduler()
+        # All jobs should be overdue (never run before)
+        status = scheduler.job_status()
+        assert all(j["overdue"] for j in status)
+
+        # Run all due jobs
+        results = scheduler.check_and_run()
+        assert len(results) >= 1
+        assert all(r.success for r in results)
+
+        # Run again — nothing should be due
+        results2 = scheduler.check_and_run()
+        assert len(results2) == 0
+
+        # Force run specific job
+        result = scheduler.force_run("daily_digest")
+        assert result is not None
+        assert result.success
+    print("  PASSED")
+
+
+def test_update_embedding():
+    """store.update_embedding() stores and caches vectors."""
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="EmbTest")
+        from mindos.store import Memory
+        mem = Memory(id="", type="fact", content="embedding test")
+        mid = m.store.add(mem)
+
+        try:
+            import numpy as np
+            vec = np.random.randn(384).astype(np.float32)
+            ok = m.store.update_embedding(mid, vec.tolist())
+            assert ok
+            assert mid in m.store._embeddings_cache
+        except ImportError:
+            pass  # numpy not available, skip
+    print("  PASSED")
+
+
+def test_identity_anchors_in_default():
+    """Default identity includes anchors field."""
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="AnchorDefault")
+        p = m.identity.get("personality", {})
+        assert "anchors" in p
+        assert isinstance(p["anchors"], list)
+    print("  PASSED")
+
+
+def test_server_process_endpoint():
+    """HTTP /api/process endpoint works."""
+    from http.server import HTTPServer
+    from mindos.server import MindosHandler, _write_lockfile, _remove_lockfile
+    import mindos.server as srv
+    import urllib.request
+
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Mindos.init(path=tmp, name="APITest")
+        srv._mindos = m
+        srv._start_time = time.time()
+
+        httpd = HTTPServer(("127.0.0.1", 0), MindosHandler)
+        port = httpd.server_address[1]
+        srv._serve_port = port
+
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            # Test /api/process
+            data = json.dumps({"text": "你好"}).encode()
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{port}/api/process",
+                data=data,
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req) as resp:
+                result = json.loads(resp.read())
+            assert result["layer"] == "l1"
+            assert "你好" in result["response"]
+
+            # Test /api/insights
+            req = urllib.request.Request(f"http://127.0.0.1:{port}/api/insights")
+            with urllib.request.urlopen(req) as resp:
+                result = json.loads(resp.read())
+            assert "total_memories" in result
+
+            # Test /api/maintenance
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{port}/api/maintenance",
+                data=b"{}",
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req) as resp:
+                result = json.loads(resp.read())
+            assert "jobs_run" in result
+
+        finally:
+            httpd.shutdown()
+    print("  PASSED")
+
+
 if __name__ == "__main__":
     tests = [
         ("full_lifecycle", test_full_lifecycle),
@@ -533,6 +837,20 @@ if __name__ == "__main__":
         ("sync_hub_push_pull", test_sync_hub_push_pull),
         ("sync_apply_remote", test_sync_apply_remote),
         ("sync_hub_persistence", test_sync_hub_persistence),
+        # v0.4.0 Phase 0 tests
+        ("process_unified_entry", test_process_unified_entry),
+        ("l1_quick_reply", test_l1_quick_reply),
+        ("event_bus", test_event_bus),
+        ("commit_emits_event", test_commit_emits_event),
+        ("l4_writeback_anchors", test_l4_writeback_anchors),
+        ("insight_daily_digest", test_insight_daily_digest),
+        ("insight_contradiction", test_insight_contradiction),
+        ("insight_patterns", test_insight_patterns),
+        ("memory_compressor", test_memory_compressor),
+        ("scheduler", test_scheduler),
+        ("update_embedding", test_update_embedding),
+        ("identity_anchors_in_default", test_identity_anchors_in_default),
+        ("server_process_endpoint", test_server_process_endpoint),
     ]
     failed = 0
     for name, fn in tests:

@@ -37,6 +37,53 @@ class LayerRouter:
         self.l3 = Prefrontal(router)
         self.l4 = Self(store, identity, router)
 
+    def process(self, text: str, **kwargs: Any) -> dict[str, Any]:
+        """Unified request entry — L1 classifies, then auto-routes to the right layer.
+
+        This is THE preferred entry point for Ome and all external systems.
+        90% of requests resolve at L1/L2. <10% escalate to L3/L4.
+        """
+        level = self.l1.classify_request(text)
+
+        if level == "l1":
+            reply = self.l1.quick_reply(text)
+            return {"response": reply, "layer": "l1", "cost": 0}
+
+        elif level == "l2":
+            identity_ctx = self.hydrate(text)
+            memories = self.l0.recall(text, top_k=5)
+            memory_ctx = "\n".join(f"- {m.content}" for m in memories)
+            if self.l2.router:
+                response = self.l2.router.call_llm(
+                    task="chat",
+                    system=identity_ctx,
+                    user=f"Context:\n{memory_ctx}\n\nUser: {text}",
+                )
+                if response:
+                    return {"response": response, "layer": "l2"}
+            # Fallback: return identity + memories as context
+            return {
+                "response": f"[L2 no-LLM] Context assembled with {len(memories)} memories.",
+                "layer": "l2",
+                "identity": identity_ctx,
+                "memories": [m.content for m in memories],
+            }
+
+        elif level == "l3":
+            response = self.reason(text)
+            return {"response": response or "[L3] No reasoning result.", "layer": "l3"}
+
+        else:  # l4
+            reflection = self.reflect()
+            summary = ""
+            if reflection:
+                summary = reflection.get("summary", "Reflection complete.")
+            return {
+                "response": summary or "No reflection needed.",
+                "layer": "l4",
+                "reflection": reflection,
+            }
+
     def hydrate(self, context: str = "", max_tokens: int = 2000,
                 query_vec: Any = None) -> str:
         """Assemble identity context (L1 → L0)."""

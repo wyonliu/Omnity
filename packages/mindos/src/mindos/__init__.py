@@ -3,7 +3,7 @@
 A portable, persistent digital soul protocol.
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 from mindos.core import Mindos
 

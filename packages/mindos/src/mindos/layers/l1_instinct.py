@@ -173,9 +173,10 @@ class Brainstem:
         text_lower = text.lower()
 
         l1_patterns = [
-            r"^(hi|hello|hey|你好|嗨)",
-            r"(what time|几点|天气)",
-            r"^(thanks|谢谢|ok|好的|明白)",
+            r"^(hi|hello|hey|你好|嗨|早上好|晚上好|早安|晚安)",
+            r"(what time|几点|天气|状态|status|多少条)",
+            r"^(thanks|谢谢|ok|好的|明白|收到|了解)",
+            r"^(你?记得|remember|回忆)",
         ]
         for p in l1_patterns:
             if re.search(p, text_lower):
@@ -198,3 +199,36 @@ class Brainstem:
                 return "l3"
 
         return "l2"
+
+    def quick_reply(self, text: str) -> str:
+        """L1 zero-cost fast reply: greetings, thanks, status queries, memory lookups."""
+        text_lower = text.lower().strip()
+
+        # Greetings
+        if re.match(r"^(hi|hello|hey|你好|嗨|早上好|晚上好|早安|晚安)", text_lower):
+            name = self.identity.get("name", "")
+            return f"你好{name}！有什么我能帮你的？"
+
+        # Thanks / acknowledgement
+        if re.match(r"^(thanks|谢谢|ok|好的|明白|收到|了解)", text_lower):
+            return "不客气！随时找我。"
+
+        # Status query
+        if "status" in text_lower or "状态" in text_lower or "多少条" in text_lower:
+            stats = self.hippocampus.stats()
+            total = stats.get("total_memories", 0)
+            kg = stats.get("knowledge_graph_triples", 0)
+            return f"记忆 {total} 条，知识图谱 {kg} 条关系。精力 {self.emotion.energy:.0%}。"
+
+        # Memory recall request
+        if "记得" in text or "remember" in text_lower or "回忆" in text:
+            memories = self.hippocampus.recall(text, top_k=3)
+            if memories:
+                return "\n".join(f"- {m.content}" for m in memories)
+            return "关于这个我还没有记忆。"
+
+        # Time/weather (placeholder)
+        if re.search(r"(几点|what time|天气|weather)", text_lower):
+            return "这个需要外部服务支持，暂时还做不到哦。"
+
+        return f"[L1] {text}"

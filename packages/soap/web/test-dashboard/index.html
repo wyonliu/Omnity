@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOAP Transport Test Dashboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-tertiary: #21262d;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --red: #f85149;
+    --gold: #d29922;
+    --font-mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    --radius: 8px;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* ── Top Bar ── */
+  .topbar {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .topbar-title {
+    font-size: 18px; font-weight: 700; white-space: nowrap;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .topbar-title svg { flex-shrink: 0; }
+  .status-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--text-muted);
+    display: inline-block; flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .status-dot.connected { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.error { background: var(--red); box-shadow: 0 0 6px var(--red); }
+  .topbar-spacer { flex: 1; }
+  .summary {
+    font-size: 13px; color: var(--text-muted);
+    display: flex; gap: 12px; align-items: center;
+  }
+  .summary .pass { color: var(--green); font-weight: 600; }
+  .summary .fail { color: var(--red); font-weight: 600; }
+  .summary .total { color: var(--text-muted); }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg-tertiary); color: var(--text);
+    font-size: 13px; font-weight: 500; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn:hover { background: var(--border); }
+  .btn-primary { background: #238636; border-color: #2ea043; }
+  .btn-primary:hover { background: #2ea043; }
+  .btn-sm { padding: 3px 10px; font-size: 12px; }
+  .btn-danger { border-color: var(--red); color: var(--red); }
+  .btn-danger:hover { background: rgba(248,81,73,0.15); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ── Main Layout ── */
+  .main { max-width: 1200px; margin: 0 auto; padding: 24px; }
+
+  /* ── Progress Bar ── */
+  .progress-wrap {
+    height: 4px; background: var(--bg-tertiary); border-radius: 2px;
+    margin-bottom: 20px; overflow: hidden; display: none;
+  }
+  .progress-wrap.active { display: block; }
+  .progress-bar {
+    height: 100%; background: var(--accent); border-radius: 2px;
+    transition: width 0.2s;
+  }
+
+  /* ── Sections (Accordion) ── */
+  .section {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    margin-bottom: 12px; overflow: hidden;
+  }
+  .section-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px; background: var(--bg-secondary);
+    cursor: pointer; user-select: none;
+    transition: background 0.15s;
+  }
+  .section-header:hover { background: var(--bg-tertiary); }
+  .section-chevron {
+    transition: transform 0.2s; flex-shrink: 0; color: var(--text-muted);
+  }
+  .section.open .section-chevron { transform: rotate(90deg); }
+  .section-icon { font-size: 18px; flex-shrink: 0; }
+  .section-name { font-weight: 600; font-size: 15px; flex: 1; }
+  .section-badge {
+    font-size: 11px; padding: 2px 8px; border-radius: 10px;
+    font-weight: 600; background: var(--bg-tertiary); color: var(--text-muted);
+  }
+  .section-badge.all-pass { background: rgba(63,185,80,0.15); color: var(--green); }
+  .section-badge.has-fail { background: rgba(248,81,73,0.15); color: var(--red); }
+  .section-body { display: none; padding: 8px; }
+  .section.open .section-body { display: block; }
+
+  /* ── Test Cards ── */
+  .test-card {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 10px 12px; border-radius: 6px;
+    border: 1px solid transparent;
+    transition: background 0.15s;
+  }
+  .test-card:hover { background: rgba(255,255,255,0.02); }
+  .test-status {
+    width: 20px; height: 20px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; margin-top: 2px;
+    background: var(--bg-tertiary); border: 1px solid var(--border);
+    font-size: 11px; color: var(--text-muted);
+  }
+  .test-status.pass { background: rgba(63,185,80,0.15); border-color: var(--green); color: var(--green); }
+  .test-status.fail { background: rgba(248,81,73,0.15); border-color: var(--red); color: var(--red); }
+  .test-status.running { border-color: var(--accent); animation: pulse 1s infinite; }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(88,166,255,0.3); }
+    50% { box-shadow: 0 0 0 4px rgba(88,166,255,0); }
+  }
+  .test-info { flex: 1; min-width: 0; }
+  .test-name { font-size: 13px; font-weight: 500; margin-bottom: 2px; }
+  .test-endpoint {
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
+    display: flex; gap: 6px; align-items: center;
+  }
+  .method-badge {
+    font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 3px;
+    text-transform: uppercase;
+  }
+  .method-badge.get { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .method-badge.post { background: rgba(63,185,80,0.15); color: var(--green); }
+  .method-badge.put { background: rgba(210,153,34,0.15); color: var(--gold); }
+  .method-badge.delete { background: rgba(248,81,73,0.15); color: var(--red); }
+  .test-response {
+    margin-top: 6px; display: none;
+  }
+  .test-response.visible { display: block; }
+  .test-response-toggle {
+    font-size: 11px; color: var(--accent); cursor: pointer;
+    background: none; border: none; font-family: inherit;
+    padding: 2px 0; margin-top: 4px;
+  }
+  .test-response-toggle:hover { text-decoration: underline; }
+  .response-pre {
+    font-family: var(--font-mono); font-size: 11px; line-height: 1.6;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 12px; margin-top: 4px; max-height: 300px; overflow: auto;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .test-time { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .test-actions { flex-shrink: 0; }
+
+  /* ── JSON Syntax ── */
+  .json-key { color: #79c0ff; }
+  .json-str { color: #a5d6ff; }
+  .json-num { color: #d2a8ff; }
+  .json-bool { color: #ff7b72; }
+  .json-null { color: var(--text-muted); }
+
+  /* ── WebSocket Panel ── */
+  .ws-panel {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    margin-top: 24px; overflow: hidden;
+  }
+  .ws-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px; background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+  }
+  .ws-header .section-icon { font-size: 18px; }
+  .ws-header .section-name { font-weight: 600; font-size: 15px; flex: 1; }
+  .ws-body { padding: 16px; }
+  .ws-controls {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;
+  }
+  .ws-log {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 12px; height: 260px; overflow-y: auto;
+    font-family: var(--font-mono); font-size: 12px; line-height: 1.7;
+  }
+  .ws-log-entry { padding: 1px 0; }
+  .ws-log-entry.in { color: var(--green); }
+  .ws-log-entry.out { color: var(--accent); }
+  .ws-log-entry.sys { color: var(--gold); }
+  .ws-log-entry.err { color: var(--red); }
+  .ws-action-row {
+    display: flex; gap: 8px; margin-top: 12px; align-items: center; flex-wrap: wrap;
+  }
+  .ws-input {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 10px; color: var(--text); font-size: 13px;
+    font-family: var(--font-sans); outline: none; transition: border-color 0.15s;
+  }
+  .ws-input:focus { border-color: var(--accent); }
+  .ws-input::placeholder { color: var(--text-muted); }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<!-- ── Top Bar ── -->
+<div class="topbar">
+  <div class="topbar-title">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+    SOAP Transport Test Dashboard
+  </div>
+  <div style="display:flex;align-items:center;gap:6px">
+    <span class="status-dot" id="serverDot"></span>
+    <span id="serverLabel" style="font-size:12px;color:var(--text-muted)">Checking...</span>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="summary" id="summary">
+    <span class="pass" id="sumPass">0 passed</span>
+    <span class="fail" id="sumFail">0 failed</span>
+    <span class="total" id="sumTotal">0 total</span>
+  </div>
+  <button class="btn btn-primary" id="btnRunAll" onclick="runAllTests()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+    Run All Tests
+  </button>
+</div>
+
+<!-- ── Main ── -->
+<div class="main">
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-bar" id="progressBar" style="width:0%"></div>
+  </div>
+  <div id="sectionsContainer"></div>
+
+  <!-- ── WebSocket Panel ── -->
+  <div class="ws-panel">
+    <div class="ws-header">
+      <span class="section-icon">&#x1F50C;</span>
+      <span class="section-name">WebSocket Live Panel</span>
+      <span class="status-dot" id="wsDot"></span>
+    </div>
+    <div class="ws-body">
+      <div class="ws-controls">
+        <button class="btn btn-sm" id="wsConnectBtn" onclick="wsConnect()">Connect</button>
+        <button class="btn btn-sm btn-danger" id="wsDisconnectBtn" onclick="wsDisconnect()" disabled>Disconnect</button>
+        <span style="font-size:12px;color:var(--text-muted)" id="wsStatus">Disconnected</span>
+      </div>
+      <div class="ws-log" id="wsLog"></div>
+      <div class="ws-action-row">
+        <input class="ws-input" id="wsVerb" placeholder="verb (e.g. OBSERVE)" style="width:140px">
+        <input class="ws-input" id="wsTarget" placeholder="target_id" style="width:180px">
+        <input class="ws-input" id="wsAgentId" placeholder="agent_id (optional)" style="width:150px">
+        <button class="btn btn-sm" onclick="wsSendAction()">Send Action</button>
+        <input class="ws-input" id="wsRaw" placeholder="raw JSON..." style="flex:1;min-width:200px">
+        <button class="btn btn-sm" onclick="wsSendRaw()">Send Raw</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ────────────────────────────────────────────
+// Test Definitions
+// ────────────────────────────────────────────
+
+const SECTIONS = [
+  {
+    name: "Scene", icon: "\u{1F30D}",
+    tests: [
+      { name: "Scene snapshot", method: "GET", path: "/api/v1/scene", body: null,
+        validate: (s, d) => s === 200 && d.space_id },
+      { name: "Scene summary", method: "GET", path: "/api/v1/scene/summary", body: null,
+        validate: (s, d) => s === 200 && d.object_count > 0 },
+    ]
+  },
+  {
+    name: "Objects", icon: "\u{1F4E6}",
+    tests: [
+      { name: "List all objects", method: "GET", path: "/api/v1/objects", body: null,
+        validate: (s, d) => s === 200 && Array.isArray(d) },
+      { name: "Get fountain_center", method: "GET", path: "/api/v1/objects/fountain_center", body: null,
+        validate: (s, d) => s === 200 && d.id === "fountain_center" },
+      { name: "Get nonexistent (404)", method: "GET", path: "/api/v1/objects/nonexistent", body: null,
+        validate: (s) => s === 404 },
+      { name: "Search by type", method: "GET", path: "/api/v1/objects/search?type=npc.store_clerk", body: null,
+        validate: (s, d) => s === 200 && (Array.isArray(d) || d.results) },
+      { name: "Search by affordance", method: "GET", path: "/api/v1/objects/search?affordance=speak", body: null,
+        validate: (s, d) => s === 200 && (Array.isArray(d) || d.results) },
+      { name: "Search by reality", method: "GET", path: "/api/v1/objects/search?reality=physical", body: null,
+        validate: (s, d) => s === 200 && (Array.isArray(d) || d.results) },
+      { name: "Spatial query (sphere)", method: "GET", path: "/api/v1/objects/spatial?cx=0&cy=0&cz=0&radius=200", body: null,
+        validate: (s, d) => s === 200 && (Array.isArray(d) || d.results) },
+      { name: "Spatial query (box)", method: "GET", path: "/api/v1/objects/spatial?min_x=-100&min_y=-100&min_z=-100&max_x=100&max_y=100&max_z=100", body: null,
+        validate: (s, d) => s === 200 && (Array.isArray(d) || d.results) },
+    ]
+  },
+  {
+    name: "Regions", icon: "\u{1F3D7}",
+    tests: [
+      { name: "List regions", method: "GET", path: "/api/v1/regions", body: null,
+        validate: (s, d) => s === 200 && Array.isArray(d) },
+      { name: "Get atrium", method: "GET", path: "/api/v1/regions/atrium", body: null,
+        validate: (s, d) => s === 200 && d.id === "atrium" },
+      { name: "Get nonexistent (404)", method: "GET", path: "/api/v1/regions/nonexistent", body: null,
+        validate: (s) => s === 404 },
+      { name: "Atrium inventory", method: "GET", path: "/api/v1/regions/atrium/inventory", body: null,
+        validate: (s, d) => s === 200 && d.object_count > 0 },
+    ]
+  },
+  {
+    name: "Actions", icon: "\u{26A1}",
+    tests: [
+      { name: "OBSERVE fountain_center", method: "POST", path: "/api/v1/actions",
+        body: { verb: "OBSERVE", target_id: "fountain_center" },
+        validate: (s, d) => s === 200 && d.status === "OK" },
+      { name: "OBSERVE region (atrium)", method: "POST", path: "/api/v1/actions",
+        body: { verb: "OBSERVE", target_id: "atrium" },
+        validate: (s, d) => s === 200 && d.status === "OK" },
+      { name: "OBSERVE nonexistent (NOT_FOUND)", method: "POST", path: "/api/v1/actions",
+        body: { verb: "OBSERVE", target_id: "nonexistent_xyz" },
+        validate: (s, d) => (s === 200 || s === 404) && (d.status === "NOT_FOUND" || s === 404) },
+      { name: "FLY (UNKNOWN_VERB)", method: "POST", path: "/api/v1/actions",
+        body: { verb: "FLY", target_id: "fountain_center" },
+        validate: (s, d) => (s === 200 || s === 400 || s === 422) && (d.status === "UNKNOWN_VERB" || d.error) },
+      { name: "MANIPULATE fly (NOT_AFFORDED)", method: "POST", path: "/api/v1/actions",
+        body: { verb: "MANIPULATE", target_id: "fountain_center", params: { action: "fly" } },
+        validate: (s, d) => (s === 200 || s === 400 || s === 403) && (d.status === "NOT_AFFORDED" || d.error) },
+      { name: "REARRANGE (NOT_IMPLEMENTED)", method: "POST", path: "/api/v1/actions",
+        body: { verb: "REARRANGE", target_id: "fountain_center" },
+        validate: (s, d) => (s === 200 || s === 501 || s === 400) && (d.status === "NOT_IMPLEMENTED" || d.error) },
+    ]
+  },
+  {
+    name: "Agents", icon: "\u{1F916}",
+    tests: [
+      { name: "Register test_bot", method: "POST", path: "/api/v1/agents",
+        body: { agent_id: "test_bot", agent_type: "robot", capabilities: ["observe", "navigate"], position: [5, 0, 3] },
+        validate: (s) => s === 201 || s === 200 },
+      { name: "Duplicate test_bot (409)", method: "POST", path: "/api/v1/agents",
+        body: { agent_id: "test_bot" },
+        validate: (s) => s === 409 },
+      { name: "List agents", method: "GET", path: "/api/v1/agents", body: null,
+        validate: (s, d) => s === 200 && JSON.stringify(d).includes("test_bot") },
+      { name: "Get test_bot", method: "GET", path: "/api/v1/agents/test_bot", body: null,
+        validate: (s, d) => s === 200 && d.agent_id === "test_bot" },
+      { name: "Heartbeat test_bot", method: "PUT", path: "/api/v1/agents/test_bot/heartbeat",
+        body: { position: [10, 0, 5] },
+        validate: (s) => s === 200 },
+      { name: "Nearby agents", method: "GET", path: "/api/v1/agents/nearby?agent_id=test_bot&radius=50", body: null,
+        validate: (s, d) => s === 200 && Array.isArray(d) },
+      { name: "Query by type", method: "GET", path: "/api/v1/agents/query?agent_type=robot", body: null,
+        validate: (s, d) => s === 200 && JSON.stringify(d).includes("test_bot") },
+      { name: "Delete test_bot", method: "DELETE", path: "/api/v1/agents/test_bot", body: null,
+        validate: (s) => s === 200 || s === 204 },
+      { name: "Get deleted test_bot (404)", method: "GET", path: "/api/v1/agents/test_bot", body: null,
+        validate: (s) => s === 404 },
+    ]
+  },
+  {
+    name: "Locking", icon: "\u{1F512}",
+    tests: [
+      { name: "Lock fountain_center", method: "POST", path: "/api/v1/objects/fountain_center/lock",
+        body: { agent_id: "lock_tester", ttl_seconds: 60 },
+        validate: (s) => s === 200 || s === 201 },
+      { name: "Verify locked", method: "GET", path: "/api/v1/objects/fountain_center/lock", body: null,
+        validate: (s, d) => s === 200 && d.locked === true },
+      { name: "Lock by other (409)", method: "POST", path: "/api/v1/objects/fountain_center/lock",
+        body: { agent_id: "other_agent", ttl_seconds: 30 },
+        validate: (s) => s === 409 },
+      { name: "Action blocked by lock (LOCK_HELD)", method: "POST", path: "/api/v1/actions",
+        body: { agent_id: "other_agent", verb: "MANIPULATE", target_id: "fountain_center", params: { action: "place_object" } },
+        validate: (s, d) => (s === 200 || s === 409 || s === 423) && (d.status === "LOCK_HELD" || d.error) },
+      { name: "Unlock fountain_center", method: "DELETE", path: "/api/v1/objects/fountain_center/lock?agent_id=lock_tester", body: null,
+        validate: (s) => s === 200 || s === 204 },
+      { name: "Verify unlocked", method: "GET", path: "/api/v1/objects/fountain_center/lock", body: null,
+        validate: (s, d) => s === 200 && d.locked === false },
+    ]
+  },
+  {
+    name: "Input Validation", icon: "\u{1F6A7}",
+    tests: [
+      { name: "Empty agent_id (422)", method: "POST", path: "/api/v1/agents",
+        body: { agent_id: "" },
+        validate: (s) => s === 422 || s === 400 },
+      { name: "Whitespace agent_id (422)", method: "POST", path: "/api/v1/agents",
+        body: { agent_id: "   " },
+        validate: (s) => s === 422 || s === 400 },
+      { name: "Short position array (422)", method: "POST", path: "/api/v1/agents",
+        body: { agent_id: "v_bot", position: [1, 2] },
+        validate: (s) => s === 422 || s === 400 },
+      { name: "Negative TTL (422)", method: "POST", path: "/api/v1/objects/fountain_center/lock",
+        body: { agent_id: "a", ttl_seconds: -5 },
+        validate: (s) => s === 422 || s === 400 },
+      { name: "Zero TTL (422)", method: "POST", path: "/api/v1/objects/fountain_center/lock",
+        body: { agent_id: "a", ttl_seconds: 0 },
+        validate: (s) => s === 422 || s === 400 },
+      { name: "Excessive TTL (422)", method: "POST", path: "/api/v1/objects/fountain_center/lock",
+        body: { agent_id: "a", ttl_seconds: 99999 },
+        validate: (s) => s === 422 || s === 400 },
+    ]
+  },
+  {
+    name: "Semantic Layer", icon: "\u{1F9E0}",
+    tests: [
+      { name: "Discover affordances", method: "GET", path: "/api/v1/discover", body: null,
+        validate: (s, d) => s === 200 && (d.affordance_count > 0 || d.affordances) },
+      { name: "Discover in atrium", method: "GET", path: "/api/v1/discover?region_id=atrium", body: null,
+        validate: (s, d) => s === 200 && (d.object_count > 0 || d.objects) },
+      { name: "Context description", method: "GET", path: "/api/v1/context", body: null,
+        validate: (s, d) => s === 200 && (d.description || "").includes("Space") },
+      { name: "Context for atrium", method: "GET", path: "/api/v1/context?region_id=atrium", body: null,
+        validate: (s, d) => s === 200 && (d.description || "").toLowerCase().includes("atrium") },
+      { name: "Relationships for fountain", method: "GET", path: "/api/v1/objects/fountain_center/relationships?radius=30", body: null,
+        validate: (s, d) => s === 200 && (Array.isArray(d.nearby) || Array.isArray(d)) },
+    ]
+  },
+  {
+    name: "Permissions", icon: "\u{1F6E1}",
+    tests: [
+      { name: "List permissions", method: "GET", path: "/api/v1/permissions", body: null,
+        validate: (s, d) => s === 200 && Array.isArray(d) },
+      { name: "Grant OBSERVE to perm_bot", method: "POST", path: "/api/v1/permissions",
+        body: { agent_id: "perm_bot", verbs: ["OBSERVE"] },
+        validate: (s) => s === 201 || s === 200 },
+      { name: "Get perm_bot permissions", method: "GET", path: "/api/v1/permissions?agent_id=perm_bot", body: null,
+        validate: (s, d) => s === 200 },
+      { name: "Enable permissions", method: "PUT", path: "/api/v1/permissions/enable?enabled=true",
+        body: null,
+        validate: (s) => s === 200 },
+      { name: "Unpermitted agent blocked (FORBIDDEN)", method: "POST", path: "/api/v1/actions",
+        body: { agent_id: "unpermitted", verb: "OBSERVE", target_id: "fountain_center" },
+        validate: (s, d) => (s === 200 || s === 403) && (d.status === "FORBIDDEN" || s === 403) },
+      { name: "Permitted agent allowed", method: "POST", path: "/api/v1/actions",
+        body: { agent_id: "perm_bot", verb: "OBSERVE", target_id: "fountain_center" },
+        validate: (s, d) => s === 200 && d.status === "OK" },
+      { name: "Disable permissions", method: "PUT", path: "/api/v1/permissions/enable?enabled=false",
+        body: null,
+        validate: (s) => s === 200 },
+      { name: "Delete perm_bot permissions", method: "DELETE", path: "/api/v1/permissions/perm_bot", body: null,
+        validate: (s) => s === 200 || s === 204 },
+    ]
+  },
+  {
+    name: "Events", icon: "\u{1F4E1}",
+    tests: [
+      { name: "Get events", method: "GET", path: "/api/v1/events?after=0", body: null,
+        validate: (s, d) => s === 200 && (Array.isArray(d.events || d)) },
+    ]
+  },
+  {
+    name: "Legacy Compatibility", icon: "\u{1F4DC}",
+    tests: [
+      { name: "Legacy scene", method: "GET", path: "/api/scene", body: null,
+        validate: (s) => s === 200 },
+      { name: "Legacy summary", method: "GET", path: "/api/summary", body: null,
+        validate: (s) => s === 200 },
+      { name: "Legacy events", method: "GET", path: "/api/events?after=0", body: null,
+        validate: (s) => s === 200 },
+      { name: "Legacy agents", method: "GET", path: "/api/agents", body: null,
+        validate: (s) => s === 200 },
+      { name: "Legacy act", method: "POST", path: "/api/act",
+        body: { verb: "OBSERVE", target_id: "fountain_center" },
+        validate: (s, d) => s === 200 && d.status === "OK" },
+    ]
+  },
+];
+
+// ────────────────────────────────────────────
+// State
+// ────────────────────────────────────────────
+let testResults = {}; // key: sectionIdx-testIdx => { status, data, time, httpStatus }
+let running = false;
+let ws = null;
+
+// ────────────────────────────────────────────
+// Render
+// ────────────────────────────────────────────
+function render() {
+  const container = document.getElementById('sectionsContainer');
+  container.innerHTML = '';
+  let globalPass = 0, globalFail = 0, globalTotal = 0;
+
+  SECTIONS.forEach((section, si) => {
+    let sPass = 0, sFail = 0;
+    section.tests.forEach((_, ti) => {
+      const r = testResults[`${si}-${ti}`];
+      globalTotal++;
+      if (r) {
+        if (r.status === 'pass') { sPass++; globalPass++; }
+        else if (r.status === 'fail') { sFail++; globalFail++; }
+      }
+    });
+
+    const sEl = document.createElement('div');
+    sEl.className = 'section';
+    const badgeClass = sFail > 0 ? 'has-fail' : (sPass === section.tests.length && sPass > 0) ? 'all-pass' : '';
+    const badgeText = sPass + sFail > 0 ? `${sPass}/${section.tests.length}` : `${section.tests.length} tests`;
+
+    sEl.innerHTML = `
+      <div class="section-header" onclick="this.parentElement.classList.toggle('open')">
+        <svg class="section-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="section-icon">${section.icon}</span>
+        <span class="section-name">${section.name}</span>
+        <span class="section-badge ${badgeClass}">${badgeText}</span>
+      </div>
+      <div class="section-body">${section.tests.map((t, ti) => renderTestCard(t, si, ti)).join('')}</div>
+    `;
+    container.appendChild(sEl);
+  });
+
+  document.getElementById('sumPass').textContent = globalPass + ' passed';
+  document.getElementById('sumFail').textContent = globalFail + ' failed';
+  document.getElementById('sumTotal').textContent = globalTotal + ' total';
+}
+
+function renderTestCard(test, si, ti) {
+  const key = `${si}-${ti}`;
+  const r = testResults[key];
+  const statusClass = r ? r.status : '';
+  const statusIcon = r ? (r.status === 'pass' ? '\u2713' : r.status === 'fail' ? '\u2717' : '\u00B7') : '';
+  const methodLower = test.method.toLowerCase();
+  const timeStr = r && r.time != null ? `${r.time}ms` : '';
+  const hasResponse = r && r.data !== undefined;
+
+  return `
+    <div class="test-card" id="tc-${key}">
+      <div class="test-status ${statusClass}" id="ts-${key}">${statusIcon}</div>
+      <div class="test-info">
+        <div class="test-name">${test.name}</div>
+        <div class="test-endpoint">
+          <span class="method-badge ${methodLower}">${test.method}</span>
+          <span>${test.path}</span>
+        </div>
+        ${timeStr ? `<div class="test-time">${r.httpStatus ? r.httpStatus + ' \u00B7 ' : ''}${timeStr}</div>` : ''}
+        ${hasResponse ? `
+          <button class="test-response-toggle" onclick="toggleResponse('${key}')">Show response</button>
+          <div class="test-response" id="resp-${key}">
+            <pre class="response-pre">${syntaxHighlight(r.data)}</pre>
+          </div>
+        ` : ''}
+      </div>
+      <div class="test-actions">
+        <button class="btn btn-sm" onclick="runSingleTest(${si},${ti})" ${running ? 'disabled' : ''}>Run</button>
+      </div>
+    </div>
+  `;
+}
+
+function toggleResponse(key) {
+  const el = document.getElementById('resp-' + key);
+  if (el) el.classList.toggle('visible');
+}
+
+function syntaxHighlight(obj) {
+  if (obj === undefined) return '';
+  let json;
+  try {
+    json = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
+  } catch { return String(obj); }
+  return json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"([^"\\]*(\\.[^"\\]*)*)"\s*:/g, '<span class="json-key">"$1"</span>:')
+    .replace(/"([^"\\]*(\\.[^"\\]*)*)"/g, '<span class="json-str">"$1"</span>')
+    .replace(/\b(-?\d+\.?\d*([eE][+-]?\d+)?)\b/g, '<span class="json-num">$1</span>')
+    .replace(/\b(true|false)\b/g, '<span class="json-bool">$1</span>')
+    .replace(/\bnull\b/g, '<span class="json-null">null</span>');
+}
+
+// ────────────────────────────────────────────
+// Test Runner
+// ────────────────────────────────────────────
+async function apiCall(method, path, body) {
+  const opts = { method, headers: {} };
+  if (body != null) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  const t0 = performance.now();
+  const resp = await fetch(path, opts);
+  const time = Math.round(performance.now() - t0);
+  let data;
+  const ct = resp.headers.get('content-type') || '';
+  if (ct.includes('json')) {
+    try { data = await resp.json(); } catch { data = await resp.text(); }
+  } else {
+    data = await resp.text();
+    try { data = JSON.parse(data); } catch {}
+  }
+  return { status: resp.status, data, time };
+}
+
+async function runSingleTest(si, ti) {
+  const test = SECTIONS[si].tests[ti];
+  const key = `${si}-${ti}`;
+  const tsEl = document.getElementById('ts-' + key);
+  if (tsEl) { tsEl.className = 'test-status running'; tsEl.textContent = ''; }
+
+  try {
+    const { status, data, time } = await apiCall(test.method, test.path, test.body);
+    const pass = test.validate(status, data);
+    testResults[key] = { status: pass ? 'pass' : 'fail', data, time, httpStatus: status };
+  } catch (err) {
+    testResults[key] = { status: 'fail', data: { error: err.message }, time: null, httpStatus: null };
+  }
+  render();
+}
+
+async function runAllTests() {
+  if (running) return;
+  running = true;
+  testResults = {};
+  document.getElementById('btnRunAll').disabled = true;
+  const pw = document.getElementById('progressWrap');
+  const pb = document.getElementById('progressBar');
+  pw.classList.add('active');
+  render();
+
+  let total = 0;
+  SECTIONS.forEach(s => total += s.tests.length);
+  let done = 0;
+
+  for (let si = 0; si < SECTIONS.length; si++) {
+    for (let ti = 0; ti < SECTIONS[si].tests.length; ti++) {
+      const test = SECTIONS[si].tests[ti];
+      const key = `${si}-${ti}`;
+      const tsEl = document.getElementById('ts-' + key);
+      if (tsEl) { tsEl.className = 'test-status running'; tsEl.textContent = ''; }
+
+      try {
+        const { status, data, time } = await apiCall(test.method, test.path, test.body);
+        const pass = test.validate(status, data);
+        testResults[key] = { status: pass ? 'pass' : 'fail', data, time, httpStatus: status };
+      } catch (err) {
+        testResults[key] = { status: 'fail', data: { error: err.message }, time: null, httpStatus: null };
+      }
+      done++;
+      pb.style.width = (done / total * 100) + '%';
+      render();
+      // Open sections with failures
+      if (testResults[key].status === 'fail') {
+        const sectionEl = document.querySelectorAll('.section')[si];
+        if (sectionEl) sectionEl.classList.add('open');
+      }
+    }
+  }
+
+  running = false;
+  document.getElementById('btnRunAll').disabled = false;
+  setTimeout(() => pw.classList.remove('active'), 1500);
+  render();
+}
+
+// ────────────────────────────────────────────
+// Server Status Check
+// ────────────────────────────────────────────
+async function checkServer() {
+  const dot = document.getElementById('serverDot');
+  const label = document.getElementById('serverLabel');
+  try {
+    const resp = await fetch('/api/v1/scene', { method: 'GET', signal: AbortSignal.timeout(3000) });
+    if (resp.ok) {
+      dot.className = 'status-dot connected';
+      label.textContent = 'Connected';
+    } else {
+      dot.className = 'status-dot error';
+      label.textContent = 'Error ' + resp.status;
+    }
+  } catch {
+    dot.className = 'status-dot error';
+    label.textContent = 'Offline';
+  }
+}
+
+// ────────────────────────────────────────────
+// WebSocket
+// ────────────────────────────────────────────
+function wsLog(msg, cls) {
+  const log = document.getElementById('wsLog');
+  const ts = new Date().toLocaleTimeString();
+  const entry = document.createElement('div');
+  entry.className = 'ws-log-entry ' + (cls || 'sys');
+  entry.textContent = `[${ts}] ${msg}`;
+  log.appendChild(entry);
+  log.scrollTop = log.scrollHeight;
+}
+
+function wsConnect() {
+  if (ws && ws.readyState <= 1) return;
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = `${proto}//${location.host}/ws`;
+  wsLog('Connecting to ' + url + ' ...');
+  try {
+    ws = new WebSocket(url);
+  } catch (e) {
+    wsLog('Failed: ' + e.message, 'err');
+    return;
+  }
+
+  ws.onopen = () => {
+    wsLog('Connected', 'sys');
+    document.getElementById('wsDot').className = 'status-dot connected';
+    document.getElementById('wsStatus').textContent = 'Connected';
+    document.getElementById('wsConnectBtn').disabled = true;
+    document.getElementById('wsDisconnectBtn').disabled = false;
+    // Send hello
+    const hello = JSON.stringify({ type: "hello", agent_id: "dashboard" });
+    ws.send(hello);
+    wsLog('\u2192 ' + hello, 'out');
+  };
+  ws.onmessage = (e) => {
+    wsLog('\u2190 ' + e.data, 'in');
+  };
+  ws.onerror = (e) => {
+    wsLog('Error: ' + (e.message || 'connection error'), 'err');
+  };
+  ws.onclose = (e) => {
+    wsLog(`Closed (code=${e.code})`, 'sys');
+    document.getElementById('wsDot').className = 'status-dot';
+    document.getElementById('wsStatus').textContent = 'Disconnected';
+    document.getElementById('wsConnectBtn').disabled = false;
+    document.getElementById('wsDisconnectBtn').disabled = true;
+    ws = null;
+  };
+}
+
+function wsDisconnect() {
+  if (ws) ws.close();
+}
+
+function wsSendAction() {
+  if (!ws || ws.readyState !== 1) { wsLog('Not connected', 'err'); return; }
+  const verb = document.getElementById('wsVerb').value.trim();
+  const target = document.getElementById('wsTarget').value.trim();
+  const agent = document.getElementById('wsAgentId').value.trim();
+  if (!verb || !target) { wsLog('verb and target_id required', 'err'); return; }
+  const msg = { type: "action", verb, target_id: target };
+  if (agent) msg.agent_id = agent;
+  const s = JSON.stringify(msg);
+  ws.send(s);
+  wsLog('\u2192 ' + s, 'out');
+}
+
+function wsSendRaw() {
+  if (!ws || ws.readyState !== 1) { wsLog('Not connected', 'err'); return; }
+  const raw = document.getElementById('wsRaw').value.trim();
+  if (!raw) return;
+  ws.send(raw);
+  wsLog('\u2192 ' + raw, 'out');
+  document.getElementById('wsRaw').value = '';
+}
+
+// ────────────────────────────────────────────
+// Init
+// ────────────────────────────────────────────
+render();
+checkServer();
+setInterval(checkServer, 10000);
+</script>
+</body>
+</html>

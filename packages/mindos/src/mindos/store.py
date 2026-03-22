@@ -253,6 +253,22 @@ class MemoryStore:
             })
         return mem.id
 
+    def update_embedding(self, mem_id: str, embedding: Any) -> bool:
+        """Update the embedding vector for an existing memory."""
+        if np is None:
+            return False
+        import numpy as _np
+        vec = _np.array(embedding, dtype=_np.float32)
+        blob = vec.tobytes()
+        cur = self._conn.execute(
+            "UPDATE memories SET embedding=? WHERE id=?", (blob, mem_id)
+        )
+        self._conn.commit()
+        if cur.rowcount > 0:
+            self._embeddings_cache[mem_id] = vec
+            return True
+        return False
+
     def add_triple(self, t: Triple) -> None:
         self._conn.execute(
             "INSERT OR REPLACE INTO knowledge_graph "
@@ -641,6 +657,125 @@ class MemoryStore:
             access_count=row["access_count"], decay_weight=row["decay_weight"],
             embedding=emb, meta=meta,
         )
+
+    # -- memory compression ------------------------------------------------------
+
+    def compress_old_episodes(self, older_than_days: int = 90) -> dict[str, int]:
+        """Compress old episode memories into condensed summaries.
+
+        Episodes older than `older_than_days` get their content truncated to
+        the first 100 chars + "...". High-confidence or frequently-accessed
+        memories are preserved in full.
+
+        Returns: {"compressed": N, "preserved": N}
+        """
+        cutoff = time.time() - older_than_days * 86400
+        rows = self._conn.execute(
+            "SELECT id, content, confidence, access_count FROM memories "
+            "WHERE type='episode' AND created_at < ? AND LENGTH(content) > 120",
+            (cutoff,),
+        ).fetchall()
+
+        compressed = 0
+        preserved = 0
+        for r in rows:
+            # Preserve important memories
+            if r["confidence"] >= 0.9 or r["access_count"] >= 5:
+                preserved += 1
+                continue
+            short = r["content"][:100] + "..."
+            self._conn.execute(
+                "UPDATE memories SET content=? WHERE id=?", (short, r["id"])
+            )
+            compressed += 1
+
+        if compressed:
+            self._conn.commit()
+            if self._fts_available:
+                self._rebuild_fts()
+
+        return {"compressed": compressed, "preserved": preserved}
+
+    def merge_redundant_facts(self, similarity_threshold: float = 0.8) -> dict[str, int]:
+        """Merge redundant facts: identical meaning expressed differently.
+
+        Uses the existing consolidate() but only for facts, with a higher threshold.
+        Merged entries get boosted confidence and access_count.
+
+        Returns: {"merged": N, "kept": N}
+        """
+        facts = self.list_recent(limit=5000, mem_type="fact")
+        if len(facts) < 2:
+            return {"merged": 0, "kept": len(facts)}
+
+        merged_count = 0
+        kept = 0
+        used: set[str] = set()
+
+        for i, a in enumerate(facts):
+            if a.id in used:
+                continue
+            group = [a]
+            used.add(a.id)
+            for j in range(i + 1, len(facts)):
+                b = facts[j]
+                if b.id in used:
+                    continue
+                if self._text_similarity(a.content, b.content) >= similarity_threshold:
+                    group.append(b)
+                    used.add(b.id)
+
+            if len(group) <= 1:
+                kept += 1
+                continue
+
+            # Keep highest confidence, merge access counts
+            group.sort(key=lambda m: (m.confidence, m.access_count), reverse=True)
+            keeper = group[0]
+            keeper.access_count += sum(m.access_count for m in group[1:])
+            keeper.confidence = min(1.0, max(m.confidence for m in group) + 0.05)
+            self.add(keeper)
+            for discard in group[1:]:
+                self._conn.execute("DELETE FROM memories WHERE id=?", (discard.id,))
+                self._embeddings_cache.pop(discard.id, None)
+                merged_count += 1
+            kept += 1
+
+        if merged_count:
+            self._conn.commit()
+
+        return {"merged": merged_count, "kept": kept}
+
+    def archive_stale(self, inactive_days: int = 180, min_access: int = 2) -> dict[str, int]:
+        """Mark long-inactive low-importance memories as archived.
+
+        Archived memories are not deleted but get decay_weight set to 0.1,
+        so they rarely appear in recall results.
+
+        Returns: {"archived": N, "skipped": N}
+        """
+        cutoff = time.time() - inactive_days * 86400
+        rows = self._conn.execute(
+            "SELECT id, confidence, access_count, decay_weight FROM memories "
+            "WHERE accessed_at < ? AND access_count < ? AND decay_weight > 0.1",
+            (cutoff, min_access),
+        ).fetchall()
+
+        archived = 0
+        skipped = 0
+        for r in rows:
+            if r["confidence"] >= 0.9:
+                skipped += 1
+                continue
+            self._conn.execute(
+                "UPDATE memories SET decay_weight=0.1 WHERE id=?", (r["id"],)
+            )
+            archived += 1
+
+        if archived:
+            self._conn.commit()
+
+        return {"archived": archived, "skipped": skipped}
 
     def close(self) -> None:
         self._conn.close()
