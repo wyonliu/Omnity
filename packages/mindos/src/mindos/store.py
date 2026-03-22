@@ -1,8 +1,18 @@
-"""L0 Hippocampus — Memory storage backed by SQLite + vector search."""
+"""L0 Hippocampus — Memory storage backed by SQLite + vector search.
+
+Storage features:
+  - Full-text search via SQLite FTS5 (CJK + Latin)
+  - Content-hash deduplication (handles minor variations)
+  - Vector search via in-process cosine similarity
+  - Knowledge graph with subject/predicate/object triples
+  - Personality history timeline
+"""
 
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
 import sqlite3
 import time
 import uuid
@@ -15,6 +25,8 @@ try:
 except ImportError:
     np = None  # vector search disabled
 
+log = logging.getLogger("mindos.store")
+
 
 # ---------------------------------------------------------------------------
 # Schema
@@ -25,6 +37,7 @@ CREATE TABLE IF NOT EXISTS memories (
     id           TEXT PRIMARY KEY,
     type         TEXT NOT NULL,
     content      TEXT NOT NULL,
+    content_hash TEXT,
     source       TEXT,
     confidence   REAL DEFAULT 1.0,
     created_at   REAL,
@@ -53,9 +66,22 @@ CREATE TABLE IF NOT EXISTS personality_history (
     created_at REAL
 );
 
+CREATE TABLE IF NOT EXISTS soul_state (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_mem_type ON memories(type);
 CREATE INDEX IF NOT EXISTS idx_mem_source ON memories(source);
 CREATE INDEX IF NOT EXISTS idx_mem_created ON memories(created_at);
+CREATE INDEX IF NOT EXISTS idx_mem_hash ON memories(content_hash);
+"""
+
+_FTS_SCHEMA = """
+CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+    content, content='memories', content_rowid='rowid',
+    tokenize='unicode61'
+);
 """
 
 

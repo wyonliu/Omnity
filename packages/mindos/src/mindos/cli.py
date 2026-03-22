@@ -247,6 +247,100 @@ def _do_consolidate(args: argparse.Namespace) -> None:
           f"kept {result.get('kept', 0)}, total after: {result.get('total_after', '?')}")
 
 
+def cmd_quickstart(args: argparse.Namespace) -> None:
+    """Interactive guided setup with instant gratification."""
+    from mindos.core import Mindos
+
+    print()
+    print("  ╔══════════════════════════════════════════╗")
+    print("  ║         Mindos — Digital Soul Setup      ║")
+    print("  ║                                          ║")
+    print("  ║  Your AI will remember you. Everywhere.  ║")
+    print("  ╚══════════════════════════════════════════╝")
+    print()
+
+    # Step 1: Name
+    name = input("  What's your name? → ").strip() or "User"
+
+    # Step 2: Soul Seed — 5 questions
+    print()
+    print("  Answer a few questions to create your soul seed:")
+    print("  (press Enter to skip any)")
+    print()
+
+    traits: list[str] = []
+    q1 = input("  1. Three words that describe you? → ").strip()
+    if q1:
+        traits = [t.strip() for t in q1.replace("，", ",").split(",")][:5]
+
+    style = input("  2. How do you like AI to talk to you? (e.g. concise, detailed, humorous) → ").strip()
+
+    values_raw = input("  3. What do you value most? (e.g. efficiency, creativity, honesty) → ").strip()
+    values = [v.strip() for v in values_raw.replace("，", ",").split(",")] if values_raw else []
+
+    skills_raw = input("  4. What are you good at? (e.g. Python, design, writing) → ").strip()
+    capabilities = []
+    if skills_raw:
+        for s in skills_raw.replace("，", ",").split(","):
+            capabilities.append({"domain": s.strip(), "level": "proficient"})
+
+    boundaries_raw = input("  5. Any boundaries for AI? (e.g. no politics, no harmful content) → ").strip()
+
+    # Create the soul
+    print()
+    print("  Creating your soul...")
+
+    m = Mindos.init(
+        path=args.path, name=name, traits=traits,
+        style=style, values=values, capabilities=capabilities,
+    )
+    if boundaries_raw:
+        m.identity.setdefault("personality", {})["boundaries"] = [
+            b.strip() for b in boundaries_raw.replace("，", ",").split(",")
+        ]
+        m.save_identity()
+
+    # Seed some demo conversations to show instant value
+    demo_convs = [
+        f"user: 我叫{name}\nassistant: 你好{name}！",
+    ]
+    if traits:
+        demo_convs.append(f"user: 我是一个{', '.join(traits)}的人\nassistant: 了解了")
+    if capabilities:
+        skills_str = ', '.join(c['domain'] for c in capabilities)
+        demo_convs.append(f"user: 我擅长{skills_str}\nassistant: 记住了")
+
+    for conv in demo_convs:
+        m.commit(conv, source="quickstart")
+
+    # Show the magic — hydrate
+    ctx = m.hydrate(context="first conversation")
+
+    print()
+    print("  ✓ Soul created!")
+    print(f"  ✓ Data stored at: {m.root}")
+    print()
+    print("  ┌──────────────────────────────────────────┐")
+    print("  │  Here's what any AI will know about you: │")
+    print("  └──────────────────────────────────────────┘")
+    print()
+    for line in ctx.split("\n"):
+        print(f"    {line}")
+
+    print()
+    print("  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print("  What's next?")
+    print()
+    print("    mindos serve              Start server (Dashboard + API)")
+    print("    mindos serve --mcp        Connect to Claude Desktop / Cursor")
+    print("    mindos commit \"...\"       Teach your soul from any conversation")
+    print("    mindos recall \"topic\"     Search your memories")
+    print("    mindos memories --stats   See what your soul knows")
+    print()
+    print("  Every AI you use can now remember you. Forever.")
+    print()
+
+
 def cmd_serve(args: argparse.Namespace) -> None:
     if args.mcp:
         from mindos.mcp_server import run_mcp_server
@@ -312,6 +406,9 @@ def main() -> None:
     p_mem.add_argument("--stats", action="store_true", help="Show memory statistics")
     p_mem.add_argument("--consolidate", action="store_true", help="Merge similar memories")
 
+    # quickstart
+    sub.add_parser("quickstart", help="Interactive guided setup (start here!)", parents=[path_parent])
+
     # serve
     p_serve = sub.add_parser("serve", help="Start Mindos server", parents=[path_parent])
     p_serve.add_argument("--mcp", action="store_true", help="MCP Server (stdio)")
@@ -327,9 +424,9 @@ def main() -> None:
         sys.exit(0)
 
     cmds = {
-        "init": cmd_init, "status": cmd_status, "recall": cmd_recall,
-        "commit": cmd_commit, "forget": cmd_forget, "memories": cmd_memories,
-        "serve": cmd_serve,
+        "init": cmd_init, "quickstart": cmd_quickstart, "status": cmd_status,
+        "recall": cmd_recall, "commit": cmd_commit, "forget": cmd_forget,
+        "memories": cmd_memories, "serve": cmd_serve,
     }
     cmds[args.command](args)
 

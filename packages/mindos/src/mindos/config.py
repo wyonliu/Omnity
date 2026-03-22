@@ -1,8 +1,18 @@
-"""Mindos configuration: config.yaml loading + ModelRouter."""
+"""Mindos configuration: config.yaml loading + ModelRouter.
+
+Supports provider types:
+  - openai_compatible: Any OpenAI-API-compatible endpoint (OpenAI, DeepSeek, etc.)
+  - anthropic: Native Anthropic Messages API via anthropic SDK
+  - ollama: Local Ollama instance (no API key required)
+  - passthrough: Stub for testing
+"""
 
 from __future__ import annotations
 
+import hashlib
+import logging
 import os
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -11,6 +21,8 @@ try:
     import yaml
 except ImportError:
     yaml = None
+
+log = logging.getLogger("mindos.config")
 
 
 @dataclass
@@ -148,10 +160,18 @@ class MindosConfig:
 
 
 class ModelRouter:
-    """Select the best available LLM provider for a given task."""
+    """Select the best available LLM provider for a given task.
+
+    Supports:
+      - openai_compatible: OpenAI, DeepSeek, etc. (via openai SDK)
+      - anthropic: Native Anthropic Messages API (via anthropic SDK)
+      - ollama: Local Ollama instance (via OpenAI-compatible endpoint)
+    """
 
     def __init__(self, config: MindosConfig) -> None:
         self.config = config
+        self._cache: dict[str, tuple[float, str]] = {}  # hash → (timestamp, response)
+        self._cache_ttl = 300  # 5 minutes
 
     def select(self, task: str = "reasoning") -> Optional[ModelProvider]:
         for p in self.config.providers:
@@ -167,21 +187,51 @@ class ModelRouter:
         return None
 
     def call_llm(self, system: str, user: str, task: str = "reasoning",
-                 max_tokens: int = 1024, json_mode: bool = False) -> Optional[str]:
+                 max_tokens: int = 1024, json_mode: bool = False,
+                 use_cache: bool = False) -> Optional[str]:
         """Call the best available LLM. Returns response text or None."""
         provider = self.select(task)
         if provider is None:
+            log.debug("No available provider for task=%s", task)
             return None
 
-        if provider.type in ("openai_compatible", "anthropic"):
-            return self._call_openai_compat(provider, system, user, max_tokens, json_mode)
-        return None
+        # Check cache
+        if use_cache:
+            cache_key = hashlib.md5(
+                f"{provider.name}:{system}:{user}:{max_tokens}:{json_mode}".encode()
+            ).hexdigest()
+            cached = self._cache.get(cache_key)
+            if cached and (time.time() - cached[0]) < self._cache_ttl:
+                log.debug("Cache hit for task=%s provider=%s", task, provider.name)
+                return cached[1]
+        else:
+            cache_key = ""
+
+        log.debug("Calling LLM: provider=%s model=%s task=%s", provider.name, provider.model, task)
+
+        result: Optional[str] = None
+        if provider.type == "anthropic":
+            result = self._call_anthropic(provider, system, user, max_tokens, json_mode)
+        elif provider.type == "ollama":
+            result = self._call_ollama(provider, system, user, max_tokens, json_mode)
+        elif provider.type == "openai_compatible":
+            result = self._call_openai_compat(provider, system, user, max_tokens, json_mode)
+
+        if result is not None and use_cache and cache_key:
+            self._cache[cache_key] = (time.time(), result)
+            # Evict old entries
+            if len(self._cache) > 100:
+                cutoff = time.time() - self._cache_ttl
+                self._cache = {k: v for k, v in self._cache.items() if v[0] > cutoff}
+
+        return result
 
     def _call_openai_compat(self, provider: ModelProvider, system: str, user: str,
                             max_tokens: int, json_mode: bool) -> Optional[str]:
         try:
             import openai
         except ImportError:
+            log.warning("openai package not installed, cannot use provider %s", provider.name)
             return None
 
         kwargs: dict[str, Any] = {}
@@ -203,5 +253,59 @@ class ModelRouter:
         try:
             resp = client.chat.completions.create(**req)
             return resp.choices[0].message.content.strip()
-        except Exception:
+        except Exception as e:
+            log.error("OpenAI-compatible call failed (%s): %s", provider.name, e)
+            return None
+
+    def _call_anthropic(self, provider: ModelProvider, system: str, user: str,
+                        max_tokens: int, json_mode: bool) -> Optional[str]:
+        """Native Anthropic Messages API call."""
+        try:
+            import anthropic
+        except ImportError:
+            log.warning("anthropic package not installed, cannot use provider %s", provider.name)
+            return None
+
+        client = anthropic.Anthropic(api_key=provider.api_key)
+        try:
+            resp = client.messages.create(
+                model=provider.model,
+                max_tokens=max_tokens,
+                system=system,
+                messages=[{"role": "user", "content": user}],
+            )
+            text = resp.content[0].text.strip()
+            return text
+        except Exception as e:
+            log.error("Anthropic call failed (%s): %s", provider.name, e)
+            return None
+
+    def _call_ollama(self, provider: ModelProvider, system: str, user: str,
+                     max_tokens: int, json_mode: bool) -> Optional[str]:
+        """Call local Ollama via its OpenAI-compatible endpoint."""
+        try:
+            import openai
+        except ImportError:
+            log.warning("openai package not installed, cannot use Ollama provider %s", provider.name)
+            return None
+
+        base_url = provider.base_url or "http://localhost:11434/v1"
+        client = openai.OpenAI(api_key="ollama", base_url=base_url)
+        req: dict[str, Any] = {
+            "model": provider.model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        }
+        if max_tokens:
+            req["max_tokens"] = max_tokens
+        if json_mode:
+            req["response_format"] = {"type": "json_object"}
+
+        try:
+            resp = client.chat.completions.create(**req)
+            return resp.choices[0].message.content.strip()
+        except Exception as e:
+            log.error("Ollama call failed (%s): %s", provider.name, e)
             return None
