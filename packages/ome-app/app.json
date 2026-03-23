@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Ome",
+    "slug": "ome-app",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "scheme": "ome",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a1628"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.omnity.ome"
+    },
+    "android": {
+      "package": "com.omnity.ome",
+      "adaptiveIcon": {
+        "backgroundColor": "#0a1628",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "plugins": [
+      "expo-router"
+    ]
+  }
+}
