@@ -82,6 +82,7 @@ struct OmeOrb: View {
                 phase = 1.0
             }
         }
+        .accessibilityHidden(true)
     }
 }
 
@@ -113,5 +114,6 @@ struct OmeOrbMini: View {
                 .offset(x: -size * 0.08, y: -size * 0.08)
         }
         .shadow(color: Theme.accent.opacity(0.3), radius: 4)
+        .accessibilityHidden(true)
     }
 }

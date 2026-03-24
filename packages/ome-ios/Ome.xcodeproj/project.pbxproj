@@ -22,6 +22,7 @@
 		9661A1B8D7F5F355A6FE1FA2 /* AgentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4706CAFA426B7B3E5F6939D0 /* AgentsView.swift */; };
 		A0F2CA5F0B21CC61118E5ADF /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A445D03246DEBAFE24DB4AC /* Theme.swift */; };
 		A53C210B4F8AF9F08728216A /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 103AA964F0D2589A12EB6B96 /* RootView.swift */; };
+		B6579A6D330B53B99DE15A8E /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAA9A1AD2CE9136AAF5FBE3B /* KeychainHelper.swift */; };
 		BE19A33A244C3DCF5D08B9D6 /* OmeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B603CF09C418873ECB7712FB /* OmeApp.swift */; };
 		DA03A5FB4FFDA33D1E34AF7D /* SoulscapeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B308805EDF577C3AC364D5EB /* SoulscapeView.swift */; };
 		E09BE1DEF1A0B31F09052068 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 980DBFC336A18BDC35AE1BA9 /* Assets.xcassets */; };
@@ -50,6 +51,7 @@
 		D42438502FE70433E00EF55B /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		D4B5CFE88050B0DDC6AB2B8C /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		F528DC02D6842E0E292D7E96 /* MemoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryView.swift; sourceTree = "<group>"; };
+		FAA9A1AD2CE9136AAF5FBE3B /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -71,6 +73,7 @@
 			isa = PBXGroup;
 			children = (
 				9E6C185933D3BD0FA1CE5E98 /* APIClient.swift */,
+				FAA9A1AD2CE9136AAF5FBE3B /* KeychainHelper.swift */,
 				14A3E5B767B7F6A8EE2A3E9B /* SessionManager.swift */,
 			);
 			path = Services;
@@ -203,6 +206,7 @@
 				9661A1B8D7F5F355A6FE1FA2 /* AgentsView.swift in Sources */,
 				47DE9B798BCEF81CC8092355 /* AwakeningView.swift in Sources */,
 				55F507D8028A9F22CF554E98 /* ChatView.swift in Sources */,
+				B6579A6D330B53B99DE15A8E /* KeychainHelper.swift in Sources */,
 				1BAC606340D206119CF688F6 /* LifeView.swift in Sources */,
 				8E754CDEE3169C56128AB1C6 /* MainTabView.swift in Sources */,
 				0F2D8009C4B717CE9207D7EB /* MemoryView.swift in Sources */,

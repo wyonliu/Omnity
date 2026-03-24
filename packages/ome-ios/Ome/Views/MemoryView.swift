@@ -9,6 +9,7 @@ struct MemoryView: View {
     @State private var newMemory = ""
     @State private var saving = false
     @State private var hasSearched = false
+    @FocusState private var searchFocused: Bool
 
     private let api = APIClient.shared
 
@@ -39,6 +40,7 @@ struct MemoryView: View {
                     .background(Theme.bgInput)
                     .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius))
                     .foregroundStyle(Theme.textPrimary)
+                    .focused($searchFocused)
                     .onSubmit { search() }
 
                 Button(action: { search() }) {
@@ -46,7 +48,8 @@ struct MemoryView: View {
                         .font(.body.bold())
                         .foregroundStyle(Theme.bg)
                         .frame(width: 44, height: 44)
-                        .background(Theme.accent)
+                        .background(query.trimmingCharacters(in: .whitespaces).isEmpty
+                                    ? Theme.accent.opacity(0.3) : Theme.accent)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .disabled(query.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -75,13 +78,20 @@ struct MemoryView: View {
                         .foregroundStyle(Theme.textPrimary)
 
                     Button(action: addMemory) {
-                        Text(saving ? "保存中..." : "记住")
-                            .font(.subheadline.bold())
-                            .foregroundStyle(Theme.bg)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 8)
-                            .background(Theme.accent)
-                            .clipShape(Capsule())
+                        HStack(spacing: 6) {
+                            if saving {
+                                ProgressView()
+                                    .tint(Theme.bg)
+                                    .scaleEffect(0.7)
+                            }
+                            Text(saving ? "保存中..." : "记住")
+                                .font(.subheadline.bold())
+                        }
+                        .foregroundStyle(Theme.bg)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 8)
+                        .background(Theme.accent)
+                        .clipShape(Capsule())
                     }
                     .frame(maxWidth: .infinity, alignment: .trailing)
                     .disabled(newMemory.trimmingCharacters(in: .whitespaces).isEmpty || saving)
@@ -142,6 +152,7 @@ struct MemoryView: View {
                     }
                     .padding()
                 }
+                .refreshable { search(query: nil) }
             }
         }
         .background(Theme.bg)
@@ -153,12 +164,13 @@ struct MemoryView: View {
         guard !q.isEmpty else { return }
         hasSearched = true
         loading = true
+        searchFocused = false
         Task {
             do {
                 let result = try await api.recall(q)
                 memories = result.results
             } catch {
-                // Silent — empty state handles it
+                // Empty state handles it
             }
             loading = false
         }

@@ -12,8 +12,11 @@ actor APIClient {
     #endif
 
     private var token: String? {
-        get { UserDefaults.standard.string(forKey: "ome_token") }
-        set { UserDefaults.standard.set(newValue, forKey: "ome_token") }
+        get { KeychainHelper.load("ome_token") }
+        set {
+            if let v = newValue { KeychainHelper.save(v, for: "ome_token") }
+            else { KeychainHelper.delete("ome_token") }
+        }
     }
 
     private var sessionId: String? {
@@ -68,7 +71,8 @@ actor APIClient {
     func logout() {
         token = nil
         sessionId = nil
-        UserDefaults.standard.removeObject(forKey: "ome_token")
+        KeychainHelper.delete("ome_token")
+        KeychainHelper.delete("ome_password")
         UserDefaults.standard.removeObject(forKey: "ome_session_id")
         UserDefaults.standard.removeObject(forKey: "ome_name")
         UserDefaults.standard.removeObject(forKey: "ome_user_id")
@@ -89,7 +93,7 @@ actor APIClient {
         AsyncThrowingStream { continuation in
             Task {
                 do {
-                    let token = UserDefaults.standard.string(forKey: "ome_token")
+                    let token = KeychainHelper.load("ome_token")
                     #if DEBUG
                     let urlStr = "http://192.168.3.242:8765/api/chat/stream"
                     #else
@@ -167,6 +171,7 @@ actor APIClient {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 30
         if let t = token {
             request.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization")
         }
@@ -190,13 +195,22 @@ actor APIClient {
     }
 
     private func execute<T: Decodable>(_ request: URLRequest) async throws -> T {
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch let urlError as URLError {
+            throw APIError.network(urlError)
+        }
         guard let http = response as? HTTPURLResponse else {
-            throw APIError.serverError("No HTTP response")
+            throw APIError.serverError("无法连接服务器")
         }
         guard (200...299).contains(http.statusCode) else {
             let detail = (try? JSONDecoder().decode([String: String].self, from: data))?["detail"]
-            throw APIError.serverError(detail ?? "HTTP \(http.statusCode)")
+            if http.statusCode == 401 {
+                throw APIError.unauthorized
+            }
+            throw APIError.serverError(detail ?? "服务器错误 (\(http.statusCode))")
         }
         return try JSONDecoder().decode(T.self, from: data)
     }
@@ -204,12 +218,29 @@ actor APIClient {
 
 enum APIError: LocalizedError {
     case invalidURL
+    case network(URLError)
+    case unauthorized
     case serverError(String)
 
     var errorDescription: String? {
         switch self {
-        case .invalidURL: return "Invalid URL"
-        case .serverError(let msg): return msg
+        case .invalidURL:
+            return "请求地址错误"
+        case .network(let urlError):
+            switch urlError.code {
+            case .notConnectedToInternet, .networkConnectionLost:
+                return "没有网络连接"
+            case .timedOut:
+                return "连接超时，请稍后再试"
+            case .cannotFindHost, .cannotConnectToHost:
+                return "无法连接服务器"
+            default:
+                return "网络错误，请检查连接"
+            }
+        case .unauthorized:
+            return "登录已过期，请重新登录"
+        case .serverError(let msg):
+            return msg
         }
     }
 }

@@ -6,6 +6,7 @@ import SwiftUI
 /// Authenticated → MainTabs
 struct RootView: View {
     @EnvironmentObject var session: SessionManager
+    @State private var splashOpacity: Double = 0
 
     var body: some View {
         Group {
@@ -29,6 +30,12 @@ struct RootView: View {
                 Text("Ome")
                     .font(.title2.bold())
                     .foregroundStyle(Theme.accent)
+            }
+            .opacity(splashOpacity)
+            .onAppear {
+                withAnimation(.easeIn(duration: 0.8)) {
+                    splashOpacity = 1
+                }
             }
         }
     }

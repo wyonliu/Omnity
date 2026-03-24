@@ -30,6 +30,7 @@ struct ChatView: View {
                 Button(isMirror ? "对话" : "镜像") {
                     isMirror.toggle()
                     setupWelcome()
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 }
                 .font(.subheadline)
                 .foregroundStyle(Theme.accent)
@@ -37,6 +38,7 @@ struct ChatView: View {
                 .padding(.vertical, 6)
                 .background(Theme.bgCard)
                 .clipShape(Capsule())
+                .overlay(Capsule().stroke(Theme.border, lineWidth: 1))
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 10)
@@ -56,43 +58,57 @@ struct ChatView: View {
                     }
                     .padding()
                 }
+                .scrollDismissesKeyboard(.interactively)
                 .onChange(of: messages.count) {
-                    withAnimation {
+                    withAnimation(.easeOut(duration: 0.3)) {
                         proxy.scrollTo(messages.last?.id, anchor: .bottom)
                     }
+                }
+                .onChange(of: messages.last?.text) {
+                    // Scroll during streaming
+                    proxy.scrollTo(messages.last?.id, anchor: .bottom)
                 }
             }
 
             // Input bar
-            HStack(alignment: .bottom, spacing: 8) {
-                TextField(isMirror ? "和自己聊聊..." : "说点什么...", text: $input, axis: .vertical)
-                    .lineLimit(1...4)
-                    .textFieldStyle(.plain)
-                    .padding(12)
-                    .background(Theme.bgInput)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius))
-                    .foregroundStyle(Theme.textPrimary)
-                    .focused($inputFocused)
-                    .onSubmit { send() }
-
-                Button(action: send) {
-                    Text(sending ? "···" : "→")
-                        .font(.title2.bold())
-                        .foregroundStyle(Theme.bg)
-                        .frame(width: 44, height: 44)
-                        .background(Theme.accent)
-                        .clipShape(Circle())
-                }
-                .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty || sending)
-                .opacity(input.trimmingCharacters(in: .whitespaces).isEmpty || sending ? 0.4 : 1)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .padding(.bottom, 8)
-            .background(Theme.bgCard)
+            inputBar
         }
         .background(Theme.bg)
         .onAppear { setupWelcome() }
+    }
+
+    private var inputBar: some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            TextField(isMirror ? "和自己聊聊..." : "说点什么...", text: $input, axis: .vertical)
+                .lineLimit(1...4)
+                .textFieldStyle(.plain)
+                .padding(12)
+                .background(Theme.bgInput)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius))
+                .foregroundStyle(Theme.textPrimary)
+                .focused($inputFocused)
+                .onSubmit { send() }
+
+            Button(action: send) {
+                Image(systemName: sending ? "ellipsis" : "arrow.up")
+                    .font(.body.bold())
+                    .foregroundStyle(Theme.bg)
+                    .frame(width: 44, height: 44)
+                    .background(canSend ? Theme.accent : Theme.accent.opacity(0.3))
+                    .clipShape(Circle())
+            }
+            .disabled(!canSend)
+            .animation(.easeInOut(duration: 0.15), value: canSend)
+            .accessibilityLabel("发送")
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 16)
+        .background(Theme.bgCard)
+    }
+
+    private var canSend: Bool {
+        !input.trimmingCharacters(in: .whitespaces).isEmpty && !sending
     }
 
     private func setupWelcome() {
@@ -113,6 +129,7 @@ struct ChatView: View {
         messages.append(Message(role: .user, text: text))
         input = ""
         sending = true
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
 
         if isMirror {
             sendMirror(text)
@@ -157,7 +174,7 @@ struct ChatView: View {
                     session.updateBondLevel(result.bond_level)
                 } catch {
                     if let idx = messages.firstIndex(where: { $0.id == streamId }) {
-                        messages[idx].text = "连接失败: \(error.localizedDescription)"
+                        messages[idx].text = friendlyError(error)
                         messages[idx].isStreaming = false
                     }
                 }
@@ -172,9 +189,21 @@ struct ChatView: View {
                 let result = try await api.mirror(text)
                 messages.append(Message(role: .ome, text: result.reply))
             } catch {
-                messages.append(Message(role: .ome, text: "连接失败: \(error.localizedDescription)"))
+                messages.append(Message(role: .ome, text: friendlyError(error)))
             }
             sending = false
         }
+    }
+
+    private func friendlyError(_ error: Error) -> String {
+        if let apiErr = error as? APIError {
+            switch apiErr {
+            case .network: return "信号不太好，检查一下网络？"
+            case .unauthorized: return "需要重新登录一下"
+            case .serverError: return "服务器开小差了，稍后再试"
+            case .invalidURL: return "出了点问题，稍后再试"
+            }
+        }
+        return "信号不太好，稍后再试"
     }
 }

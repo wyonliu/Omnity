@@ -4,6 +4,7 @@ import SwiftUI
 struct AgentsView: View {
     @State private var agents: [AgentInfo] = []
     @State private var loading = true
+    @State private var loadError = false
     @State private var selectedAgent: AgentInfo?
     @State private var chatMessages: [(role: String, text: String)] = []
     @State private var chatInput = ""
@@ -14,15 +15,18 @@ struct AgentsView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Header
-            VStack(alignment: .leading, spacing: 4) {
-                Text("🏘️ 广场")
-                    .font(.title2.bold())
-                    .foregroundStyle(Theme.textPrimary)
-                Text("OmeTown · \(agents.count) 个 Ome 在线")
-                    .font(.caption)
-                    .foregroundStyle(Theme.textMuted)
+            HStack(spacing: 10) {
+                OmeOrbMini(size: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("广场")
+                        .font(.title2.bold())
+                        .foregroundStyle(Theme.textPrimary)
+                    Text("OmeTown · \(agents.count) 个 Ome 在线")
+                        .font(.caption)
+                        .foregroundStyle(Theme.textMuted)
+                }
+                Spacer()
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
             .overlay(alignment: .bottom) { Divider().background(Theme.border) }
@@ -31,10 +35,22 @@ struct AgentsView: View {
                 Spacer()
                 ProgressView().tint(Theme.accent)
                 Spacer()
+            } else if loadError {
+                Spacer()
+                VStack(spacing: 16) {
+                    OmeOrb(size: 40, intensity: 0.3, breathing: false)
+                    Text("连接失败")
+                        .font(.title3.bold())
+                        .foregroundStyle(Theme.textPrimary)
+                    Text("下拉刷新重试")
+                        .font(.body)
+                        .foregroundStyle(Theme.textMuted)
+                }
+                Spacer()
             } else if agents.isEmpty {
                 Spacer()
                 VStack(spacing: 16) {
-                    Text("🌍").font(.system(size: 56))
+                    OmeOrb(size: 48, intensity: 0.3, breathing: true)
                     Text("还没有其他 Ome")
                         .font(.title3.bold())
                         .foregroundStyle(Theme.textPrimary)
@@ -50,8 +66,7 @@ struct AgentsView: View {
                         ForEach(agents) { agent in
                             Button { startChat(agent) } label: {
                                 HStack(spacing: 12) {
-                                    Text(agent.mood_emoji)
-                                        .font(.largeTitle)
+                                    OmeOrbMini(size: 40)
                                     VStack(alignment: .leading) {
                                         Text(agent.name)
                                             .font(.headline)
@@ -81,6 +96,7 @@ struct AgentsView: View {
                     }
                     .padding()
                 }
+                .refreshable { await loadAgents() }
             }
         }
         .background(Theme.bg)
@@ -97,11 +113,12 @@ struct AgentsView: View {
     }
 
     private func loadAgents() async {
+        loadError = false
         do {
             let result = try await api.getAgentDirectory()
             agents = result.agents
         } catch {
-            print("Agent directory error:", error)
+            loadError = true
         }
         loading = false
     }
@@ -109,16 +126,17 @@ struct AgentsView: View {
     private func startChat(_ agent: AgentInfo) {
         chatMessages = [("system", "正在向 \(agent.name) 打招呼...")]
         selectedAgent = agent
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
 
         Task {
             do {
                 let result = try await api.messageAgent(agent.user_id, message: "你好！")
                 chatMessages = [
                     ("me", result.my_message),
-                    ("them", "\(result.their_mood_emoji) \(result.their_reply)"),
+                    ("them", result.their_reply),
                 ]
             } catch {
-                chatMessages = [("system", "连接失败: \(error.localizedDescription)")]
+                chatMessages = [("system", "连接失败，请稍后再试")]
             }
         }
     }
@@ -133,9 +151,9 @@ struct AgentsView: View {
         Task {
             do {
                 let result = try await api.messageAgent(agent.user_id, message: text)
-                chatMessages.append(("them", "\(result.their_mood_emoji) \(result.their_reply)"))
+                chatMessages.append(("them", result.their_reply))
             } catch {
-                chatMessages.append(("system", "发送失败: \(error.localizedDescription)"))
+                chatMessages.append(("system", "发送失败，请稍后再试"))
             }
             chatSending = false
         }
@@ -151,7 +169,8 @@ struct AgentChatSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: 10) {
+                OmeOrbMini(size: 28)
                 VStack(alignment: .leading) {
                     Text("与 \(agent.name) 对话")
                         .font(.headline)
@@ -168,20 +187,30 @@ struct AgentChatSheet: View {
             ScrollView {
                 LazyVStack(spacing: 8) {
                     ForEach(Array(messages.enumerated()), id: \.offset) { _, msg in
+
                         HStack {
                             if msg.role == "me" { Spacer() }
+                            if msg.role == "them" {
+                                OmeOrbMini(size: 24)
+                                    .padding(.top, 4)
+                            }
                             Text(msg.text)
                                 .font(.body)
                                 .foregroundStyle(msg.role == "me" ? Theme.bg : Theme.textPrimary)
                                 .padding(12)
                                 .background(msg.role == "me" ? Theme.accent : Theme.bgCard)
                                 .clipShape(RoundedRectangle(cornerRadius: 14))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .stroke(msg.role == "me" ? Color.clear : Theme.border, lineWidth: 1)
+                                )
                             if msg.role != "me" { Spacer() }
                         }
                     }
                 }
                 .padding()
             }
+            .scrollDismissesKeyboard(.interactively)
 
             HStack(spacing: 8) {
                 TextField("让你的 Ome 说...", text: $input)
@@ -193,8 +222,8 @@ struct AgentChatSheet: View {
                     .onSubmit(onSend)
 
                 Button(action: onSend) {
-                    Text(sending ? "···" : "→")
-                        .font(.title2.bold())
+                    Image(systemName: sending ? "ellipsis" : "arrow.up")
+                        .font(.body.bold())
                         .foregroundStyle(Theme.bg)
                         .frame(width: 44, height: 44)
                         .background(Theme.accent)
@@ -202,7 +231,9 @@ struct AgentChatSheet: View {
                 }
                 .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty || sending)
             }
-            .padding()
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 16)
             .background(Theme.bgCard)
         }
         .background(Theme.bg)

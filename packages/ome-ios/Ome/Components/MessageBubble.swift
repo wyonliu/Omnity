@@ -21,16 +21,19 @@ struct MessageBubble: View {
                     .font(.body)
                     .foregroundStyle(isUser ? Theme.bg : Theme.textPrimary)
                     .lineSpacing(4)
-                    .padding(12)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
                     .background(isUser ? Theme.accent : Theme.bgCard)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius))
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
                     .overlay(
-                        RoundedRectangle(cornerRadius: Theme.cornerRadius)
+                        RoundedRectangle(cornerRadius: 18)
                             .stroke(isUser ? Color.clear : Theme.border, lineWidth: 1)
                     )
             }
 
             if !isUser { Spacer(minLength: 60) }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(isUser ? "你" : "Ome")说：\(message.text)")
     }
 }

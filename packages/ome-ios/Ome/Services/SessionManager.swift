@@ -20,11 +20,23 @@ class SessionManager: ObservableObject {
 
     init() {
         // Synchronously read cached state to avoid flicker
-        let hasToken = UserDefaults.standard.string(forKey: "ome_token") != nil
+        // Check Keychain first, fall back to UserDefaults for migration
+        let hasToken = KeychainHelper.load("ome_token") != nil
+            || UserDefaults.standard.string(forKey: "ome_token") != nil
         userName = UserDefaults.standard.string(forKey: "ome_name") ?? ""
         bondLevel = UserDefaults.standard.integer(forKey: "ome_bond_level")
 
         if hasToken && !userName.isEmpty {
+            // Migrate token from UserDefaults to Keychain if needed
+            if let oldToken = UserDefaults.standard.string(forKey: "ome_token"),
+               KeychainHelper.load("ome_token") == nil {
+                KeychainHelper.save(oldToken, for: "ome_token")
+                UserDefaults.standard.removeObject(forKey: "ome_token")
+            }
+            if let oldPwd = UserDefaults.standard.string(forKey: "ome_password") {
+                KeychainHelper.save(oldPwd, for: "ome_password")
+                UserDefaults.standard.removeObject(forKey: "ome_password")
+            }
             // Optimistic: show authenticated immediately, validate in background
             authState = .authenticated
             Task { await validateSession() }
@@ -41,15 +53,24 @@ class SessionManager: ObservableObject {
             bondLevel = profile.bond.level
             UserDefaults.standard.set(profile.bond.level, forKey: "ome_bond_level")
         } catch {
-            // Token expired or invalid — stay authenticated but don't force logout
-            // User can still use the app; next API call will reveal the issue
+            // Token expired or invalid — try auto-login
+            if let userId = UserDefaults.standard.string(forKey: "ome_user_id"),
+               let password = KeychainHelper.load("ome_password") {
+                do {
+                    let resp = try await api.login(userId: userId, password: password)
+                    userName = resp.name
+                } catch {
+                    // Auto-login also failed — force logout
+                    await logout()
+                }
+            }
         }
     }
 
     func register(name: String, traits: [String] = ["curious"], style: String = "warm and casual") async throws {
         let userId = name.lowercased()
             .replacingOccurrences(of: " ", with: "_")
-            .replacingOccurrences(of: " ", with: "_")  // fullwidth space
+            .replacingOccurrences(of: "\u{3000}", with: "_")  // fullwidth space
         let password = userId + "_ome_" + String(UUID().uuidString.prefix(8))
 
         let req = RegisterRequest(
@@ -61,9 +82,9 @@ class SessionManager: ObservableObject {
         )
         let resp = try await api.register(req)
 
-        // Store credentials for auto-login
+        // Store credentials securely for auto-login
         UserDefaults.standard.set(userId, forKey: "ome_user_id")
-        UserDefaults.standard.set(password, forKey: "ome_password")
+        KeychainHelper.save(password, for: "ome_password")
 
         userName = resp.name
         withAnimation(.easeInOut(duration: 0.5)) {
@@ -74,7 +95,8 @@ class SessionManager: ObservableObject {
     func logout() async {
         await api.logout()
         UserDefaults.standard.removeObject(forKey: "ome_bond_level")
-        UserDefaults.standard.removeObject(forKey: "ome_password")
+        KeychainHelper.delete("ome_password")
+        KeychainHelper.delete("ome_token")
 
         withAnimation(.easeInOut(duration: 0.3)) {
             authState = .anonymous

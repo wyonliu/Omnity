@@ -10,9 +10,9 @@ struct SettingsView: View {
     private let api = APIClient.shared
 
     private let autonomyLevels = [
-        ("👁️", "观察者", "Ome 只观察不主动行动"),
-        ("🤝", "助手", "Ome 可以提建议、写草稿"),
-        ("🚀", "代理人", "Ome 可以代你执行操作"),
+        ("eye", "观察者", "Ome 只观察不主动行动"),
+        ("hand.raised", "助手", "Ome 可以提建议、写草稿"),
+        ("bolt.fill", "代理人", "Ome 可以代你执行操作"),
     ]
 
     var body: some View {
@@ -78,7 +78,10 @@ struct SettingsView: View {
                             UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         } label: {
                             HStack(spacing: 12) {
-                                Text(al.0).font(.title2)
+                                Image(systemName: al.0)
+                                    .font(.title2)
+                                    .foregroundStyle(selected ? Theme.accent : Theme.textSecondary)
+                                    .frame(width: 32)
                                 VStack(alignment: .leading) {
                                     Text(al.1)
                                         .font(.body.bold())

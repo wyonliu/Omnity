@@ -11,8 +11,8 @@ struct LifeView: View {
     private let milestones = [3, 7, 14, 30, 90, 365]
 
     private let stages = [
-        ("🌱", "初见"), ("🌿", "嫩芽"), ("🌳", "小树"), ("🌲", "茂盛"),
-        ("🍊", "结果"), ("🌸", "繁花"), ("🏔️", "参天"),
+        ("leaf", "初见"), ("leaf.fill", "嫩芽"), ("tree", "小树"), ("tree.fill", "茂盛"),
+        ("sparkles", "结果"), ("laurel.leading", "繁花"), ("mountain.2.fill", "参天"),
     ]
 
     private var bondProgress: Double {
@@ -41,8 +41,9 @@ struct LifeView: View {
                 // Bond hero
                 let level = min(profile?.bond.level ?? session.bondLevel, 6)
                 VStack(spacing: 10) {
-                    Text(stages[level].0)
-                        .font(.system(size: 56))
+                    Image(systemName: stages[level].0)
+                        .font(.system(size: 48))
+                        .foregroundStyle(Theme.bondGreen)
 
                     Text("Lv.\(level) · \(stages[level].1)")
                         .font(.headline.bold())

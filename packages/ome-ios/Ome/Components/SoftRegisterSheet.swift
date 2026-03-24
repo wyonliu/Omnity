@@ -8,10 +8,12 @@ struct SoftRegisterSheet: View {
     var onRegister: () -> Void
     var onSkip: () -> Void
 
+    @FocusState private var nameFocused: Bool
+
     var body: some View {
         VStack(spacing: 20) {
-            Text("🌱")
-                .font(.system(size: 48))
+            OmeOrb(size: 48, intensity: 0.6, breathing: true)
+                .frame(height: 80)
 
             Text("让我记住你")
                 .font(.title2.bold())
@@ -30,24 +32,34 @@ struct SoftRegisterSheet: View {
                 .foregroundStyle(Theme.textPrimary)
                 .multilineTextAlignment(.center)
                 .font(.title3)
+                .focused($nameFocused)
+                .onSubmit(onRegister)
 
             if !error.isEmpty {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(Theme.error)
+                    .transition(.opacity)
             }
 
             Button(action: onRegister) {
-                Text(registering ? "创建中..." : "记住我")
-                    .font(.headline)
-                    .foregroundStyle(Theme.bg)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Theme.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius))
+                HStack(spacing: 8) {
+                    if registering {
+                        ProgressView()
+                            .tint(Theme.bg)
+                            .scaleEffect(0.8)
+                    }
+                    Text(registering ? "创建中..." : "记住我")
+                        .font(.headline)
+                }
+                .foregroundStyle(Theme.bg)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(canRegister ? Theme.accent : Theme.accent.opacity(0.4))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius))
             }
-            .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || registering)
-            .opacity(name.trimmingCharacters(in: .whitespaces).isEmpty || registering ? 0.5 : 1)
+            .disabled(!canRegister)
+            .animation(.easeInOut(duration: 0.15), value: canRegister)
 
             Button("先不了，继续聊", action: onSkip)
                 .font(.body)
@@ -55,5 +67,10 @@ struct SoftRegisterSheet: View {
         }
         .padding(24)
         .background(Theme.bgCard)
+        .onAppear { nameFocused = true }
+    }
+
+    private var canRegister: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty && !registering
     }
 }

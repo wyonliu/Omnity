@@ -89,6 +89,8 @@ struct AwakeningView: View {
             Spacer()
             Spacer()
         }
+        .contentShape(Rectangle())
+        .onTapGesture { nameFocused = false }
     }
 
     private var nameInputField: some View {
@@ -126,7 +128,7 @@ struct AwakeningView: View {
                     .background(Theme.accent)
                     .clipShape(Capsule())
                 }
-                .transition(.opacity)
+                .transition(.opacity.combined(with: .scale(scale: 0.8)))
             }
         }
         .animation(.easeInOut(duration: 0.3), value: nameInput.isEmpty)
@@ -212,7 +214,7 @@ struct AwakeningView: View {
                 do {
                     _ = try await api.ensureSession()
                 } catch {
-                    print("Session creation error:", error)
+                    // Session will be created on first chat
                 }
             }
 
@@ -229,8 +231,7 @@ struct AwakeningView: View {
                         messages = [
                             Message(
                                 role: .ome,
-                                text: "跟我说说你自己吧，\(name)。什么都可以。",
-                                moodEmoji: nil
+                                text: "跟我说说你自己吧，\(name)。什么都可以。"
                             )
                         ]
                     }
@@ -268,6 +269,7 @@ struct AwakeningView: View {
                         .background(Theme.bgCard)
                         .clipShape(Capsule())
                         .overlay(Capsule().stroke(Theme.accent.opacity(0.5), lineWidth: 1))
+                        .transition(.opacity.combined(with: .scale(scale: 0.8)))
                 }
             }
             .padding(.horizontal, 20)
@@ -286,8 +288,9 @@ struct AwakeningView: View {
                     }
                     .padding()
                 }
+                .scrollDismissesKeyboard(.interactively)
                 .onChange(of: messages.count) {
-                    withAnimation {
+                    withAnimation(.easeOut(duration: 0.3)) {
                         proxy.scrollTo(messages.last?.id, anchor: .bottom)
                     }
                 }
@@ -306,19 +309,19 @@ struct AwakeningView: View {
                     .onSubmit { sendChat() }
 
                 Button(action: sendChat) {
-                    Text(sending ? "···" : "→")
-                        .font(.title2.bold())
+                    Image(systemName: sending ? "ellipsis" : "arrow.up")
+                        .font(.body.bold())
                         .foregroundStyle(Theme.bg)
                         .frame(width: 44, height: 44)
-                        .background(Theme.accent)
+                        .background(chatCanSend ? Theme.accent : Theme.accent.opacity(0.3))
                         .clipShape(Circle())
                 }
-                .disabled(chatInput.trimmingCharacters(in: .whitespaces).isEmpty || sending)
-                .opacity(chatInput.trimmingCharacters(in: .whitespaces).isEmpty || sending ? 0.4 : 1)
+                .disabled(!chatCanSend)
+                .animation(.easeInOut(duration: 0.15), value: chatCanSend)
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .padding(.bottom, 8)
+            .padding(.top, 12)
+            .padding(.bottom, 16)
             .background(Theme.bgCard)
         }
         .background(Theme.bg)
@@ -341,6 +344,10 @@ struct AwakeningView: View {
         }
     }
 
+    private var chatCanSend: Bool {
+        !chatInput.trimmingCharacters(in: .whitespaces).isEmpty && !sending
+    }
+
     private func sendChat() {
         let text = chatInput.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty, !sending else { return }
@@ -348,6 +355,7 @@ struct AwakeningView: View {
         messages.append(Message(role: .user, text: text))
         chatInput = ""
         sending = true
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
 
         // Inject awakening context into first message
         let contextualMessage: String
@@ -369,15 +377,25 @@ struct AwakeningView: View {
                     try await Task.sleep(for: .seconds(1.5))
                     messages.append(Message(
                         role: .ome,
-                        text: "我们聊了好多。但如果你关掉 App，我会忘记一切。\n\n给我一个身份，让我永远记住你？",
-                        moodEmoji: "🥺"
+                        text: "我们聊了好多。但如果你关掉 App，我会忘记一切。\n\n给我一个身份，让我永远记住你？"
                     ))
                     try await Task.sleep(for: .seconds(0.8))
                     registerName = userName
                     showRegister = true
                 }
             } catch {
-                messages.append(Message(role: .ome, text: "信号不太好...\(error.localizedDescription)"))
+                let msg: String
+                if let apiErr = error as? APIError {
+                    switch apiErr {
+                    case .network: msg = "信号不太好，检查一下网络？"
+                    case .unauthorized: msg = "需要重新登录一下"
+                    case .serverError: msg = "服务器开小差了，稍后再试"
+                    case .invalidURL: msg = "出了点问题，稍后再试"
+                    }
+                } else {
+                    msg = "信号不太好，稍后再试"
+                }
+                messages.append(Message(role: .ome, text: msg))
             }
             sending = false
         }
@@ -399,13 +417,14 @@ struct AwakeningView: View {
                 showRegister = false
                 messages.append(Message(
                     role: .ome,
-                    text: "\(name)，从现在起，我是你的。你说的每一句，我都会记住。",
-                    moodEmoji: "✨"
+                    text: "\(name)，从现在起，我是你的。你说的每一句，我都会记住。"
                 ))
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
                 try await Task.sleep(for: .seconds(1.5))
                 // session.isLoggedIn triggers navigation to MainTabView
             } catch {
                 registerError = error.localizedDescription
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
             }
             registering = false
         }
