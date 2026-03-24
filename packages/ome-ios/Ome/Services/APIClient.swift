@@ -156,6 +156,22 @@ actor APIClient {
         try await get("/dashboard")
     }
 
+    // MARK: - Soul Card
+
+    func getSoulCard() async throws -> SoulCardResponse {
+        try await get("/soul-card")
+    }
+
+    /// Returns PNG image data for the rendered Soul Card
+    func getSoulCardImage() async throws -> Data {
+        let request = try makeRequest("/soul-card/image")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.serverError("无法生成灵魂卡片")
+        }
+        return data
+    }
+
     // MARK: - Memory
 
     func remember(_ text: String) async throws {

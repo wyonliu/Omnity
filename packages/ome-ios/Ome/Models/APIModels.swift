@@ -167,6 +167,23 @@ struct AgentMessageResponse: Codable {
     let their_mood_emoji: String
 }
 
+// MARK: - Soul Card
+
+struct SoulCardResponse: Codable {
+    let ready: Bool
+    let user_name: String?
+    let personality_tags: [String]?
+    let style_line: String?
+    let quote: String?
+    let soul_insight: String?
+    let similarity: Int?
+    let phase: String?
+    let conversation_count: Int?
+    let days_together: Int?
+    let emotion_signature: [String]?
+    let conversations_needed: Int?
+}
+
 // MARK: - Memory
 
 struct RecallResponse: Codable {

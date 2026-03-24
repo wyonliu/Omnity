@@ -1,10 +1,11 @@
-"""Life routes — dashboard, status, identity, autonomy."""
+"""Life routes — dashboard, status, identity, autonomy, soul card."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from ome.core import Ome
@@ -35,6 +36,25 @@ async def identity(protocol: str = "generic", ome: Ome = Depends(get_ome)) -> di
 async def daily_challenge(ome: Ome = Depends(get_ome)) -> dict[str, Any]:
     """Today's daily challenge with progress."""
     return ome.get_daily_challenge()
+
+
+@router.get("/soul-card")
+async def soul_card(ome: Ome = Depends(get_ome)) -> dict[str, Any]:
+    """Get Soul Card data (JSON). Use /soul-card/image for the rendered PNG."""
+    if not ome.soul_card_ready():
+        return {"ready": False, "conversations_needed": 10 - ome.bond.total_interactions}
+    card = ome.soul_card()
+    return {"ready": True, **card.to_dict()}
+
+
+@router.get("/soul-card/image")
+async def soul_card_image(ome: Ome = Depends(get_ome)):
+    """Get Soul Card as a rendered PNG image."""
+    if not ome.soul_card_ready():
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="需要至少10次对话才能生成灵魂卡片")
+    png_bytes = ome.soul_card_image()
+    return Response(content=png_bytes, media_type="image/png")
 
 
 @router.get("/profile")

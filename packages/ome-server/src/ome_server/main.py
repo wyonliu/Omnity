@@ -18,7 +18,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from ome_server.routes import agents, anon, auth, chat, life, memories, skills
+from ome_server.routes import agents, anon, auth, chat, life, memories, skills, viral
 
 log = logging.getLogger("ome_server")
 
@@ -59,6 +59,7 @@ app.include_router(life.router, prefix="/api", tags=["life"])
 app.include_router(memories.router, prefix="/api", tags=["memories"])
 app.include_router(skills.router, prefix="/api", tags=["skills"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
+app.include_router(viral.router, prefix="/api/viral", tags=["viral"])
 
 
 @app.get("/")

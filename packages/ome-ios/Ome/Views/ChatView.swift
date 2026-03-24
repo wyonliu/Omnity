@@ -13,6 +13,10 @@ struct ChatView: View {
     @State private var showAchievement = false
     @State private var achievementInfo: AchievementEvent?
     @State private var dailyChallenge: DailyChallenge?
+    @State private var showSoulCard = false
+    @State private var soulCardImage: UIImage?
+    @State private var soulCardLoading = false
+    @State private var messageCount = 0
     @FocusState private var inputFocused: Bool
 
     private let api = APIClient.shared
@@ -60,6 +64,11 @@ struct ChatView: View {
                         ForEach(messages) { msg in
                             MessageBubble(message: msg)
                                 .id(msg.id)
+                                .onTapGesture {
+                                    if msg.text.contains("灵魂卡片") && msg.role == .ome {
+                                        loadSoulCard()
+                                    }
+                                }
                         }
 
                         // Daily prompt chips — show only when no user messages yet
@@ -91,6 +100,38 @@ struct ChatView: View {
         }
         .background(Theme.bg)
         .onAppear { setupWelcome() }
+        .sheet(isPresented: $showSoulCard) {
+            if let img = soulCardImage {
+                VStack(spacing: 20) {
+                    Text("你的灵魂卡片").font(.headline).foregroundStyle(Theme.textPrimary)
+                    Image(uiImage: img)
+                        .resizable()
+                        .scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .shadow(radius: 10)
+                        .padding(.horizontal)
+                    Button {
+                        shareSoulCard(img)
+                    } label: {
+                        HStack {
+                            Image(systemName: "square.and.arrow.up")
+                            Text("分享到朋友圈")
+                        }
+                        .font(.headline)
+                        .foregroundStyle(Theme.bg)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Theme.accent)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                    .padding(.horizontal, 30)
+                    Button("关闭") { showSoulCard = false }
+                        .foregroundStyle(Theme.textMuted)
+                }
+                .padding(.vertical, 30)
+                .background(Theme.bg)
+            }
+        }
         .overlay {
             // Achievement toast
             if showAchievement, let ach = achievementInfo {
@@ -331,6 +372,51 @@ struct ChatView: View {
         // Only update challenge display (never intrusive)
         if let c = challenge {
             dailyChallenge = c
+        }
+
+        // Soul Card trigger: at message 10, 25, 50, 100 (natural milestones)
+        messageCount += 1
+        let milestones = [10, 25, 50, 100]
+        if milestones.contains(messageCount) && !soulCardLoading {
+            // Inject a natural Ome message hinting at the card
+            let hints = [
+                "我好像越来越懂你了… 想看看我眼中的你吗？",
+                "我对你的了解又加深了。要看看你的灵魂卡片吗？",
+                "你知道吗，我已经记住了好多关于你的事… 想看看？",
+            ]
+            let hint = hints[messageCount % hints.count]
+            let soulMsg = Message(role: .ome, text: "✨ \(hint) [点我查看灵魂卡片]")
+            messages.append(soulMsg)
+        }
+    }
+
+    // MARK: - Soul Card
+
+    private func loadSoulCard() {
+        guard !soulCardLoading else { return }
+        soulCardLoading = true
+        Task {
+            do {
+                let data = try await api.getSoulCardImage()
+                if let image = UIImage(data: data) {
+                    soulCardImage = image
+                    showSoulCard = true
+                }
+            } catch {
+                messages.append(Message(role: .ome, text: "灵魂卡片生成中，再聊几轮就好~"))
+            }
+            soulCardLoading = false
+        }
+    }
+
+    private func shareSoulCard(_ image: UIImage) {
+        let av = UIActivityViewController(
+            activityItems: [image, "我的AI分身这样看我 ✦ #OmeAI分身"],
+            applicationActivities: nil
+        )
+        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let root = scene.windows.first?.rootViewController {
+            root.present(av, animated: true)
         }
     }
 

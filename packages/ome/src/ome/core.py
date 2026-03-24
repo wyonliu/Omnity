@@ -30,6 +30,7 @@ from ome.engine.autonomy import AutonomyEngine, EventResult
 from ome.engine.conversation_strategy import (
     build_strategy_prompt, classify_memories, get_growth_phase, parse_response,
 )
+from ome.engine.soul_card import SoulCardData, generate_soul_card
 from ome.engine.permissions import PermissionSandbox, TrustLevel
 from ome.engine.personality import PersonalityEngine
 from ome.identity_protocol import OmeIdentity
@@ -444,6 +445,33 @@ class Ome:
         Simpler than full export — just paste into any AI's system prompt.
         """
         return self.soul.hydrate(context=context, max_tokens=3000)
+
+    # -- Soul Card (viral growth engine) -------------------------------------
+
+    def soul_card(self) -> SoulCardData:
+        """Generate a Soul Card — a shareable personality card.
+
+        Available after 10+ conversations. Returns card data that can be
+        rendered to an image via soul_card_renderer.render_soul_card().
+        """
+        return generate_soul_card(self)
+
+    def soul_card_image(self, output_path: str | None = None) -> bytes:
+        """Generate Soul Card as a PNG image (bytes).
+
+        Args:
+            output_path: Optional file path to save the image.
+
+        Returns:
+            PNG image bytes.
+        """
+        from ome.engine.soul_card_renderer import render_soul_card
+        card = self.soul_card()
+        return render_soul_card(card, output_path=output_path)
+
+    def soul_card_ready(self) -> bool:
+        """Check if enough data exists to generate a meaningful Soul Card."""
+        return self.bond.total_interactions >= 10
 
     # -- Status --------------------------------------------------------------
 
