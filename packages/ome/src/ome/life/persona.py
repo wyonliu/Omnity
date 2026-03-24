@@ -410,6 +410,72 @@ class PersonaEngine:
         return parse_chat_export(text)
 
     @staticmethod
+    def evolve_from_markers(
+        existing: PersonaProfile,
+        markers: list[str],
+        decay: float = 0.9,
+    ) -> PersonaProfile:
+        """Incrementally evolve persona from conversation markers.
+
+        Called after each chat with persona_markers from the LLM's <think> block.
+        Uses exponential moving average: old traits decay, new markers accumulate.
+
+        Args:
+            existing: Current persona profile
+            markers: New persona markers from this conversation (e.g., ["likes hiking", "direct speaker"])
+            decay: Weight for existing data vs new (0.9 = 90% old, 10% new)
+        """
+        if not markers:
+            return existing
+
+        evolved = PersonaProfile(
+            catchphrases=list(existing.catchphrases),
+            sentence_starters=list(existing.sentence_starters),
+            emoji_habits=list(existing.emoji_habits),
+            avg_msg_length=existing.avg_msg_length,
+            vocabulary_richness=existing.vocabulary_richness,
+            topics=list(existing.topics),
+            tone_tags=list(existing.tone_tags),
+            style_summary=existing.style_summary,
+            raw_traits=list(existing.raw_traits),
+        )
+
+        # Extract potential new traits/topics from markers
+        for marker in markers:
+            marker_lower = marker.lower().strip()
+            if not marker_lower:
+                continue
+
+            # Check if it's a tone/personality marker
+            tone_keywords = {
+                "direct": ["直接", "direct", "坦率"],
+                "warm": ["温暖", "warm", "体贴", "关心"],
+                "humorous": ["幽默", "humor", "搞笑", "有趣"],
+                "analytical": ["分析", "analytical", "逻辑", "理性"],
+                "creative": ["创意", "creative", "想象", "脑洞"],
+                "sensitive": ["敏感", "sensitive", "细腻", "感性"],
+            }
+
+            for tone, keywords in tone_keywords.items():
+                if any(kw in marker_lower for kw in keywords):
+                    if tone not in evolved.tone_tags:
+                        evolved.tone_tags.append(tone)
+                    break
+            else:
+                # Not a tone marker — treat as a trait
+                if marker_lower not in [t.lower() for t in evolved.raw_traits]:
+                    evolved.raw_traits.append(marker)
+
+        # Keep lists bounded
+        evolved.tone_tags = evolved.tone_tags[:8]
+        evolved.raw_traits = evolved.raw_traits[:12]
+
+        # Regenerate style summary
+        evolved.style_summary = _generate_style_summary(evolved)
+
+        return evolved
+
+    @staticmethod
     def merge_profiles(*profiles: PersonaProfile) -> PersonaProfile:
         """Merge multiple profiles (e.g., chat + social) into one."""
         merged = PersonaProfile()

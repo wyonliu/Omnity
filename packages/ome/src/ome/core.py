@@ -27,6 +27,9 @@ from ome.life.growth import GrowthEngine
 from ome.life.emotion import EmotionState
 from ome.life.persona import PersonaEngine, PersonaProfile, parse_chat_export
 from ome.engine.autonomy import AutonomyEngine, EventResult
+from ome.engine.conversation_strategy import (
+    build_strategy_prompt, classify_memories, get_growth_phase, parse_response,
+)
 from ome.engine.permissions import PermissionSandbox, TrustLevel
 from ome.engine.personality import PersonalityEngine
 from ome.identity_protocol import OmeIdentity
@@ -102,26 +105,71 @@ class Ome:
     def chat(self, message: str, provider: str = "") -> str:
         """Talk to your Ome. It remembers everything you've ever said.
 
-        1. Recalls relevant memories based on your message
-        2. Assembles identity + context + emotion
-        3. Generates a response (via LLM)
-        4. Commits the exchange to long-term memory
-        5. Updates life state (bond, achievements, skills, emotion)
+        Flow (with conversation strategy engine):
+        1. L0 keyword emotion update (fast fallback)
+        2. Recall + classify memories by type
+        3. Determine growth phase from total interactions
+        4. Build strategy-aware system prompt (with <think> instructions)
+        5. Generate response (LLM outputs <think> block + reply)
+        6. Parse <think> → update emotion (L1 deep) + evolve persona
+        7. Validate, commit, update life state
 
         Returns the Ome's response text.
         """
-        # Update emotion from user message
+        # L0 keyword emotion (fast fallback, always runs)
         self.emotion.update_from_message(message)
 
+        # Recall and classify memories
         memories = self.soul.recall(message, top_k=5)
+        classified = classify_memories(memories) if memories else []
         memory_context = "\n".join(
             f"- [{m.get('type', '?')}] {m.get('content', '')}"
             for m in memories
         ) if memories else "(no relevant memories yet)"
 
+        # Determine growth phase
+        phase = get_growth_phase(self.bond.total_interactions)
+
+        # Build strategy-aware system prompt
         identity = self.soul.hydrate(context=message, max_tokens=1500)
-        system_prompt = self._build_system_prompt(identity, memory_context)
-        reply = self._generate(system_prompt, message, provider)
+        personality = self.soul.identity.get("personality", {})
+        catchphrases = personality.get("catchphrases", [])
+        anchor_text = self.personality.system_prompt_injection()
+
+        system_prompt = build_strategy_prompt(
+            name=self.name,
+            identity=identity,
+            memory_context=memory_context,
+            classified_memories=classified,
+            emotion_state=self.emotion.to_dict(),
+            phase=phase,
+            personality_injection=anchor_text,
+            catchphrases=catchphrases,
+            conversation_count=self.bond.total_interactions,
+        )
+
+        # Generate (LLM will output <think>...</think> + reply)
+        raw_reply = self._generate(system_prompt, message, provider)
+
+        # Parse thinking block
+        reply, thinking = parse_response(raw_reply)
+
+        # L1 deep emotion update from LLM's assessment
+        if thinking:
+            self.emotion.update_from_llm_thinking(
+                emotion=thinking.emotion,
+                nuance=thinking.emotion_nuance,
+            )
+            # Evolve persona from conversation markers
+            if thinking.persona_markers and self._persona_profile:
+                self._persona_profile = PersonaEngine.evolve_from_markers(
+                    self._persona_profile,
+                    thinking.persona_markers,
+                )
+            elif thinking.persona_markers and not self._persona_profile:
+                # Bootstrap persona from first markers
+                from ome.life.persona import PersonaProfile as PP
+                self._persona_profile = PP(raw_traits=thinking.persona_markers[:5])
 
         # Validate response against personality
         ok, reply = self.personality.validate(reply, context=message)
@@ -557,7 +605,10 @@ class Ome:
     # -- Internal ------------------------------------------------------------
 
     def _build_system_prompt(self, identity: str, memory_context: str) -> str:
-        """Assemble the system prompt for chat."""
+        """Legacy system prompt builder — kept for mirror_chat and export.
+
+        Main chat() now uses build_strategy_prompt() from conversation_strategy.
+        """
         name = self.name
         parts = [
             f"You are {name}'s Ome — their AI twin. "
@@ -566,7 +617,6 @@ class Ome:
             f"\n## Relevant Memories\n{memory_context}",
         ]
 
-        # Inject persona catchphrases if available
         personality = self.soul.identity.get("personality", {})
         catchphrases = personality.get("catchphrases", [])
         if catchphrases:
@@ -576,12 +626,10 @@ class Ome:
                 f"Match the user's emoji habits and sentence length."
             )
 
-        # Inject emotion-based style modifier
         style_mod = self.emotion.style_modifier()
         if style_mod:
             parts.append(f"\n## Current Mood\n{self.emotion.mood_emoji()} {style_mod}")
 
-        # Inject personality anchors/boundaries as hard constraints
         anchor_text = self.personality.system_prompt_injection()
         if anchor_text:
             parts.append(f"\n{anchor_text}")

@@ -1,10 +1,11 @@
-"""Emotion State — L0 rule-based mood inference from recent interactions.
+"""Emotion State — dual-mode mood inference.
 
-No LLM needed. Uses keyword matching + interaction patterns to infer
-the Ome's emotional state, which affects its response style.
+L0: Keyword matching (fast fallback, always runs)
+L1: LLM-parsed emotion from <think> block (deep, zero extra cost)
 
-This is NOT sentiment analysis of the user — it's the Ome's own mood,
-shaped by how the relationship is going.
+When the conversation strategy engine is active, L1 emotion from the LLM's
+structured thinking replaces L0 keyword matching. This gives nuanced
+understanding like detecting that "升职了但感觉很空" is lonely, not happy.
 """
 
 from __future__ import annotations
@@ -42,7 +43,11 @@ class EmotionState:
     _MAX_SIGNALS = 20
 
     def update_from_message(self, message: str):
-        """Update mood based on a user message (L0 keyword matching)."""
+        """Update mood based on a user message (L0 keyword matching).
+
+        This is the fast fallback. When strategy engine is active,
+        update_from_llm_thinking() provides much deeper understanding.
+        """
         message_lower = message.lower()
         detected = []
 
@@ -61,6 +66,46 @@ class EmotionState:
 
         # Recalculate mood from recent signals
         self._recalculate()
+
+    def update_from_llm_thinking(self, emotion: str, nuance: str = ""):
+        """Update mood from LLM's structured thinking (L1 deep understanding).
+
+        This overrides keyword matching with the LLM's nuanced assessment.
+        e.g., "升职了但感觉很空" → emotion="lonely", nuance="表面是好消息但内心空虚"
+
+        The emotion comes from the <think> block parsed by conversation_strategy.
+        """
+        # Map extended emotions to our core set + extras
+        emotion_map = {
+            "happy": "happy",
+            "sad": "sad",
+            "excited": "excited",
+            "stressed": "stressed",
+            "curious": "curious",
+            "neutral": "neutral",
+            "lonely": "sad",       # lonely maps to sad but with different nuance
+            "confused": "curious",  # confused maps to curious
+            "grateful": "happy",   # grateful maps to happy
+            "angry": "stressed",   # angry maps to stressed
+        }
+        mapped = emotion_map.get(emotion, "neutral")
+
+        # Override: LLM assessment is authoritative
+        self.recent_signals.append(mapped)
+        if len(self.recent_signals) > self._MAX_SIGNALS:
+            self.recent_signals = self.recent_signals[-self._MAX_SIGNALS:]
+
+        # Direct set — LLM's read is more accurate than voting
+        self.mood = mapped
+
+        # Adjust energy/warmth based on nuanced emotion
+        if emotion in ("excited", "happy", "grateful"):
+            self.energy = min(1.0, self.energy + 0.1)
+        elif emotion in ("sad", "lonely"):
+            self.energy = max(0.2, self.energy - 0.05)
+            self.warmth = min(1.0, self.warmth + 0.05)  # sadness increases warmth need
+        elif emotion in ("stressed", "angry"):
+            self.energy = max(0.2, self.energy - 0.1)
 
     def update_from_interaction(self, *, streak_days: int = 0, bond_level: int = 0,
                                 idle_days: int = 0, actions_today: int = 0,
@@ -122,7 +167,11 @@ class EmotionState:
         }.get(self.mood, "😌")
 
     def style_modifier(self) -> str:
-        """Return a style hint that can be injected into the system prompt."""
+        """Return a style hint for system prompt injection.
+
+        When strategy engine is active, this is less important since the
+        LLM already has full emotional context. Kept for backward compat.
+        """
         modifiers = {
             "happy": "回复时语气温暖愉悦，多用积极的词汇",
             "sad": "回复时语气温柔体贴，表达关心和陪伴",
