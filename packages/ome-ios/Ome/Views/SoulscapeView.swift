@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Soulscape — visual growth stage + greeting + quick stats.
+/// Soulscape — the Ome's soul visualized. Orb + growth stage + quick stats.
 struct SoulscapeView: View {
     @EnvironmentObject var session: SessionManager
     @State private var profile: ProfileResponse?
@@ -9,40 +9,42 @@ struct SoulscapeView: View {
     private let api = APIClient.shared
 
     private let stages = [
-        ("🌱", "种子", "一切刚开始"),
-        ("🌿", "嫩芽", "开始有记忆了"),
-        ("🌳", "小树", "开始有生活了"),
-        ("🌲", "茂盛", "能帮你做事了"),
-        ("🍊", "结果", "能替你社交了"),
-        ("🌸", "繁花", "完全代表你了"),
-        ("🏔️", "参天", "传说级存在"),
+        ("种子", "一切刚开始"),
+        ("嫩芽", "开始有记忆了"),
+        ("小树", "开始有生活了"),
+        ("茂盛", "能帮你做事了"),
+        ("结果", "能替你社交了"),
+        ("繁花", "完全代表你了"),
+        ("参天", "传说级存在"),
     ]
 
-    private var stage: (String, String, String) {
-        let level = min(profile?.bond.level ?? 0, 6)
-        return stages[level]
-    }
+    private var level: Int { min(profile?.bond.level ?? session.bondLevel, 6) }
+
+    // Orb grows with bond level
+    private var orbSize: CGFloat { CGFloat(80 + level * 12) }
+    private var orbIntensity: CGFloat { 0.35 + CGFloat(level) * 0.1 }
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                // Soulscape visual
-                VStack(spacing: 8) {
-                    Text(stage.0)
-                        .font(.system(size: 80))
-                    Text("灵境 · 第 \(profile?.bond.total_interactions ?? 0) 天")
-                        .font(.body)
-                        .foregroundStyle(Theme.textSecondary)
-                    Text(stage.2)
+            VStack(spacing: 24) {
+                // Soulscape — orb as the centerpiece
+                VStack(spacing: 12) {
+                    OmeOrb(size: orbSize, intensity: orbIntensity)
+                        .padding(.top, 20)
+
+                    Text(stages[level].0)
+                        .font(.title3.bold())
+                        .foregroundStyle(Theme.accent)
+
+                    Text("Lv.\(level) · \(stages[level].1)")
                         .font(.caption)
                         .foregroundStyle(Theme.textMuted)
                 }
-                .padding(.vertical, 32)
+                .padding(.vertical, 16)
 
                 // Greeting
                 HStack(spacing: 12) {
-                    Text(profile?.emotion.mood_emoji ?? "😌")
-                        .font(.title)
+                    OmeOrbMini(size: 32)
                     Text("嗨，\(session.userName)。今天想聊什么？")
                         .font(.body)
                         .foregroundStyle(Theme.textPrimary)
@@ -59,13 +61,13 @@ struct SoulscapeView: View {
 
                 // Quick stats
                 HStack(spacing: 8) {
-                    StatCard(value: "Lv.\(profile?.bond.level ?? 0)",
-                             label: profile?.bond.name ?? "初见",
+                    StatCard(value: "Lv.\(level)",
+                             label: profile?.bond.name ?? stages[level].0,
                              color: Theme.bondGreen)
                     StatCard(value: "\(profile?.streak.current ?? 0)",
                              label: "连续天数",
                              color: Theme.streakOrange)
-                    StatCard(value: profile?.achievements_count ?? "0/0",
+                    StatCard(value: profile?.achievements_count ?? "0",
                              label: "成就",
                              color: Theme.achieveGold)
                     StatCard(value: "\(profile?.total_memories ?? 0)",
@@ -112,7 +114,7 @@ struct SoulscapeView: View {
                 session.updateBondLevel(level)
             }
         } catch {
-            print("Soulscape load error:", error)
+            // Silent — stats just show cached/default values
         }
     }
 }
@@ -130,6 +132,7 @@ struct StatCard: View {
             Text(label)
                 .font(.caption2)
                 .foregroundStyle(Theme.textMuted)
+                .lineLimit(1)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)

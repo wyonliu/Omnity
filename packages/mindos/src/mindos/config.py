@@ -60,7 +60,7 @@ _DEFAULT_CONFIG: dict[str, Any] = {
             "api_key_env": "DEEPSEEK_API_KEY",
             "model": "deepseek-chat",
             "priority": 1,
-            "for": ["commit_digest", "reflection", "reasoning"],
+            "for": ["chat", "commit_digest", "reflection", "reasoning"],
         },
         {
             "name": "openai",

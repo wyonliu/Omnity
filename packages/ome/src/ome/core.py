@@ -605,7 +605,6 @@ class Ome:
                     system=system,
                     user=user_message,
                     max_tokens=1024,
-                    provider_name=provider or None,
                 )
                 if result:
                     return result

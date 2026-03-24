@@ -1,11 +1,11 @@
 import SwiftUI
 
-/// Life dashboard — bond progress, achievements, skills, streak.
+/// Life dashboard — bond progress, achievements, streak.
 struct LifeView: View {
     @EnvironmentObject var session: SessionManager
     @State private var profile: ProfileResponse?
     @State private var dashboard: DashboardResponse?
-    @State private var selectedTab = 0
+    @State private var loadError = false
 
     private let api = APIClient.shared
     private let milestones = [3, 7, 14, 30, 90, 365]
@@ -15,42 +15,63 @@ struct LifeView: View {
         ("🍊", "结果"), ("🌸", "繁花"), ("🏔️", "参天"),
     ]
 
+    private var bondProgress: Double {
+        guard let bond = profile?.bond else { return 0 }
+        let needed = bond.interactions_needed ?? 50
+        guard needed > 0 else { return 1.0 }
+        let total = bond.total_interactions ?? 0
+        // Progress within current level
+        return min(1.0, Double(total % needed) / Double(needed))
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                // Header
-                Text("📊 成长")
-                    .font(.title2.bold())
-                    .foregroundStyle(Theme.textPrimary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 8)
+                // Header with orb
+                HStack(spacing: 10) {
+                    OmeOrbMini(size: 28)
+                    Text("成长")
+                        .font(.title2.bold())
+                        .foregroundStyle(Theme.textPrimary)
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
 
                 // Bond hero
-                let level = min(profile?.bond.level ?? 0, 6)
-                VStack(spacing: 8) {
+                let level = min(profile?.bond.level ?? session.bondLevel, 6)
+                VStack(spacing: 10) {
                     Text(stages[level].0)
                         .font(.system(size: 56))
+
                     Text("Lv.\(level) · \(stages[level].1)")
                         .font(.headline.bold())
                         .foregroundStyle(Theme.bondGreen)
 
-                    // Progress bar
+                    // Progress bar — actual calculation
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
                             RoundedRectangle(cornerRadius: 3)
                                 .fill(Theme.bgInput)
                             RoundedRectangle(cornerRadius: 3)
                                 .fill(Theme.bondGreen)
-                                .frame(width: geo.size.width * 0.3) // placeholder
+                                .frame(width: geo.size.width * bondProgress)
+                                .animation(.easeInOut(duration: 0.5), value: bondProgress)
                         }
                     }
                     .frame(height: 6)
                     .padding(.horizontal, 24)
 
-                    Text("第 \(profile?.bond.total_interactions ?? 0) 次对话")
-                        .font(.caption)
-                        .foregroundStyle(Theme.textMuted)
+                    if let bond = profile?.bond {
+                        Text("第 \(bond.total_interactions ?? 0) 次对话")
+                            .font(.caption)
+                            .foregroundStyle(Theme.textMuted)
+                        if let next = bond.next_level, let needed = bond.interactions_needed {
+                            Text("距离「\(next)」还需 \(needed) 次对话")
+                                .font(.caption2)
+                                .foregroundStyle(Theme.textMuted.opacity(0.7))
+                        }
+                    }
                 }
                 .padding()
                 .background(Theme.bgCard)
@@ -79,13 +100,14 @@ struct LifeView: View {
                     }
 
                     // Milestone dots
-                    HStack {
+                    HStack(spacing: 0) {
                         ForEach(milestones, id: \.self) { m in
                             let done = (profile?.streak.current ?? 0) >= m
                             Text("\(m)")
                                 .font(.caption2.bold())
                                 .foregroundStyle(done ? Theme.bg : Theme.textMuted)
-                                .frame(width: 40, height: 40)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 36)
                                 .background(done ? Theme.streakOrange : Theme.bgInput)
                                 .clipShape(Circle())
                         }
@@ -147,6 +169,14 @@ struct LifeView: View {
                     .overlay(RoundedRectangle(cornerRadius: Theme.cornerRadius).stroke(Theme.border))
                     .padding(.horizontal, 20)
                 }
+
+                // Error state
+                if loadError {
+                    Text("加载失败，下拉刷新重试")
+                        .font(.caption)
+                        .foregroundStyle(Theme.textMuted)
+                        .padding()
+                }
             }
             .padding(.bottom, 32)
         }
@@ -156,13 +186,17 @@ struct LifeView: View {
     }
 
     private func load() async {
+        loadError = false
         do {
             async let p = api.getProfile()
             async let d = api.getDashboard()
             profile = try await p
             dashboard = try await d
+            if let level = profile?.bond.level {
+                session.updateBondLevel(level)
+            }
         } catch {
-            print("Life load error:", error)
+            loadError = true
         }
     }
 }

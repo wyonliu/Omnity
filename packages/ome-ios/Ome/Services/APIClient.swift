@@ -6,7 +6,7 @@ actor APIClient {
     static let shared = APIClient()
 
     #if DEBUG
-    private let baseURL = "http://localhost:8765/api"
+    private let baseURL = "http://192.168.3.242:8765/api"
     #else
     private let baseURL = "https://api.ome.ai/api"
     #endif
@@ -91,7 +91,7 @@ actor APIClient {
                 do {
                     let token = UserDefaults.standard.string(forKey: "ome_token")
                     #if DEBUG
-                    let urlStr = "http://localhost:8765/api/chat/stream"
+                    let urlStr = "http://192.168.3.242:8765/api/chat/stream"
                     #else
                     let urlStr = "https://api.ome.ai/api/chat/stream"
                     #endif

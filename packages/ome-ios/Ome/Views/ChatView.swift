@@ -13,15 +13,21 @@ struct ChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                Text(isMirror ? "🪞 镜像 · \(session.userName)" : "💬 对话")
-                    .font(.title2.bold())
-                    .foregroundStyle(Theme.textPrimary)
+            // Header with orb
+            HStack(spacing: 10) {
+                OmeOrbMini(size: 32)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(isMirror ? "镜像 · \(session.userName)" : "Ome")
+                        .font(.headline)
+                        .foregroundStyle(Theme.textPrimary)
+                    Text(isMirror ? "用你的语气说话" : "你的 AI 化身")
+                        .font(.caption2)
+                        .foregroundStyle(Theme.textMuted)
+                }
 
                 Spacer()
 
-                Button(isMirror ? "普通" : "镜像") {
+                Button(isMirror ? "对话" : "镜像") {
                     isMirror.toggle()
                     setupWelcome()
                 }
@@ -33,7 +39,7 @@ struct ChatView: View {
                 .clipShape(Capsule())
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+            .padding(.vertical, 10)
             .background(Theme.bg)
             .overlay(alignment: .bottom) {
                 Divider().background(Theme.border)
@@ -95,8 +101,7 @@ struct ChatView: View {
                 role: .ome,
                 text: isMirror
                     ? "镜像模式：我会用\(session.userName)的语气说话。试试看？"
-                    : "嗨！有什么想聊的？",
-                moodEmoji: "😊"
+                    : "嗨，\(session.userName)。想聊点什么？"
             )
         ]
     }
@@ -117,7 +122,7 @@ struct ChatView: View {
     }
 
     private func sendStream(_ text: String) {
-        let streamMsg = Message(role: .ome, text: "", moodEmoji: "💭", isStreaming: true)
+        let streamMsg = Message(role: .ome, text: "", isStreaming: true)
         let streamId = streamMsg.id
         messages.append(streamMsg)
 
@@ -134,7 +139,6 @@ struct ChatView: View {
                     if token.done == true {
                         if let idx = messages.firstIndex(where: { $0.id == streamId }) {
                             messages[idx].text = token.full_reply ?? accumulated
-                            messages[idx].moodEmoji = token.mood_emoji
                             messages[idx].isStreaming = false
                         }
                         if let level = token.bond_level {
@@ -148,7 +152,6 @@ struct ChatView: View {
                     let result = try await api.chat(text)
                     if let idx = messages.firstIndex(where: { $0.id == streamId }) {
                         messages[idx].text = result.reply
-                        messages[idx].moodEmoji = result.mood_emoji
                         messages[idx].isStreaming = false
                     }
                     session.updateBondLevel(result.bond_level)
@@ -167,7 +170,7 @@ struct ChatView: View {
         Task {
             do {
                 let result = try await api.mirror(text)
-                messages.append(Message(role: .ome, text: result.reply, moodEmoji: result.mood_emoji))
+                messages.append(Message(role: .ome, text: result.reply))
             } catch {
                 messages.append(Message(role: .ome, text: "连接失败: \(error.localizedDescription)"))
             }

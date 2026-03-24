@@ -15,15 +15,18 @@ struct MemoryView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Header
-            VStack(alignment: .leading, spacing: 4) {
-                Text("🧠 记忆")
-                    .font(.title2.bold())
-                    .foregroundStyle(Theme.textPrimary)
-                Text(memories.isEmpty ? "搜索 Ome 的记忆" : "\(memories.count) 条记忆")
-                    .font(.caption)
-                    .foregroundStyle(Theme.textMuted)
+            HStack(spacing: 10) {
+                OmeOrbMini(size: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("记忆")
+                        .font(.title2.bold())
+                        .foregroundStyle(Theme.textPrimary)
+                    Text(memories.isEmpty ? "搜索 Ome 的记忆" : "\(memories.count) 条记忆")
+                        .font(.caption)
+                        .foregroundStyle(Theme.textMuted)
+                }
+                Spacer()
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
             .overlay(alignment: .bottom) { Divider().background(Theme.border) }
@@ -39,7 +42,7 @@ struct MemoryView: View {
                     .onSubmit { search() }
 
                 Button(action: { search() }) {
-                    Text("搜")
+                    Image(systemName: "magnifyingglass")
                         .font(.body.bold())
                         .foregroundStyle(Theme.bg)
                         .frame(width: 44, height: 44)
@@ -48,9 +51,12 @@ struct MemoryView: View {
                 }
                 .disabled(query.trimmingCharacters(in: .whitespaces).isEmpty)
 
-                Button(action: { showAdd.toggle() }) {
-                    Text(showAdd ? "×" : "+")
-                        .font(.title2)
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) { showAdd.toggle() }
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                }) {
+                    Image(systemName: showAdd ? "xmark" : "plus")
+                        .font(.body.bold())
                         .foregroundStyle(Theme.accent)
                         .frame(width: 44, height: 44)
                         .background(Theme.bgCard)
@@ -85,9 +91,10 @@ struct MemoryView: View {
                 .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius))
                 .overlay(
                     RoundedRectangle(cornerRadius: Theme.cornerRadius)
-                        .stroke(Theme.accent, lineWidth: 1)
+                        .stroke(Theme.accent.opacity(0.5), lineWidth: 1)
                 )
                 .padding(.horizontal)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
             // Memory list
@@ -98,7 +105,7 @@ struct MemoryView: View {
             } else if memories.isEmpty {
                 Spacer()
                 VStack(spacing: 12) {
-                    Text("🌊").font(.system(size: 48))
+                    OmeOrb(size: 40, intensity: 0.3, breathing: false)
                     Text(hasSearched ? "没有找到相关记忆" : "和 Ome 聊天，记忆会自动积累")
                         .font(.body)
                         .foregroundStyle(Theme.textMuted)
@@ -114,9 +121,13 @@ struct MemoryView: View {
                                     .foregroundStyle(Theme.textPrimary)
                                     .lineSpacing(4)
                                 if let score = mem.score {
-                                    Text("相关度 \(Int(score * 100))%")
-                                        .font(.caption2)
-                                        .foregroundStyle(Theme.textMuted)
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "waveform")
+                                            .font(.caption2)
+                                        Text("相关度 \(Int(score * 100))%")
+                                            .font(.caption2)
+                                    }
+                                    .foregroundStyle(Theme.textMuted)
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -147,7 +158,7 @@ struct MemoryView: View {
                 let result = try await api.recall(q)
                 memories = result.results
             } catch {
-                print("Recall error:", error)
+                // Silent — empty state handles it
             }
             loading = false
         }
@@ -161,10 +172,11 @@ struct MemoryView: View {
             do {
                 try await api.remember(text)
                 newMemory = ""
-                showAdd = false
+                withAnimation { showAdd = false }
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
                 search(query: "最近的记忆")
             } catch {
-                print("Remember error:", error)
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
             }
             saving = false
         }

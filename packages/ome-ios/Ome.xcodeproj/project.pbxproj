@@ -8,11 +8,12 @@
 
 /* Begin PBXBuildFile section */
 		0352EC4A9F52CCF0C22BA3BF /* SoftRegisterSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0495D2C050511AC52FDD9D87 /* SoftRegisterSheet.swift */; };
-		09622A3679D47E18115725DD /* FirstChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB2811BAB9D7E34A943F6E8B /* FirstChatView.swift */; };
 		0F2D8009C4B717CE9207D7EB /* MemoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F528DC02D6842E0E292D7E96 /* MemoryView.swift */; };
 		129944915363470C4D142A37 /* APIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0735B0320F6B20F6A636277 /* APIModels.swift */; };
 		158104F95A9F383B4ABE38F6 /* MessageBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = B39D8C52C1B6682B463F4D75 /* MessageBubble.swift */; };
 		1BAC606340D206119CF688F6 /* LifeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2BB2418044A64DC0EC67C7A /* LifeView.swift */; };
+		24F954AF22FE68159444F9D5 /* OmeOrb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03F1281639CC8BE145F195A8 /* OmeOrb.swift */; };
+		47DE9B798BCEF81CC8092355 /* AwakeningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58460D545D483D49A3597A1D /* AwakeningView.swift */; };
 		55F507D8028A9F22CF554E98 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4B5CFE88050B0DDC6AB2B8C /* ChatView.swift */; };
 		72E5943F4B408B2D5F90E003 /* SessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A3E5B767B7F6A8EE2A3E9B /* SessionManager.swift */; };
 		8E754CDEE3169C56128AB1C6 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D42438502FE70433E00EF55B /* MainTabView.swift */; };
@@ -28,6 +29,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		03F1281639CC8BE145F195A8 /* OmeOrb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmeOrb.swift; sourceTree = "<group>"; };
 		0495D2C050511AC52FDD9D87 /* SoftRegisterSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoftRegisterSheet.swift; sourceTree = "<group>"; };
 		103AA964F0D2589A12EB6B96 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		14A3E5B767B7F6A8EE2A3E9B /* SessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionManager.swift; sourceTree = "<group>"; };
@@ -35,6 +37,7 @@
 		4A445D03246DEBAFE24DB4AC /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		553012559D31BBD092A21CFE /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
 		57A56180C007F5E510CE4E5F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		58460D545D483D49A3597A1D /* AwakeningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AwakeningView.swift; sourceTree = "<group>"; };
 		9064B2AEEC33610E58D0FDCE /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		980DBFC336A18BDC35AE1BA9 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		9E6C185933D3BD0FA1CE5E98 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
@@ -46,7 +49,6 @@
 		D239F8B0E176FF24BB1EBDAF /* Ome.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Ome.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D42438502FE70433E00EF55B /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		D4B5CFE88050B0DDC6AB2B8C /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
-		DB2811BAB9D7E34A943F6E8B /* FirstChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstChatView.swift; sourceTree = "<group>"; };
 		F528DC02D6842E0E292D7E96 /* MemoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -96,8 +98,8 @@
 			isa = PBXGroup;
 			children = (
 				4706CAFA426B7B3E5F6939D0 /* AgentsView.swift */,
+				58460D545D483D49A3597A1D /* AwakeningView.swift */,
 				D4B5CFE88050B0DDC6AB2B8C /* ChatView.swift */,
-				DB2811BAB9D7E34A943F6E8B /* FirstChatView.swift */,
 				A2BB2418044A64DC0EC67C7A /* LifeView.swift */,
 				D42438502FE70433E00EF55B /* MainTabView.swift */,
 				F528DC02D6842E0E292D7E96 /* MemoryView.swift */,
@@ -120,6 +122,7 @@
 			isa = PBXGroup;
 			children = (
 				B39D8C52C1B6682B463F4D75 /* MessageBubble.swift */,
+				03F1281639CC8BE145F195A8 /* OmeOrb.swift */,
 				0495D2C050511AC52FDD9D87 /* SoftRegisterSheet.swift */,
 			);
 			path = Components;
@@ -156,7 +159,7 @@
 				LastUpgradeCheck = 2630;
 				TargetAttributes = {
 					4D63704ABC843A2B422C5080 = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = 2ZPPQ465YX;
 					};
 				};
 			};
@@ -198,14 +201,15 @@
 				94D7764CA80FC47D079625A2 /* APIClient.swift in Sources */,
 				129944915363470C4D142A37 /* APIModels.swift in Sources */,
 				9661A1B8D7F5F355A6FE1FA2 /* AgentsView.swift in Sources */,
+				47DE9B798BCEF81CC8092355 /* AwakeningView.swift in Sources */,
 				55F507D8028A9F22CF554E98 /* ChatView.swift in Sources */,
-				09622A3679D47E18115725DD /* FirstChatView.swift in Sources */,
 				1BAC606340D206119CF688F6 /* LifeView.swift in Sources */,
 				8E754CDEE3169C56128AB1C6 /* MainTabView.swift in Sources */,
 				0F2D8009C4B717CE9207D7EB /* MemoryView.swift in Sources */,
 				9460D782C746434A5E7298CE /* Message.swift in Sources */,
 				158104F95A9F383B4ABE38F6 /* MessageBubble.swift in Sources */,
 				BE19A33A244C3DCF5D08B9D6 /* OmeApp.swift in Sources */,
+				24F954AF22FE68159444F9D5 /* OmeOrb.swift in Sources */,
 				A53C210B4F8AF9F08728216A /* RootView.swift in Sources */,
 				72E5943F4B408B2D5F90E003 /* SessionManager.swift in Sources */,
 				F0F14C232439C8440CA7B1D5 /* SettingsView.swift in Sources */,
@@ -253,7 +257,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 2ZPPQ465YX;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -342,7 +346,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 2ZPPQ465YX;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;

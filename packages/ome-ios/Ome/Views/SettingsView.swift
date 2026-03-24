@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// Settings — autonomy level, about, logout.
+/// Settings — profile, autonomy level, about, logout.
 struct SettingsView: View {
     @EnvironmentObject var session: SessionManager
-    @State private var autonomyLevel = 0
+    @AppStorage("ome_autonomy_level") private var autonomyLevel = 0
     @State private var profile: ProfileResponse?
     @State private var showLogoutConfirm = false
 
@@ -19,29 +19,37 @@ struct SettingsView: View {
         ScrollView {
             VStack(spacing: 16) {
                 // Header
-                Text("⚙️ 设置")
-                    .font(.title2.bold())
-                    .foregroundStyle(Theme.textPrimary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 8)
+                HStack(spacing: 10) {
+                    OmeOrbMini(size: 28)
+                    Text("设置")
+                        .font(.title2.bold())
+                        .foregroundStyle(Theme.textPrimary)
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
 
                 // Profile card
                 HStack(spacing: 16) {
-                    Text(String(session.userName.prefix(1)).uppercased())
-                        .font(.title2.bold())
-                        .foregroundStyle(Theme.bg)
-                        .frame(width: 48, height: 48)
-                        .background(Theme.accent)
-                        .clipShape(Circle())
+                    ZStack {
+                        Circle()
+                            .fill(Theme.accent)
+                            .frame(width: 48, height: 48)
+                        Text(String(session.userName.prefix(1)).uppercased())
+                            .font(.title2.bold())
+                            .foregroundStyle(Theme.bg)
+                    }
 
-                    VStack(alignment: .leading) {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text(session.userName)
                             .font(.headline)
                             .foregroundStyle(Theme.textPrimary)
-                        Text("Lv.\(profile?.bond.level ?? 0) · \(profile?.bond.total_interactions ?? 0) 次对话 · \(profile?.total_memories ?? 0) 条记忆")
-                            .font(.caption)
-                            .foregroundStyle(Theme.textMuted)
+                        HStack(spacing: 8) {
+                            Label("Lv.\(profile?.bond.level ?? session.bondLevel)", systemImage: "leaf")
+                            Label("\(profile?.total_memories ?? 0) 记忆", systemImage: "brain.head.profile")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(Theme.textMuted)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -51,8 +59,8 @@ struct SettingsView: View {
                 .overlay(RoundedRectangle(cornerRadius: Theme.cornerRadius).stroke(Theme.border))
                 .padding(.horizontal, 20)
 
-                // Autonomy level
-                VStack(alignment: .leading, spacing: 8) {
+                // Autonomy level (persisted via @AppStorage)
+                VStack(alignment: .leading, spacing: 10) {
                     Text("自治等级")
                         .font(.headline)
                         .foregroundStyle(Theme.accent)
@@ -64,7 +72,10 @@ struct SettingsView: View {
                         let al = autonomyLevels[i]
                         let selected = autonomyLevel == i
                         Button {
-                            autonomyLevel = i
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                autonomyLevel = i
+                            }
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         } label: {
                             HStack(spacing: 12) {
                                 Text(al.0).font(.title2)
@@ -78,8 +89,7 @@ struct SettingsView: View {
                                 }
                                 Spacer()
                                 if selected {
-                                    Text("✓")
-                                        .font(.headline)
+                                    Image(systemName: "checkmark.circle.fill")
                                         .foregroundStyle(Theme.accent)
                                 }
                             }
@@ -97,9 +107,9 @@ struct SettingsView: View {
 
                 // About
                 VStack(spacing: 0) {
-                    aboutRow("版本", value: "Ome v0.4.0")
+                    aboutRow("版本", value: "0.1.0")
                     Divider().background(Theme.border)
-                    aboutRow("引擎", value: "Mindos v0.4.0")
+                    aboutRow("引擎", value: "Mindos + Ome")
                     Divider().background(Theme.border)
                     aboutRow("项目", value: "Omnity (开源)")
                 }
@@ -121,7 +131,7 @@ struct SettingsView: View {
                         .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius))
                         .overlay(
                             RoundedRectangle(cornerRadius: Theme.cornerRadius)
-                                .stroke(Theme.error, lineWidth: 1)
+                                .stroke(Theme.error.opacity(0.3), lineWidth: 1)
                         )
                 }
                 .padding(.horizontal, 20)
@@ -143,7 +153,7 @@ struct SettingsView: View {
                 Task { await session.logout() }
             }
         } message: {
-            Text("确定要退出吗？Ome 的记忆不会丢失。")
+            Text("确定要退出吗？Ome 的记忆不会丢失，下次回来还在。")
         }
     }
 
