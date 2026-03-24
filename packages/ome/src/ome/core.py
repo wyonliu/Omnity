@@ -24,7 +24,7 @@ from mindos.core import Mindos
 from ome.life.bond import BondState
 from ome.life.achievements import AchievementTracker
 from ome.life.growth import GrowthEngine
-from ome.life.emotion import EmotionState
+from ome.life.emotion import EmotionState, detect_crisis
 from ome.life.persona import PersonaEngine, PersonaProfile, parse_chat_export
 from ome.engine.autonomy import AutonomyEngine, EventResult
 from ome.engine.conversation_strategy import (
@@ -119,8 +119,17 @@ class Ome:
         # L0 keyword emotion (fast fallback, always runs)
         self.emotion.update_from_message(message)
 
-        # Recall and classify memories
-        memories = self.soul.recall(message, top_k=5)
+        # Crisis detection — safety net, highest priority
+        is_crisis = detect_crisis(message)
+
+        # Low-engagement detection — "嗯", "哦", "好" etc.
+        stripped = message.strip()
+        is_low_engagement = len(stripped) <= 4 and not any(
+            c in stripped for c in "？?！!…"
+        )
+
+        # Recall and classify memories (15 for richer context)
+        memories = self.soul.recall(message, top_k=15)
         classified = classify_memories(memories) if memories else []
         memory_context = "\n".join(
             f"- [{m.get('type', '?')}] {m.get('content', '')}"
@@ -146,6 +155,8 @@ class Ome:
             personality_injection=anchor_text,
             catchphrases=catchphrases,
             conversation_count=self.bond.total_interactions,
+            is_crisis=is_crisis,
+            is_low_engagement=is_low_engagement,
         )
 
         # Generate (LLM will output <think>...</think> + reply)
@@ -206,15 +217,21 @@ class Ome:
         # Track daily stats for challenges
         self._record_daily_stat(message)
 
+        # Suppress gamification noise during emotional/crisis/low-engagement moments
+        suppress_gamification = is_crisis or (
+            self.emotion.mood in ("sad", "stressed") and is_low_engagement
+        )
+
         self._check_achievements(message=message)
-        streak_rewards = self._check_streak_rewards()
+        streak_rewards = self._check_streak_rewards() if not suppress_gamification else []
         self._save_life_state()
 
-        # Append streak reward messages
-        for reward in streak_rewards:
-            reply += f"\n\n🎁 {reward['name']}：{reward['description']}"
+        # Append streak reward messages (suppressed during sensitive moments)
+        if not suppress_gamification:
+            for reward in streak_rewards:
+                reply += f"\n\n🎁 {reward['name']}：{reward['description']}"
 
-        if level_result.get("level_changed"):
+        if level_result.get("level_changed") and not suppress_gamification:
             lvl_name = level_result["level_name"]
             new_level = level_result["new_level"]
             reply += f"\n\n✨ 我们的关系升级了：{lvl_name}！"
@@ -792,11 +809,8 @@ class Ome:
             except Exception as e:
                 log.warning("LLM generation failed: %s", e)
 
-        # Fallback: return a helpful message instead of crashing
+        # Fallback: user-friendly message without exposing internals
         return (
-            f"[Ome needs an LLM to chat. "
-            f"Set DEEPSEEK_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY "
-            f"in your environment, then try again.]\n\n"
-            f"In the meantime, I remembered what you said. "
-            f"Try: ome recall \"{user_message[:30]}...\""
+            "抱歉，我现在没法回复你——需要先配置好我的大脑才能聊天。"
+            "不过我已经记住你说的话了，等我准备好就来找你！"
         )

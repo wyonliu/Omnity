@@ -116,8 +116,14 @@ actor APIClient {
                     request.httpBody = try JSONEncoder().encode(ChatRequest(message: message))
 
                     let (bytes, response) = try await URLSession.shared.bytes(for: request)
-                    guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                    guard let http = response as? HTTPURLResponse else {
                         throw APIError.serverError("Stream failed")
+                    }
+                    if http.statusCode == 401 {
+                        throw APIError.unauthorized
+                    }
+                    guard http.statusCode == 200 else {
+                        throw APIError.serverError("Stream failed (\(http.statusCode))")
                     }
 
                     for try await line in bytes.lines {
@@ -217,6 +223,8 @@ actor APIClient {
         guard (200...299).contains(http.statusCode) else {
             let detail = (try? JSONDecoder().decode([String: String].self, from: data))?["detail"]
             if http.statusCode == 401 {
+                // Clear stale token immediately so UI can react
+                token = nil
                 throw APIError.unauthorized
             }
             throw APIError.serverError(detail ?? "服务器错误 (\(http.statusCode))")

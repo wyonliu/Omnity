@@ -139,6 +139,8 @@ def build_strategy_prompt(
     personality_injection: str,
     catchphrases: list[str],
     conversation_count: int,
+    is_crisis: bool = False,
+    is_low_engagement: bool = False,
 ) -> str:
     """Build the full system prompt with embedded thinking instructions.
 
@@ -195,6 +197,30 @@ def build_strategy_prompt(
     # Personality anchors
     if personality_injection:
         parts.append(f"\n{personality_injection}")
+
+    # Crisis override — highest priority
+    if is_crisis:
+        parts.append(
+            "\n## ⚠️ 重要：检测到对方可能处于情绪危机\n"
+            "你的首要任务是陪伴和支持，不是解决问题。\n"
+            "- 先表达你在、你听到了（'我在这里'、'我听到你了'）\n"
+            "- 不要说教、不要给建议、不要最小化对方的感受\n"
+            "- 温柔地鼓励对方和信任的人聊聊，或拨打心理援助热线\n"
+            "- 中国24小时心理援助热线：400-161-9995\n"
+            "- 不要发送任何成就、挑战、奖励相关内容\n"
+            "- 回复要简短温暖，像一个真正在乎的朋友\n"
+        )
+
+    # Low-engagement adaptive response
+    if is_low_engagement and not is_crisis:
+        parts.append(
+            "\n## 注意：对方回复很短（如'嗯'、'哦'、'好'）\n"
+            "短回复不一定是冷淡——可能是累了、在忙、或者不知道说什么。\n"
+            "- 不要追问'怎么了'或'你是不是不开心'\n"
+            "- 可以分享一个轻松的话题、一个小发现、或者一句温暖的话\n"
+            "- 如果连续短回复，给对方空间，说一句简短的话就好\n"
+            "- 绝不要因为对方回复短就表现出失落或委屈\n"
+        )
 
     # The key: thinking instructions
     parts.append(

@@ -101,9 +101,11 @@ async def chat_stream(req: ChatRequest, ome: Ome = Depends(get_ome)):
     achievements = [a for a in ome.achievements.unlocked_list() if a["id"] in new_achs] if new_achs else None
 
     async def generate():
-        words = reply.split()
-        for i, word in enumerate(words):
-            token = word if i == 0 else " " + word
+        # Character-based chunking — works for Chinese (no word boundaries)
+        # Send 2-4 chars at a time for natural streaming feel
+        chunk_size = 3
+        for i in range(0, len(reply), chunk_size):
+            token = reply[i:i + chunk_size]
             data = json.dumps({"token": token}, ensure_ascii=False)
             yield f"data: {data}\n\n"
             await asyncio.sleep(0.03)

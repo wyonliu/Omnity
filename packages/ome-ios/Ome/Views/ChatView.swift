@@ -252,6 +252,7 @@ struct ChatView: View {
                     }
                 }
             } catch {
+                // SSE failed — fallback to non-streaming
                 do {
                     let result = try await api.chat(text)
                     if let idx = messages.firstIndex(where: { $0.id == streamId }) {
@@ -264,12 +265,20 @@ struct ChatView: View {
                         achievements: result.achievements,
                         challenge: result.daily_challenge
                     )
-                } catch {
+                } catch let fallbackError {
                     if let idx = messages.firstIndex(where: { $0.id == streamId }) {
-                        messages[idx].text = friendlyError(error)
+                        messages[idx].text = friendlyError(fallbackError)
                         messages[idx].isStreaming = false
                     }
+                    // Handle 401 globally
+                    if let apiErr = fallbackError as? APIError, case .unauthorized = apiErr {
+                        await session.logout()
+                    }
                 }
+            }
+            // Safety: ensure streaming state is always cleared
+            if let idx = messages.firstIndex(where: { $0.id == streamId }), messages[idx].isStreaming {
+                messages[idx].isStreaming = false
             }
             sending = false
         }
@@ -310,6 +319,7 @@ struct ChatView: View {
     // MARK: - Gamification Events
 
     private func handleGameEvents(levelUp: LevelUpEvent?, achievements: [AchievementEvent]?, challenge: DailyChallenge?) {
+        // Server already suppresses during crisis, but double-check client-side
         if let lu = levelUp {
             levelUpInfo = lu
             showLevelUp = true
@@ -318,6 +328,7 @@ struct ChatView: View {
             achievementInfo = first
             withAnimation(.spring(response: 0.4)) { showAchievement = true }
         }
+        // Only update challenge display (never intrusive)
         if let c = challenge {
             dailyChallenge = c
         }

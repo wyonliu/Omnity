@@ -39,7 +39,7 @@ struct AwakeningView: View {
     @FocusState private var chatFocused: Bool
 
     private let api = APIClient.shared
-    private let softRegisterAfter = 3
+    private let softRegisterAfter = 10
 
     var body: some View {
         ZStack {

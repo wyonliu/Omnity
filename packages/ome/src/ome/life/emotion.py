@@ -30,6 +30,28 @@ _MOOD_SIGNALS = {
                 "focus", "working", "deep work", "🎯"],
 }
 
+# Crisis keywords — these indicate the user may be in emotional distress or danger.
+# When detected, Ome should prioritize empathetic support over all other behaviors.
+_CRISIS_KEYWORDS = [
+    # Chinese
+    "不想活", "想死", "自杀", "活不下去", "没有意义", "跳下去", "割腕",
+    "结束生命", "遗书", "再见了", "对不起大家", "我走了", "活着好累",
+    "没人在乎", "世界没有我", "不如死", "去死",
+    # English
+    "kill myself", "want to die", "end it all", "suicide", "self-harm",
+    "no reason to live", "better off dead", "goodbye everyone",
+]
+
+
+def detect_crisis(message: str) -> bool:
+    """Detect potential crisis/self-harm signals in a message.
+
+    Returns True if crisis keywords are found. This is a safety net —
+    false positives are acceptable, false negatives are not.
+    """
+    msg_lower = message.lower()
+    return any(kw in msg_lower for kw in _CRISIS_KEYWORDS)
+
 
 @dataclass
 class EmotionState:

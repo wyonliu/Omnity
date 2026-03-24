@@ -105,8 +105,8 @@ def test_chat_without_llm(ome_dir):
     ome = Ome.create(ome_dir, name="Grace")
     reply = ome.chat("What do you know about Python?")
 
-    # Without LLM, should return fallback message
-    assert "LLM" in reply or "API" in reply
+    # Without LLM, should return user-friendly fallback (no API key exposure)
+    assert "抱歉" in reply or "配置" in reply
     # But the conversation should still be committed to memory
     results = ome.recall("Python")
     assert len(results) > 0
