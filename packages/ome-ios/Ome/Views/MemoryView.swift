@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Memory palace — search + add memories.
+/// Memory palace — search + add memories + milestones.
 struct MemoryView: View {
     @State private var query = ""
     @State private var memories: [MemoryItem] = []
@@ -9,9 +9,12 @@ struct MemoryView: View {
     @State private var newMemory = ""
     @State private var saving = false
     @State private var hasSearched = false
+    @State private var totalMemories: Int?
     @FocusState private var searchFocused: Bool
+    @AppStorage("ome_selected_tab") private var selectedTab = 0
 
     private let api = APIClient.shared
+    private let milestones = [10, 50, 100, 500, 1000]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,6 +34,27 @@ struct MemoryView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
             .overlay(alignment: .bottom) { Divider().background(Theme.border) }
+
+            // Memory milestone banner
+            if let total = totalMemories, total > 0 {
+                let nextMilestone = milestones.first(where: { $0 > total })
+                HStack(spacing: 8) {
+                    Image(systemName: "brain.head.profile")
+                        .foregroundStyle(Theme.emotionPurple)
+                    Text("Ome 记住了 \(total) 件关于你的事")
+                        .font(.caption)
+                        .foregroundStyle(Theme.textSecondary)
+                    if let next = nextMilestone {
+                        Spacer()
+                        Text("→ \(next)")
+                            .font(.caption2)
+                            .foregroundStyle(Theme.textMuted)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
+                .background(Theme.emotionPurple.opacity(0.08))
+            }
 
             // Search + Add
             HStack(spacing: 8) {
@@ -114,11 +138,24 @@ struct MemoryView: View {
                 Spacer()
             } else if memories.isEmpty {
                 Spacer()
-                VStack(spacing: 12) {
+                VStack(spacing: 16) {
                     OmeOrb(size: 40, intensity: 0.3, breathing: false)
                     Text(hasSearched ? "没有找到相关记忆" : "和 Ome 聊天，记忆会自动积累")
                         .font(.body)
                         .foregroundStyle(Theme.textMuted)
+                    if !hasSearched {
+                        Button {
+                            selectedTab = 0  // Switch to Chat
+                        } label: {
+                            Text("去聊天")
+                                .font(.subheadline.bold())
+                                .foregroundStyle(Theme.bg)
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 8)
+                                .background(Theme.accent)
+                                .clipShape(Capsule())
+                        }
+                    }
                 }
                 Spacer()
             } else {
@@ -156,7 +193,13 @@ struct MemoryView: View {
             }
         }
         .background(Theme.bg)
-        .task { search(query: "最近的记忆") }
+        .task {
+            // Load total memories count
+            if let profile = try? await api.getProfile() {
+                totalMemories = profile.total_memories
+            }
+            search(query: "最近的记忆")
+        }
     }
 
     private func search(query: String? = nil) {
@@ -169,9 +212,7 @@ struct MemoryView: View {
             do {
                 let result = try await api.recall(q)
                 memories = result.results
-            } catch {
-                // Empty state handles it
-            }
+            } catch {}
             loading = false
         }
     }
@@ -186,6 +227,7 @@ struct MemoryView: View {
                 newMemory = ""
                 withAnimation { showAdd = false }
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
+                if let t = totalMemories { totalMemories = t + 1 }
                 search(query: "最近的记忆")
             } catch {
                 UINotificationFeedbackGenerator().notificationOccurred(.error)

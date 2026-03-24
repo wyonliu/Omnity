@@ -15,17 +15,27 @@
 		24F954AF22FE68159444F9D5 /* OmeOrb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03F1281639CC8BE145F195A8 /* OmeOrb.swift */; };
 		47DE9B798BCEF81CC8092355 /* AwakeningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58460D545D483D49A3597A1D /* AwakeningView.swift */; };
 		55F507D8028A9F22CF554E98 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4B5CFE88050B0DDC6AB2B8C /* ChatView.swift */; };
+		664419E96F06F95CD9BC936E /* NotificationPermissionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B4AD8B688B2719EB9AE2433 /* NotificationPermissionSheet.swift */; };
+		6A8E6061DAFD46FB3A53068D /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37CD02B57AA4DD21F58F064C /* NotificationManager.swift */; };
 		72E5943F4B408B2D5F90E003 /* SessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A3E5B767B7F6A8EE2A3E9B /* SessionManager.swift */; };
+		8278A9B3083DF8095F8995EE /* PromptManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56B8E7B6D03C920DD86F58F4 /* PromptManager.swift */; };
 		8E754CDEE3169C56128AB1C6 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D42438502FE70433E00EF55B /* MainTabView.swift */; };
 		9460D782C746434A5E7298CE /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = 553012559D31BBD092A21CFE /* Message.swift */; };
 		94D7764CA80FC47D079625A2 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E6C185933D3BD0FA1CE5E98 /* APIClient.swift */; };
 		9661A1B8D7F5F355A6FE1FA2 /* AgentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4706CAFA426B7B3E5F6939D0 /* AgentsView.swift */; };
+		98514601EE62035266C3E400 /* GreetingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B68FE77768E5548371BDB42 /* GreetingManager.swift */; };
 		A0F2CA5F0B21CC61118E5ADF /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A445D03246DEBAFE24DB4AC /* Theme.swift */; };
 		A53C210B4F8AF9F08728216A /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 103AA964F0D2589A12EB6B96 /* RootView.swift */; };
 		B6579A6D330B53B99DE15A8E /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAA9A1AD2CE9136AAF5FBE3B /* KeychainHelper.swift */; };
+		B74810661089D0FD0D56BEFC /* SkeletonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 819733593C4DD3A171D0D760 /* SkeletonView.swift */; };
+		BBB17AABD7A5569CF22D0EBE /* TraitPill.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9953453CF18D130C0EA29A8 /* TraitPill.swift */; };
 		BE19A33A244C3DCF5D08B9D6 /* OmeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B603CF09C418873ECB7712FB /* OmeApp.swift */; };
+		D2B0CE25AE6604785A3E0C7F /* LevelUpCelebration.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA3FAC7BEA3D77CFE0A01730 /* LevelUpCelebration.swift */; };
+		D6A616093FEEEB5A75D93E04 /* ParticleField.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABA384F4CE1476D4E0EADDDD /* ParticleField.swift */; };
 		DA03A5FB4FFDA33D1E34AF7D /* SoulscapeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B308805EDF577C3AC364D5EB /* SoulscapeView.swift */; };
 		E09BE1DEF1A0B31F09052068 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 980DBFC336A18BDC35AE1BA9 /* Assets.xcassets */; };
+		E1CB8CD2A7308ADC7E6BCE79 /* TypewriterText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14F9D7C820617F9D2305DE46 /* TypewriterText.swift */; };
+		E542D85F3D1512905CF9137D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 46D4E0CD7A56C91D12A59022 /* PrivacyInfo.xcprivacy */; };
 		F0F14C232439C8440CA7B1D5 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9064B2AEEC33610E58D0FDCE /* SettingsView.swift */; };
 /* End PBXBuildFile section */
 
@@ -34,22 +44,32 @@
 		0495D2C050511AC52FDD9D87 /* SoftRegisterSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoftRegisterSheet.swift; sourceTree = "<group>"; };
 		103AA964F0D2589A12EB6B96 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		14A3E5B767B7F6A8EE2A3E9B /* SessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionManager.swift; sourceTree = "<group>"; };
+		14F9D7C820617F9D2305DE46 /* TypewriterText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypewriterText.swift; sourceTree = "<group>"; };
+		2B68FE77768E5548371BDB42 /* GreetingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GreetingManager.swift; sourceTree = "<group>"; };
+		37CD02B57AA4DD21F58F064C /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
+		46D4E0CD7A56C91D12A59022 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		4706CAFA426B7B3E5F6939D0 /* AgentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsView.swift; sourceTree = "<group>"; };
 		4A445D03246DEBAFE24DB4AC /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		553012559D31BBD092A21CFE /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
+		56B8E7B6D03C920DD86F58F4 /* PromptManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptManager.swift; sourceTree = "<group>"; };
 		57A56180C007F5E510CE4E5F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		58460D545D483D49A3597A1D /* AwakeningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AwakeningView.swift; sourceTree = "<group>"; };
+		6B4AD8B688B2719EB9AE2433 /* NotificationPermissionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationPermissionSheet.swift; sourceTree = "<group>"; };
+		819733593C4DD3A171D0D760 /* SkeletonView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkeletonView.swift; sourceTree = "<group>"; };
 		9064B2AEEC33610E58D0FDCE /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		980DBFC336A18BDC35AE1BA9 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		9E6C185933D3BD0FA1CE5E98 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		A2BB2418044A64DC0EC67C7A /* LifeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeView.swift; sourceTree = "<group>"; };
+		ABA384F4CE1476D4E0EADDDD /* ParticleField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParticleField.swift; sourceTree = "<group>"; };
 		B308805EDF577C3AC364D5EB /* SoulscapeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoulscapeView.swift; sourceTree = "<group>"; };
 		B39D8C52C1B6682B463F4D75 /* MessageBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBubble.swift; sourceTree = "<group>"; };
 		B603CF09C418873ECB7712FB /* OmeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmeApp.swift; sourceTree = "<group>"; };
 		C0735B0320F6B20F6A636277 /* APIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIModels.swift; sourceTree = "<group>"; };
+		C9953453CF18D130C0EA29A8 /* TraitPill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TraitPill.swift; sourceTree = "<group>"; };
 		D239F8B0E176FF24BB1EBDAF /* Ome.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Ome.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D42438502FE70433E00EF55B /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		D4B5CFE88050B0DDC6AB2B8C /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		EA3FAC7BEA3D77CFE0A01730 /* LevelUpCelebration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelUpCelebration.swift; sourceTree = "<group>"; };
 		F528DC02D6842E0E292D7E96 /* MemoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryView.swift; sourceTree = "<group>"; };
 		FAA9A1AD2CE9136AAF5FBE3B /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -61,6 +81,7 @@
 				980DBFC336A18BDC35AE1BA9 /* Assets.xcassets */,
 				57A56180C007F5E510CE4E5F /* Info.plist */,
 				B603CF09C418873ECB7712FB /* OmeApp.swift */,
+				46D4E0CD7A56C91D12A59022 /* PrivacyInfo.xcprivacy */,
 				B91F30F4A1874EEE167175B4 /* Components */,
 				6CF7281C1695A3C3A838DD59 /* Models */,
 				3AEC45646F2371C873D1C317 /* Services */,
@@ -73,7 +94,10 @@
 			isa = PBXGroup;
 			children = (
 				9E6C185933D3BD0FA1CE5E98 /* APIClient.swift */,
+				2B68FE77768E5548371BDB42 /* GreetingManager.swift */,
 				FAA9A1AD2CE9136AAF5FBE3B /* KeychainHelper.swift */,
+				37CD02B57AA4DD21F58F064C /* NotificationManager.swift */,
+				56B8E7B6D03C920DD86F58F4 /* PromptManager.swift */,
 				14A3E5B767B7F6A8EE2A3E9B /* SessionManager.swift */,
 			);
 			path = Services;
@@ -124,9 +148,15 @@
 		B91F30F4A1874EEE167175B4 /* Components */ = {
 			isa = PBXGroup;
 			children = (
+				EA3FAC7BEA3D77CFE0A01730 /* LevelUpCelebration.swift */,
 				B39D8C52C1B6682B463F4D75 /* MessageBubble.swift */,
+				6B4AD8B688B2719EB9AE2433 /* NotificationPermissionSheet.swift */,
 				03F1281639CC8BE145F195A8 /* OmeOrb.swift */,
+				ABA384F4CE1476D4E0EADDDD /* ParticleField.swift */,
+				819733593C4DD3A171D0D760 /* SkeletonView.swift */,
 				0495D2C050511AC52FDD9D87 /* SoftRegisterSheet.swift */,
+				C9953453CF18D130C0EA29A8 /* TraitPill.swift */,
+				14F9D7C820617F9D2305DE46 /* TypewriterText.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -191,6 +221,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E09BE1DEF1A0B31F09052068 /* Assets.xcassets in Resources */,
+				E542D85F3D1512905CF9137D /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -206,20 +237,29 @@
 				9661A1B8D7F5F355A6FE1FA2 /* AgentsView.swift in Sources */,
 				47DE9B798BCEF81CC8092355 /* AwakeningView.swift in Sources */,
 				55F507D8028A9F22CF554E98 /* ChatView.swift in Sources */,
+				98514601EE62035266C3E400 /* GreetingManager.swift in Sources */,
 				B6579A6D330B53B99DE15A8E /* KeychainHelper.swift in Sources */,
+				D2B0CE25AE6604785A3E0C7F /* LevelUpCelebration.swift in Sources */,
 				1BAC606340D206119CF688F6 /* LifeView.swift in Sources */,
 				8E754CDEE3169C56128AB1C6 /* MainTabView.swift in Sources */,
 				0F2D8009C4B717CE9207D7EB /* MemoryView.swift in Sources */,
 				9460D782C746434A5E7298CE /* Message.swift in Sources */,
 				158104F95A9F383B4ABE38F6 /* MessageBubble.swift in Sources */,
+				6A8E6061DAFD46FB3A53068D /* NotificationManager.swift in Sources */,
+				664419E96F06F95CD9BC936E /* NotificationPermissionSheet.swift in Sources */,
 				BE19A33A244C3DCF5D08B9D6 /* OmeApp.swift in Sources */,
 				24F954AF22FE68159444F9D5 /* OmeOrb.swift in Sources */,
+				D6A616093FEEEB5A75D93E04 /* ParticleField.swift in Sources */,
+				8278A9B3083DF8095F8995EE /* PromptManager.swift in Sources */,
 				A53C210B4F8AF9F08728216A /* RootView.swift in Sources */,
 				72E5943F4B408B2D5F90E003 /* SessionManager.swift in Sources */,
 				F0F14C232439C8440CA7B1D5 /* SettingsView.swift in Sources */,
+				B74810661089D0FD0D56BEFC /* SkeletonView.swift in Sources */,
 				0352EC4A9F52CCF0C22BA3BF /* SoftRegisterSheet.swift in Sources */,
 				DA03A5FB4FFDA33D1E34AF7D /* SoulscapeView.swift in Sources */,
 				A0F2CA5F0B21CC61118E5ADF /* Theme.swift in Sources */,
+				BBB17AABD7A5569CF22D0EBE /* TraitPill.swift in Sources */,
+				E1CB8CD2A7308ADC7E6BCE79 /* TypewriterText.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

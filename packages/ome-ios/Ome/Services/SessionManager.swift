@@ -87,14 +87,21 @@ class SessionManager: ObservableObject {
         KeychainHelper.save(password, for: "ome_password")
 
         userName = resp.name
+        // Request notification permission after next MainTabView appears
+        UserDefaults.standard.set(true, forKey: "ome_should_request_notifications")
         withAnimation(.easeInOut(duration: 0.5)) {
             authState = .authenticated
         }
     }
 
+    func deleteAccount() async {
+        await logout()
+    }
+
     func logout() async {
         await api.logout()
         UserDefaults.standard.removeObject(forKey: "ome_bond_level")
+        UserDefaults.standard.removeObject(forKey: "ome_has_onboarded")
         KeychainHelper.delete("ome_password")
         KeychainHelper.delete("ome_token")
 

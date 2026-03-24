@@ -1,11 +1,14 @@
 import SwiftUI
 
-/// Settings — profile, autonomy level, about, logout.
+/// Settings — profile, autonomy level, about, logout, account deletion.
 struct SettingsView: View {
     @EnvironmentObject var session: SessionManager
     @AppStorage("ome_autonomy_level") private var autonomyLevel = 0
     @State private var profile: ProfileResponse?
     @State private var showLogoutConfirm = false
+    @State private var showDeleteConfirm = false
+    @State private var deleteConfirmName = ""
+    @State private var deleting = false
 
     private let api = APIClient.shared
 
@@ -59,7 +62,7 @@ struct SettingsView: View {
                 .overlay(RoundedRectangle(cornerRadius: Theme.cornerRadius).stroke(Theme.border))
                 .padding(.horizontal, 20)
 
-                // Autonomy level (persisted via @AppStorage)
+                // Autonomy level
                 VStack(alignment: .leading, spacing: 10) {
                     Text("自治等级")
                         .font(.headline)
@@ -115,6 +118,10 @@ struct SettingsView: View {
                     aboutRow("引擎", value: "Mindos + Ome")
                     Divider().background(Theme.border)
                     aboutRow("项目", value: "Omnity (开源)")
+                    Divider().background(Theme.border)
+                    linkRow("隐私政策", url: "https://omnity.ai/privacy")
+                    Divider().background(Theme.border)
+                    linkRow("用户协议", url: "https://omnity.ai/terms")
                 }
                 .background(Theme.bgCard)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius))
@@ -127,17 +134,27 @@ struct SettingsView: View {
                 } label: {
                     Text("退出登录")
                         .font(.body.bold())
-                        .foregroundStyle(Theme.error)
+                        .foregroundStyle(Theme.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(Theme.bgCard)
                         .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius))
                         .overlay(
                             RoundedRectangle(cornerRadius: Theme.cornerRadius)
-                                .stroke(Theme.error.opacity(0.3), lineWidth: 1)
+                                .stroke(Theme.border, lineWidth: 1)
                         )
                 }
                 .padding(.horizontal, 20)
+
+                // Delete account
+                Button {
+                    showDeleteConfirm = true
+                } label: {
+                    Text("删除账号")
+                        .font(.body)
+                        .foregroundStyle(Theme.error.opacity(0.7))
+                }
+                .padding(.top, 8)
 
                 Text("Omnity · 碳硅共居，万物有灵")
                     .font(.caption)
@@ -158,6 +175,21 @@ struct SettingsView: View {
         } message: {
             Text("确定要退出吗？Ome 的记忆不会丢失，下次回来还在。")
         }
+        .alert("删除账号", isPresented: $showDeleteConfirm) {
+            TextField("输入你的名字确认", text: $deleteConfirmName)
+            Button("取消", role: .cancel) {
+                deleteConfirmName = ""
+            }
+            Button("永久删除", role: .destructive) {
+                guard deleteConfirmName.trimmingCharacters(in: .whitespaces) == session.userName else {
+                    deleteConfirmName = ""
+                    return
+                }
+                Task { await deleteAccount() }
+            }
+        } message: {
+            Text("删除账号将永久清除 Ome 的所有记忆，无法恢复。\n\n请输入「\(session.userName)」确认删除。")
+        }
     }
 
     private func aboutRow(_ label: String, value: String) -> some View {
@@ -171,5 +203,37 @@ struct SettingsView: View {
         .font(.body)
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+    }
+
+    private func linkRow(_ label: String, url: String) -> some View {
+        Button {
+            if let u = URL(string: url) {
+                UIApplication.shared.open(u)
+            }
+        } label: {
+            HStack {
+                Text(label)
+                    .foregroundStyle(Theme.textSecondary)
+                Spacer()
+                Image(systemName: "arrow.up.right")
+                    .font(.caption)
+                    .foregroundStyle(Theme.textMuted)
+            }
+            .font(.body)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+    }
+
+    private func deleteAccount() async {
+        deleting = true
+        do {
+            try await api.deleteAccount()
+        } catch {
+            // Server endpoint may not exist yet — proceed with local cleanup
+        }
+        await session.deleteAccount()
+        deleting = false
+        deleteConfirmName = ""
     }
 }

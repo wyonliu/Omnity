@@ -1,12 +1,13 @@
 import SwiftUI
 
-/// Authenticated chat with SSE streaming + mirror mode.
+/// Authenticated chat with SSE streaming + mirror mode + daily prompts.
 struct ChatView: View {
     @EnvironmentObject var session: SessionManager
     @State private var messages: [Message] = []
     @State private var input = ""
     @State private var sending = false
     @State private var isMirror = false
+    @State private var showPrompts = true
     @FocusState private var inputFocused: Bool
 
     private let api = APIClient.shared
@@ -55,6 +56,12 @@ struct ChatView: View {
                             MessageBubble(message: msg)
                                 .id(msg.id)
                         }
+
+                        // Daily prompt chips — show only when no user messages yet
+                        if showPrompts && !isMirror && messages.count <= 1 {
+                            promptChips
+                                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        }
                     }
                     .padding()
                 }
@@ -65,7 +72,6 @@ struct ChatView: View {
                     }
                 }
                 .onChange(of: messages.last?.text) {
-                    // Scroll during streaming
                     proxy.scrollTo(messages.last?.id, anchor: .bottom)
                 }
             }
@@ -76,6 +82,39 @@ struct ChatView: View {
         .background(Theme.bg)
         .onAppear { setupWelcome() }
     }
+
+    // MARK: - Daily Prompt Chips
+
+    private var promptChips: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("聊点什么？")
+                .font(.caption)
+                .foregroundStyle(Theme.textMuted)
+                .padding(.leading, 4)
+            ForEach(PromptManager.dailyPrompts(), id: \.self) { prompt in
+                Button {
+                    input = prompt
+                    send()
+                } label: {
+                    Text(prompt)
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.textPrimary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(Theme.bgCard)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(Theme.accent.opacity(0.3), lineWidth: 1)
+                        )
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 8)
+    }
+
+    // MARK: - Input Bar
 
     private var inputBar: some View {
         HStack(alignment: .bottom, spacing: 8) {
@@ -112,12 +151,13 @@ struct ChatView: View {
     }
 
     private func setupWelcome() {
+        showPrompts = true
         messages = [
             Message(
                 role: .ome,
                 text: isMirror
                     ? "镜像模式：我会用\(session.userName)的语气说话。试试看？"
-                    : "嗨，\(session.userName)。想聊点什么？"
+                    : GreetingManager.shortGreeting(for: session.userName)
             )
         ]
     }
@@ -126,6 +166,7 @@ struct ChatView: View {
         let text = input.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty, !sending else { return }
 
+        withAnimation { showPrompts = false }
         messages.append(Message(role: .user, text: text))
         input = ""
         sending = true
@@ -164,7 +205,6 @@ struct ChatView: View {
                     }
                 }
             } catch {
-                // Fallback to regular chat
                 do {
                     let result = try await api.chat(text)
                     if let idx = messages.firstIndex(where: { $0.id == streamId }) {

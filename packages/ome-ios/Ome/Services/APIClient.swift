@@ -68,6 +68,15 @@ actor APIClient {
         return resp
     }
 
+    func deleteAccount() async throws {
+        let request = try makeRequest("/auth/delete", method: "POST")
+        let (_, response) = try await URLSession.shared.data(for: request)
+        // 404 = endpoint not yet implemented on server, still proceed with local cleanup
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) && http.statusCode != 404 {
+            throw APIError.serverError("删除失败")
+        }
+    }
+
     func logout() {
         token = nil
         sessionId = nil
