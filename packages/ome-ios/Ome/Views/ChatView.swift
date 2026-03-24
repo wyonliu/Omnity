@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Authenticated chat with SSE streaming + mirror mode + daily prompts.
+/// Authenticated chat with SSE streaming + mirror mode + daily prompts + gamification.
 struct ChatView: View {
     @EnvironmentObject var session: SessionManager
     @State private var messages: [Message] = []
@@ -8,6 +8,11 @@ struct ChatView: View {
     @State private var sending = false
     @State private var isMirror = false
     @State private var showPrompts = true
+    @State private var showLevelUp = false
+    @State private var levelUpInfo: LevelUpEvent?
+    @State private var showAchievement = false
+    @State private var achievementInfo: AchievementEvent?
+    @State private var dailyChallenge: DailyChallenge?
     @FocusState private var inputFocused: Bool
 
     private let api = APIClient.shared
@@ -76,11 +81,48 @@ struct ChatView: View {
                 }
             }
 
+            // Daily challenge banner
+            if let challenge = dailyChallenge, !challenge.completed {
+                dailyChallengeBanner(challenge)
+            }
+
             // Input bar
             inputBar
         }
         .background(Theme.bg)
         .onAppear { setupWelcome() }
+        .overlay {
+            // Achievement toast
+            if showAchievement, let ach = achievementInfo {
+                VStack {
+                    HStack(spacing: 10) {
+                        Text(ach.icon ?? "🏆")
+                            .font(.title)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("成就解锁")
+                                .font(.caption.bold())
+                                .foregroundStyle(Theme.accent)
+                            Text(ach.name)
+                                .font(.headline.bold())
+                                .foregroundStyle(Theme.textPrimary)
+                        }
+                    }
+                    .padding()
+                    .background(.ultraThinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .shadow(color: Theme.accent.opacity(0.3), radius: 12)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    Spacer()
+                }
+                .padding(.top, 60)
+                .onAppear {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                        withAnimation { showAchievement = false }
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Daily Prompt Chips
@@ -202,6 +244,11 @@ struct ChatView: View {
                         if let level = token.bond_level {
                             session.updateBondLevel(level)
                         }
+                        handleGameEvents(
+                            levelUp: token.level_up,
+                            achievements: token.achievements,
+                            challenge: token.daily_challenge
+                        )
                     }
                 }
             } catch {
@@ -212,6 +259,11 @@ struct ChatView: View {
                         messages[idx].isStreaming = false
                     }
                     session.updateBondLevel(result.bond_level)
+                    handleGameEvents(
+                        levelUp: result.level_up,
+                        achievements: result.achievements,
+                        challenge: result.daily_challenge
+                    )
                 } catch {
                     if let idx = messages.firstIndex(where: { $0.id == streamId }) {
                         messages[idx].text = friendlyError(error)
@@ -232,6 +284,42 @@ struct ChatView: View {
                 messages.append(Message(role: .ome, text: friendlyError(error)))
             }
             sending = false
+        }
+    }
+
+    // MARK: - Daily Challenge Banner
+
+    private func dailyChallengeBanner(_ challenge: DailyChallenge) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "star.circle.fill")
+                .foregroundStyle(Theme.accent)
+                .font(.caption)
+            Text(challenge.text)
+                .font(.caption)
+                .foregroundStyle(Theme.textSecondary)
+            Spacer()
+            Text("\(challenge.progress)/\(challenge.target)")
+                .font(.caption.bold().monospacedDigit())
+                .foregroundStyle(Theme.accent)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Theme.accent.opacity(0.08))
+    }
+
+    // MARK: - Gamification Events
+
+    private func handleGameEvents(levelUp: LevelUpEvent?, achievements: [AchievementEvent]?, challenge: DailyChallenge?) {
+        if let lu = levelUp {
+            levelUpInfo = lu
+            showLevelUp = true
+        }
+        if let achs = achievements, let first = achs.first {
+            achievementInfo = first
+            withAnimation(.spring(response: 0.4)) { showAchievement = true }
+        }
+        if let c = challenge {
+            dailyChallenge = c
         }
     }
 

@@ -29,6 +29,31 @@ struct ChatResponse: Codable {
     let mood_emoji: String
     let bond_level: Int
     let streak_days: Int
+    // Gamification events
+    let level_up: LevelUpEvent?
+    let achievements: [AchievementEvent]?
+    let daily_challenge: DailyChallenge?
+}
+
+struct LevelUpEvent: Codable {
+    let level: Int
+    let name: String
+    let unlocks: [String]?
+}
+
+struct AchievementEvent: Codable, Identifiable {
+    var id: String { name }
+    let name: String
+    let icon: String?
+    let description: String
+}
+
+struct DailyChallenge: Codable {
+    let id: String
+    let text: String
+    let progress: Int
+    let target: Int
+    let completed: Bool
 }
 
 struct AnonChatResponse: Codable {
@@ -53,6 +78,10 @@ struct StreamToken: Codable {
     var mood_emoji: String?
     var bond_level: Int?
     var streak_days: Int?
+    // Gamification events (only in final "done" token)
+    var level_up: LevelUpEvent?
+    var achievements: [AchievementEvent]?
+    var daily_challenge: DailyChallenge?
 }
 
 // MARK: - Life

@@ -31,6 +31,12 @@ async def identity(protocol: str = "generic", ome: Ome = Depends(get_ome)) -> di
     return ome.identity_card(protocol=protocol)
 
 
+@router.get("/daily-challenge")
+async def daily_challenge(ome: Ome = Depends(get_ome)) -> dict[str, Any]:
+    """Today's daily challenge with progress."""
+    return ome.get_daily_challenge()
+
+
 @router.get("/profile")
 async def profile(ome: Ome = Depends(get_ome)):
     """User profile summary for the app."""
@@ -49,4 +55,5 @@ async def profile(ome: Ome = Depends(get_ome)):
         },
         "total_memories": ome.soul.status().get("memory", {}).get("total", 0),
         "achievements_count": f"{ome.achievements.unlocked_count()}/{ome.achievements.total_count()}",
+        "daily_challenge": ome.get_daily_challenge(),
     }

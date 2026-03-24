@@ -203,10 +203,8 @@ class Ome:
             action_budget=self.autonomy.daily_action_budget,
         )
 
-        # Check time-based achievements
-        now = datetime.now()
-        if now.hour < 5 or now.hour >= 23:
-            self.achievements.check_and_unlock("night_owl")
+        # Track daily stats for challenges
+        self._record_daily_stat(message)
 
         self._check_achievements(message=message)
         streak_rewards = self._check_streak_rewards()
@@ -231,11 +229,31 @@ class Ome:
     def remember(self, text: str, source: str = "manual") -> dict[str, Any]:
         """Teach your Ome something directly."""
         self.growth.record_action("recall", success=True, quality=0.6)
+        # Track for daily challenge
+        today = datetime.now().strftime("%Y-%m-%d")
+        try:
+            key = f"ome.daily.{today}"
+            raw = self.soul.store.get_state(key)
+            daily = json.loads(raw) if raw else {}
+            daily["memories_added"] = daily.get("memories_added", 0) + 1
+            self.soul.store.set_state(key, json.dumps(daily))
+        except Exception:
+            pass
         return self.soul.commit(f"user: {text}", source=source)
 
     def recall(self, query: str, top_k: int = 10) -> list[dict[str, Any]]:
         """Ask your Ome what it remembers about a topic."""
         self.growth.record_action("recall", success=True, quality=0.5)
+        # Track for daily challenge
+        today = datetime.now().strftime("%Y-%m-%d")
+        try:
+            key = f"ome.daily.{today}"
+            raw = self.soul.store.get_state(key)
+            daily = json.loads(raw) if raw else {}
+            daily["memory_searches"] = daily.get("memory_searches", 0) + 1
+            self.soul.store.set_state(key, json.dumps(daily))
+        except Exception:
+            pass
         return self.soul.recall(query, top_k=top_k)
 
     def forget(self, pattern: str) -> dict[str, Any]:
@@ -492,7 +510,8 @@ class Ome:
         return highlights
 
     def _check_achievements(self, *, message: str = ""):
-        """Check and unlock any newly earned achievements."""
+        """Check and unlock all achievements whose conditions are met."""
+        # -- Basic --
         if self.bond.total_interactions == 1:
             ach = self.achievements.check_and_unlock("first_chat")
             if ach:
@@ -500,25 +519,52 @@ class Ome:
 
         stats = self.soul.status().get("memory", {})
         total_facts = stats.get("by_type", {}).get("fact", 0)
-        if total_facts >= 1 and "first_memory" not in self.achievements.unlocked:
+        total_memories = stats.get("total", 0)
+        if total_facts >= 1 or total_memories >= 1:
             self.achievements.check_and_unlock("first_memory")
-        if total_facts >= 10 and "ten_facts" not in self.achievements.unlocked:
+        if total_facts >= 10 or total_memories >= 10:
             self.achievements.check_and_unlock("ten_facts")
 
         if self.bond.total_interactions >= 50:
             self.achievements.check_and_unlock("fifty_chats")
 
+        # Schedule skill used
+        if self.growth.skills.get("schedule", None) and self.growth.skills["schedule"].uses >= 1:
+            self.achievements.check_and_unlock("first_schedule")
+
+        # Write skill used (draft)
+        if self.growth.skills.get("write", None) and self.growth.skills["write"].uses >= 1:
+            self.achievements.check_and_unlock("first_draft")
+
+        # -- Deep --
         if self.bond.streak_days >= 7:
             self.achievements.check_and_unlock("morning_7")
         if self.bond.streak_days >= 30:
             self.achievements.check_and_unlock("month_streak")
 
+        # Social skill used
+        if self.growth.skills.get("social", None) and self.growth.skills["social"].uses >= 1:
+            self.achievements.check_and_unlock("social_first")
+
+        # 4 weeks of weekly highlights (proxy for weekly_4)
+        if self.bond.days_since_creation >= 28 and self.bond.total_interactions >= 100:
+            self.achievements.check_and_unlock("weekly_4")
+
+        # -- Hidden --
         if self.bond.level >= 5:
             self.achievements.check_and_unlock("soulmate")
 
         # Deep talk: single message > 500 chars
         if message and len(message) > 500:
             self.achievements.check_and_unlock("deep_talk")
+
+        # Night owl: chat after 23:00 or before 05:00
+        now = datetime.now()
+        if now.hour < 5 or now.hour >= 23:
+            self.achievements.check_and_unlock("night_owl")
+
+        # Cross-platform (unlocked externally via identity_card export)
+        # home_iot, night_task, know_unsaid — unlocked by specific subsystems
 
     def _check_streak_rewards(self) -> list[dict[str, Any]]:
         """Check and trigger streak-based rewards. Returns list of rewards triggered."""
@@ -551,6 +597,93 @@ class Ome:
                         self.achievements.check_and_unlock("month_streak")
 
         return rewards
+
+    # -- Daily Challenges (short-term retention hook) -------------------------
+
+    # Rotating challenge pool — deterministic per day via date seed
+    _DAILY_CHALLENGES = [
+        {"id": "chat_3", "text": "今天和 Ome 聊 3 次", "target": 3, "track": "chat_count"},
+        {"id": "deep_msg", "text": "发一条超过 100 字的消息", "target": 1, "track": "long_message"},
+        {"id": "memory_add", "text": "告诉 Ome 一件新事情", "target": 1, "track": "memory_add"},
+        {"id": "chat_5", "text": "今天和 Ome 聊 5 次", "target": 5, "track": "chat_count"},
+        {"id": "ask_memory", "text": "搜索一条 Ome 的记忆", "target": 1, "track": "memory_search"},
+        {"id": "streak_keep", "text": "保持连续互动记录", "target": 1, "track": "streak_alive"},
+        {"id": "evening_chat", "text": "晚上和 Ome 说晚安", "target": 1, "track": "evening_chat"},
+    ]
+
+    def get_daily_challenge(self) -> dict[str, Any]:
+        """Get today's challenge with current progress."""
+        today = datetime.now().strftime("%Y-%m-%d")
+        day_seed = int(datetime.now().strftime("%Y%m%d"))
+        challenge = self._DAILY_CHALLENGES[day_seed % len(self._DAILY_CHALLENGES)]
+
+        # Calculate progress based on track type
+        progress = 0
+        track = challenge["track"]
+
+        # Read today's stats from soul_state
+        today_key = f"ome.daily.{today}"
+        try:
+            daily_data = self.soul.store.get_state(today_key)
+            daily = json.loads(daily_data) if daily_data else {}
+        except Exception:
+            daily = {}
+
+        if track == "chat_count":
+            progress = daily.get("chats", 0)
+        elif track == "long_message":
+            progress = daily.get("long_messages", 0)
+        elif track == "memory_add":
+            progress = daily.get("memories_added", 0)
+        elif track == "memory_search":
+            progress = daily.get("memory_searches", 0)
+        elif track == "streak_alive":
+            progress = 1 if self.bond.last_interaction_date == today else 0
+        elif track == "evening_chat":
+            progress = daily.get("evening_chats", 0)
+
+        completed = progress >= challenge["target"]
+
+        # Award XP on first completion
+        if completed and not daily.get(f"reward_{challenge['id']}"):
+            daily[f"reward_{challenge['id']}"] = True
+            self.growth.record_action("chat", success=True, quality=0.8)  # bonus quality
+            try:
+                self.soul.store.set_state(today_key, json.dumps(daily))
+            except Exception:
+                pass
+
+        return {
+            "id": challenge["id"],
+            "text": challenge["text"],
+            "progress": min(progress, challenge["target"]),
+            "target": challenge["target"],
+            "completed": completed,
+        }
+
+    def _record_daily_stat(self, message: str):
+        """Track daily statistics for challenge progress."""
+        today = datetime.now().strftime("%Y-%m-%d")
+        today_key = f"ome.daily.{today}"
+        try:
+            daily_data = self.soul.store.get_state(today_key)
+            daily = json.loads(daily_data) if daily_data else {}
+        except Exception:
+            daily = {}
+
+        daily["chats"] = daily.get("chats", 0) + 1
+
+        if len(message) > 100:
+            daily["long_messages"] = daily.get("long_messages", 0) + 1
+
+        now = datetime.now()
+        if now.hour >= 20:
+            daily["evening_chats"] = daily.get("evening_chats", 0) + 1
+
+        try:
+            self.soul.store.set_state(today_key, json.dumps(daily))
+        except Exception:
+            pass
 
     def _load_life_state(self):
         """Load life system state from Mindos soul_state."""

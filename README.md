@@ -117,7 +117,7 @@ mindos serve                         # HTTP API for any app
 
 All AI companions are pets. All agent frameworks are tools. **Ome is the layer above both** — it inherits your personality and memory, continuously grows, and creates real value on your behalf.
 
-What OpenClaw does for one-shot agent calls, Ome does for **persistent digital lives**: persona replication engine + skill system + work engine + social engine + growth system.
+What OpenClaw does for one-shot agent calls, Ome does for **persistent digital lives**: conversation strategy engine + persona evolution + skill system + growth system + autonomy engine.
 
 | Stage | Ome's Capability | Real Value |
 |-------|-----------------|------------|
@@ -126,9 +126,14 @@ What OpenClaw does for one-shot agent calls, Ome does for **persistent digital l
 | Step 3 | Commerce + content creation + customer service | **Income amplifier**: one-person company |
 | Step 4+ | Self-learning + cross-platform + physical world | **Digital worker**: AI labor market |
 
-Modules: `ome-persona` · `ome-skill` · `ome-work` · `ome-social` · `ome-grow`
+```bash
+pip install ome
+ome create        # 5 questions, your twin is born
+ome chat          # talk to it (it remembers everything)
+ome serve --mcp   # connect to Claude/Cursor
+```
 
-*Design phase — depends on Mindos. Contributions welcome.*
+**Ships with:** Conversation strategy engine (zero-cost LLM thinking) · Deep emotion system (LLM-parsed, not keywords) · 4-phase growth arc (newborn → soulmate) · Continuous persona evolution · 7-level bond system · 20 achievements · Daily challenges · Streak rewards · 7 skills with competence tracking · Autonomy engine (4 proactive L0 events) · Native iOS app (SwiftUI, SSE streaming) · OmeTown agent network · 119 tests.
 
 ---
 
@@ -244,7 +249,9 @@ soul.commit(conversation_text, source="openclaw")
 |---------|---------|--------|
 | **SOAP** | v0.1 | Spec + runtime + MCP + visualizer. **Ready to use.** |
 | **Mindos** | v0.3 | Five-layer brain + cross-device sync + MCP + 22 tests. **Ready to use.** |
-| **Ome** | — | Design phase |
+| **Ome** | v0.4 | Strategy engine + persona evolution + life system + iOS app + 119 tests. **Ready to use.** |
+| **Ome Server** | v0.4 | FastAPI + SSE streaming + zero-reg first chat + OmeTown agents. **Ready to use.** |
+| **Ome iOS** | v0.4 | Native SwiftUI app. App Store submission in progress. |
 | **Maxim** | — | Design phase |
 | **OmeTown** | — | Design phase |
 
@@ -252,11 +259,14 @@ soul.commit(conversation_text, source="openclaw")
 
 ```
 packages/
-├── soap/       SOAP — Spatial Omnity Agentic Protocol
-├── mindos/     Mindos — Multi-layer brain + persistent memory
-├── ome/        Ome — Individual agent persona + growth
-├── maxim/      Maxim — Multi-agent society + economy
-└── ometown/    OmeTown — The integrated world experience
+├── soap/         SOAP — Spatial Omnity Agentic Protocol
+├── mindos/       Mindos — Multi-layer brain + persistent memory
+├── ome/          Ome — Individual agent: persona, strategy, growth, skills
+├── ome-server/   Ome Server — FastAPI backend + SSE + OmeTown agents
+├── ome-ios/      Ome iOS — Native SwiftUI app for iPhone
+├── ome-app/      Ome App — React Native / Expo (experimental)
+├── maxim/        Maxim — Multi-agent society + economy
+└── ometown/      OmeTown — The integrated world experience
 ```
 
 Dependency: `soap` → `mindos` → `ome` / `maxim` → `ometown`. Lower layers ship first.
