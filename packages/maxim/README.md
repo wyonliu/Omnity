@@ -2,6 +2,8 @@
 
 **The first open-source AI civilization engine with a working economy.**
 
+![Maxim Dashboard](dashboard_preview.png)
+
 Agents don't just chat — they work, earn, spend, trade, marry, have children, age, and die. Run 100 years of civilization history in 30 minutes. Watch economies boom and crash, alliances form and break, and cultures emerge from nothing but a handful of AI agents and a set of rules.
 
 > **Maxim** = **M**ulti-**A**gent Society: **I**nteraction, e**X**change & **M**ulti-economy **M**odeler
