@@ -141,11 +141,14 @@ ome serve --mcp   # connect to Claude/Cursor
 
 > *What happens when thousands of Omes live together?*
 
-The first open-source **Simile-class AI society simulator**. Multiple Omes spontaneously socialize, cooperate, compete, and form relationships — plus a full economic engine: jobs, income, spending, transactions, supply and demand.
+The first open-source AI civilization engine **with a working economy**. Agents don't just chat — they work, earn, spend, trade, marry, have children, and die. Run 100 years of civilization history in 30 minutes for ~$0.40.
 
-The data flywheel: **Space × Language × Behavior** alignment datasets — among the scarcest and most valuable data in AI.
+```bash
+pip install -e packages/maxim
+maxim run packages/maxim/examples/village.yaml
+```
 
-*Design phase — depends on Mindos + Ome. Contributions welcome.*
+**Ships with:** Maslow needs-driven agent behavior (zero LLM cost) · LLM Game Master arbitration (1 call/tick) · Supply/demand market + wages + tax + GDP/Gini tracking · Full lifecycle (birth, aging, marriage, death, inheritance) · Chronicle with auto-milestone detection · Rich terminal UI · JSON export for visualization.
 
 ---
 
@@ -252,7 +255,7 @@ soul.commit(conversation_text, source="openclaw")
 | **Ome** | v0.5 | Strategy engine + persona evolution + life system + LLM-generated content + 119 tests. **Ready to use.** |
 | **Ome Server** | v0.5 | FastAPI + SSE streaming + LLM prompts/greeting API + OmeTown agents. **Ready to use.** |
 | **Ome iOS** | v0.5 | Native SwiftUI app. Voice-first input, growth system, zero hardcoded content. |
-| **Maxim** | — | Design phase |
+| **Maxim** | v0.1 | Needs-driven agents + GM arbitration + economy engine + chronicle. **First run complete.** |
 | **OmeTown** | — | Design phase |
 
 ## Monorepo Layout
@@ -284,7 +287,7 @@ Apache-2.0. PRs welcome.
 - [SOAP Spec v0.1](./packages/soap/spec/SOAP-v0.1.md)
 - [SOAP Vision & Execution](./docs/soap/PROTOCOL_VISION_AND_EXECUTION.md)
 - [Mindos Architecture Plan](./packages/mindos/MINDOS_PLAN.md)
-- [Execution Roadmap](./ometown_execution.md)
+- [Maxim — Getting Started](./packages/maxim/README.md)
 
 ---
 

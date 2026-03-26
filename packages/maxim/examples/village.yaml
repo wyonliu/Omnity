@@ -1,0 +1,138 @@
+name: "Willowbrook Village"
+start_year: 1
+duration_years: 100
+initial_currency: 150.0
+tax_rate: 0.05
+
+agents:
+  - id: farmer_li
+    name: "Li Wei"
+    age: 25
+    traits: [hardworking, cautious, kind]
+    occupation: farmer
+    skills: {farming: 0.7, cooking: 0.3}
+
+  - id: farmer_zhang
+    name: "Zhang Mei"
+    age: 22
+    traits: [resilient, quiet, observant]
+    occupation: farmer
+    skills: {farming: 0.6, weaving: 0.2}
+
+  - id: farmer_wang
+    name: "Wang Da"
+    age: 30
+    traits: [strong, stubborn, loyal]
+    occupation: farmer
+    skills: {farming: 0.65, building: 0.3}
+
+  - id: smith_chen
+    name: "Chen Gang"
+    age: 32
+    traits: [skilled, proud, ambitious]
+    occupation: blacksmith
+    skills: {smithing: 0.8, trading: 0.2}
+
+  - id: merchant_sun
+    name: "Sun Ling"
+    age: 28
+    traits: [clever, social, ambitious]
+    occupation: merchant
+    skills: {trading: 0.75, cooking: 0.3}
+
+  - id: healer_liu
+    name: "Liu Fang"
+    age: 35
+    traits: [compassionate, wise, patient]
+    occupation: healer
+    skills: {healing: 0.8, herbalism: 0.6}
+
+  - id: teacher_zhao
+    name: "Zhao Yi"
+    age: 40
+    traits: [learned, strict, fair]
+    occupation: teacher
+    skills: {teaching: 0.85, writing: 0.7}
+
+  - id: builder_wu
+    name: "Wu Qiang"
+    age: 27
+    traits: [creative, strong, curious]
+    occupation: builder
+    skills: {building: 0.7, smithing: 0.2}
+
+  - id: hunter_lin
+    name: "Lin Hu"
+    age: 24
+    traits: [brave, independent, quiet]
+    occupation: hunter
+    skills: {hunting: 0.75, tracking: 0.5}
+
+  - id: weaver_ma
+    name: "Ma Xiu"
+    age: 26
+    traits: [artistic, gentle, social]
+    occupation: weaver
+    skills: {weaving: 0.7, dyeing: 0.4}
+
+  - id: innkeeper_he
+    name: "He Rong"
+    age: 33
+    traits: [generous, talkative, warm]
+    occupation: innkeeper
+    skills: {hospitality: 0.7, cooking: 0.6}
+
+  - id: elder_zhou
+    name: "Zhou Bai"
+    age: 58
+    traits: [wise, respected, traditional]
+    occupation: teacher
+    skills: {teaching: 0.9, governance: 0.7, farming: 0.5}
+    wealth: 300.0
+    needs:
+      survival: 60
+      safety: 70
+      belonging: 50
+      esteem: 60
+      actualization: 30
+
+goods:
+  - name: food
+    base_price: 5
+    producers: [farmer, hunter]
+
+  - name: tools
+    base_price: 20
+    producers: [blacksmith]
+
+  - name: cloth
+    base_price: 15
+    producers: [weaver]
+
+  - name: medicine
+    base_price: 25
+    producers: [healer]
+
+  - name: lodging
+    base_price: 10
+    producers: [innkeeper]
+
+properties:
+  - name: "Li Farm"
+    owner: farmer_li
+  - name: "Zhang Farm"
+    owner: farmer_zhang
+  - name: "Wang Farm"
+    owner: farmer_wang
+  - name: "Chen Forge"
+    owner: smith_chen
+  - name: "Sun Trading Post"
+    owner: merchant_sun
+  - name: "Liu Herb Garden"
+    owner: healer_liu
+  - name: "Village School"
+    owner: teacher_zhao
+  - name: "Wu Workshop"
+    owner: builder_wu
+  - name: "He Inn"
+    owner: innkeeper_he
