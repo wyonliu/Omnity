@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -26,17 +27,17 @@ class RecallRequest(BaseModel):
 @router.post("/remember")
 async def remember(req: RememberRequest, ome: Ome = Depends(get_ome)) -> dict[str, Any]:
     """Teach your Ome something."""
-    return ome.remember(req.text, source=req.source)
+    return await asyncio.to_thread(ome.remember, req.text, source=req.source)
 
 
 @router.post("/recall")
 async def recall(req: RecallRequest, ome: Ome = Depends(get_ome)):
     """Search your Ome's memories."""
-    results = ome.recall(req.query, top_k=req.top_k)
+    results = await asyncio.to_thread(ome.recall, req.query, top_k=req.top_k)
     return {"results": results, "count": len(results)}
 
 
 @router.post("/forget")
 async def forget(req: RememberRequest, ome: Ome = Depends(get_ome)) -> dict[str, Any]:
     """Make your Ome forget something."""
-    return ome.forget(req.text)
+    return await asyncio.to_thread(ome.forget, req.text)

@@ -12,7 +12,9 @@ class SessionManager: ObservableObject {
 
     @Published var authState: AuthState = .loading
     @Published var userName: String = ""
+    @Published var omeName: String = ""  // 分身的名字
     @Published var bondLevel: Int = 0
+    @Published var logoutReason: String?
 
     var isLoggedIn: Bool { authState == .authenticated }
 
@@ -24,6 +26,7 @@ class SessionManager: ObservableObject {
         let hasToken = KeychainHelper.load("ome_token") != nil
             || UserDefaults.standard.string(forKey: "ome_token") != nil
         userName = UserDefaults.standard.string(forKey: "ome_name") ?? ""
+        omeName = UserDefaults.standard.string(forKey: "ome_ome_name") ?? ""
         bondLevel = UserDefaults.standard.integer(forKey: "ome_bond_level")
 
         if hasToken && !userName.isEmpty {
@@ -60,7 +63,8 @@ class SessionManager: ObservableObject {
                     let resp = try await api.login(userId: userId, password: password)
                     userName = resp.name
                 } catch {
-                    // Auto-login also failed — force logout
+                    // Auto-login also failed — force logout with reason
+                    logoutReason = "登录已过期，请重新登录"
                     await logout()
                 }
             }
@@ -118,5 +122,18 @@ class SessionManager: ObservableObject {
             bondLevel = level
         }
         UserDefaults.standard.set(level, forKey: "ome_bond_level")
+    }
+
+    /// 给分身起名/改名
+    func updateOmeName(_ name: String) {
+        omeName = name
+        UserDefaults.standard.set(name, forKey: "ome_ome_name")
+    }
+
+    /// 分身的显示名：有名用名，没名用默认
+    var omeDisplayName: String {
+        if !omeName.isEmpty { return omeName }
+        if !userName.isEmpty { return "小\(userName.prefix(1))" }
+        return "Ome"
     }
 }

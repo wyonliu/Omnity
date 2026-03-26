@@ -7,5 +7,9 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Ome 需要麦克风来听你说话，这样你可以用语音和 Ome 聊天。</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Ome 需要语音识别来理解你说的话。</string>
 </dict>
 </plist>

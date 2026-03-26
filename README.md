@@ -133,7 +133,7 @@ ome chat          # talk to it (it remembers everything)
 ome serve --mcp   # connect to Claude/Cursor
 ```
 
-**Ships with:** Conversation strategy engine (zero-cost LLM thinking) · Deep emotion system (LLM-parsed, not keywords) · 4-phase growth arc (newborn → soulmate) · Continuous persona evolution · 7-level bond system · 20 achievements · Daily challenges · Streak rewards · 7 skills with competence tracking · Autonomy engine (4 proactive L0 events) · Native iOS app (SwiftUI, SSE streaming) · OmeTown agent network · 119 tests.
+**Ships with:** Conversation strategy engine (zero-cost LLM thinking) · Deep emotion system (LLM-parsed, not keywords) · 4-phase growth arc (newborn → soulmate) · Continuous persona evolution · 7-level bond system · 20 achievements · Daily challenges · Streak rewards · 7 skills with competence tracking · Autonomy engine (4 proactive L0 events) · Native iOS app (SwiftUI, SSE streaming, voice-first) · LLM-generated greetings, prompts, and follow-ups (zero hardcoded content) · OmeTown agent network · 119 tests.
 
 ---
 
@@ -249,9 +249,9 @@ soul.commit(conversation_text, source="openclaw")
 |---------|---------|--------|
 | **SOAP** | v0.1 | Spec + runtime + MCP + visualizer. **Ready to use.** |
 | **Mindos** | v0.3 | Five-layer brain + cross-device sync + MCP + 22 tests. **Ready to use.** |
-| **Ome** | v0.4 | Strategy engine + persona evolution + life system + iOS app + 119 tests. **Ready to use.** |
-| **Ome Server** | v0.4 | FastAPI + SSE streaming + zero-reg first chat + OmeTown agents. **Ready to use.** |
-| **Ome iOS** | v0.4 | Native SwiftUI app. App Store submission in progress. |
+| **Ome** | v0.5 | Strategy engine + persona evolution + life system + LLM-generated content + 119 tests. **Ready to use.** |
+| **Ome Server** | v0.5 | FastAPI + SSE streaming + LLM prompts/greeting API + OmeTown agents. **Ready to use.** |
+| **Ome iOS** | v0.5 | Native SwiftUI app. Voice-first input, growth system, zero hardcoded content. |
 | **Maxim** | — | Design phase |
 | **OmeTown** | — | Design phase |
 

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ome.core import Ome
@@ -26,7 +27,10 @@ async def list_skills(ome: Ome = Depends(get_ome)):
 @router.post("/skills/{skill_name}")
 async def use_skill(skill_name: str, req: SkillRequest, ome: Ome = Depends(get_ome)):
     """Execute a skill by name."""
-    result = ome.use_skill(skill_name, **req.kwargs)
+    try:
+        result = await asyncio.to_thread(ome.use_skill, skill_name, **req.kwargs)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"技能执行失败: {e}")
     return {
         "success": result.success,
         "output": result.output,

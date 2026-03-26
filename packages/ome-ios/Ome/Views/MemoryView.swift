@@ -10,6 +10,7 @@ struct MemoryView: View {
     @State private var saving = false
     @State private var hasSearched = false
     @State private var totalMemories: Int?
+    @State private var errorMessage: String?
     @FocusState private var searchFocused: Bool
     @AppStorage("ome_selected_tab") private var selectedTab = 0
 
@@ -136,6 +137,31 @@ struct MemoryView: View {
                 Spacer()
                 ProgressView().tint(Theme.accent)
                 Spacer()
+            } else if let error = errorMessage {
+                Spacer()
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.title)
+                        .foregroundStyle(Theme.textMuted)
+                    Text(error)
+                        .font(.body)
+                        .foregroundStyle(Theme.textMuted)
+                        .multilineTextAlignment(.center)
+                    Button {
+                        errorMessage = nil
+                        search(query: "最近的记忆")
+                    } label: {
+                        Text("重试")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(Theme.bg)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 8)
+                            .background(Theme.accent)
+                            .clipShape(Capsule())
+                    }
+                }
+                .padding(.horizontal, 40)
+                Spacer()
             } else if memories.isEmpty {
                 Spacer()
                 VStack(spacing: 16) {
@@ -145,7 +171,7 @@ struct MemoryView: View {
                         .foregroundStyle(Theme.textMuted)
                     if !hasSearched {
                         Button {
-                            selectedTab = 0  // Switch to Chat
+                            selectedTab = 0
                         } label: {
                             Text("去聊天")
                                 .font(.subheadline.bold())
@@ -207,12 +233,24 @@ struct MemoryView: View {
         guard !q.isEmpty else { return }
         hasSearched = true
         loading = true
+        errorMessage = nil
         searchFocused = false
         Task {
             do {
                 let result = try await api.recall(q)
                 memories = result.results
-            } catch {}
+            } catch {
+                if let apiErr = error as? APIError {
+                    switch apiErr {
+                    case .network: errorMessage = "网络连接失败，请检查网络"
+                    case .unauthorized: errorMessage = "登录已过期，请重新登录"
+                    case .serverError: errorMessage = "服务器开小差了，稍后再试"
+                    case .invalidURL: errorMessage = "出了点问题，稍后再试"
+                    }
+                } else {
+                    errorMessage = "加载记忆失败：\(error.localizedDescription)"
+                }
+            }
             loading = false
         }
     }

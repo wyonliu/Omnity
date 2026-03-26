@@ -82,6 +82,8 @@ struct StreamToken: Codable {
     var level_up: LevelUpEvent?
     var achievements: [AchievementEvent]?
     var daily_challenge: DailyChallenge?
+    // LLM-generated follow-up suggestions
+    var suggested_follow_ups: [String]?
 }
 
 // MARK: - Life
@@ -141,7 +143,7 @@ struct AutonomyInfo: Codable {
     let level: Int?
     let level_name: String?
     let actions_today: Int?
-    let daily_budget: Int?
+    let budget: Int?
 }
 
 // MARK: - Agents
@@ -184,6 +186,47 @@ struct SoulCardResponse: Codable {
     let conversations_needed: Int?
 }
 
+// MARK: - Skills
+
+struct SkillInfo: Codable, Identifiable {
+    var id: String { name }
+    let name: String
+    let description: String?
+    let available: Bool?
+    let min_bond_level: Int?
+    let competence: Double?
+    let uses: Int?
+}
+
+struct SkillResult: Codable {
+    let success: Bool
+    let output: String
+    let output_type: String?
+    let needs_approval: Bool?
+}
+
+// MARK: - Guess Who Game (Viral)
+
+struct GuessGameCreateRequest: Codable {
+    let question: String
+    let user_answer: String
+    let ome_answer: String
+}
+
+struct GuessGameResponse: Codable {
+    let game_id: String
+    let share_url: String?
+}
+
+// MARK: - Proactive Events
+
+struct OmeEvent: Codable, Identifiable {
+    var id: String { event_name }
+    let event_name: String
+    let message: String
+    let needs_approval: Bool?
+}
+
 // MARK: - Memory
 
 struct RecallResponse: Codable {
@@ -192,7 +235,14 @@ struct RecallResponse: Codable {
 }
 
 struct MemoryItem: Codable, Identifiable {
-    var id: String { text.prefix(50) + "\(score ?? 0)" }
-    let text: String
-    let score: Double?
+    let id: String
+    let content: String
+    let type: String?
+    let source: String?
+    let confidence: Double?
+
+    /// Display text (maps server "content" to UI "text")
+    var text: String { content }
+    /// Display score (maps server "confidence" to UI "score")
+    var score: Double? { confidence }
 }

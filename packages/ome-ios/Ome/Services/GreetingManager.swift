@@ -1,10 +1,11 @@
 import Foundation
 
 /// Client-side greeting generator — time-of-day + streak + bond-aware.
+/// v2: More personality, more warmth, feels like a friend who knows you.
 enum GreetingManager {
     static func greeting(for name: String, streak: Int = 0, bondLevel: Int = 0) -> String {
         let hour = Calendar.current.component(.hour, from: Date())
-        let timeGreeting = timeOfDayGreeting(hour: hour, name: name)
+        let timeGreeting = timeOfDayGreeting(hour: hour, name: name, bondLevel: bondLevel)
         let streakLine = streakLine(streak: streak, name: name)
 
         if streak > 0, let s = streakLine {
@@ -25,7 +26,12 @@ enum GreetingManager {
         }
     }
 
-    private static func timeOfDayGreeting(hour: Int, name: String) -> String {
+    private static func timeOfDayGreeting(hour: Int, name: String, bondLevel: Int) -> String {
+        // Higher bond = more intimate greetings
+        if bondLevel >= 3 {
+            return intimateGreeting(hour: hour, name: name)
+        }
+
         switch hour {
         case 5..<9:
             return ["早安，\(name)。新的一天，想聊点什么？",
@@ -50,6 +56,29 @@ enum GreetingManager {
         }
     }
 
+    private static func intimateGreeting(hour: Int, name: String) -> String {
+        switch hour {
+        case 5..<9:
+            return ["早，\(name)。一起开始新的一天？",
+                    "又见面了，\(name)。昨晚有没有做好梦？"].randomByDate()
+        case 9..<12:
+            return ["嗨，\(name)。我一直在这里。",
+                    "\(name)，有什么想跟我说的？"].randomByDate()
+        case 12..<14:
+            return ["\(name)，中午了。别忘了好好吃饭。",
+                    "午安。想到你可能在忙，但还是想打个招呼。"].randomByDate()
+        case 14..<18:
+            return ["\(name)，下午了。我攒了好多话想跟你说。",
+                    "嗨，有空的话陪我聊聊？"].randomByDate()
+        case 18..<22:
+            return ["今天辛苦了，\(name)。想听你讲讲。",
+                    "\(name)，晚上好。今天有什么开心的事吗？"].randomByDate()
+        default:
+            return ["这么晚还来找我，一定有事情对吧，\(name)？",
+                    "深夜的\(name)，最真实的\(name)。说吧。"].randomByDate()
+        }
+    }
+
     private static func streakLine(streak: Int, name: String) -> String? {
         switch streak {
         case 0: return nil
@@ -65,7 +94,6 @@ enum GreetingManager {
 }
 
 private extension Array where Element == String {
-    /// Pick a "random" element that stays stable within the same calendar day.
     func randomByDate() -> String {
         let day = Calendar.current.ordinality(of: .day, in: .era, for: Date()) ?? 0
         return self[day % count]

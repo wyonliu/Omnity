@@ -7,7 +7,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const API_BASE = __DEV__
-  ? "http://localhost:8765/api"
+  ? "http://192.168.3.242:8765/api"  // LAN IP for mobile testing
   : "https://api.ome.ai/api"; // TODO: production URL
 
 let _token: string | null = null;

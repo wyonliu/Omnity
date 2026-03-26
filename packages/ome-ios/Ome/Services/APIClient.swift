@@ -195,6 +195,45 @@ actor APIClient {
         return try await post("/agents/\(targetId)/message", body: Req(message: message))
     }
 
+    // MARK: - Skills
+
+    func listSkills() async throws -> [SkillInfo] {
+        try await get("/skills")
+    }
+
+    func executeSkill(_ name: String, input: String) async throws -> SkillResult {
+        struct Req: Codable { let input: String }
+        return try await post("/skills/\(name)", body: Req(input: input))
+    }
+
+    // MARK: - Guess Who Game (Viral)
+
+    func createGuessGame(question: String, userAnswer: String, omeAnswer: String) async throws -> GuessGameResponse {
+        let req = GuessGameCreateRequest(question: question, user_answer: userAnswer, ome_answer: omeAnswer)
+        return try await post("/viral/guess-game/create", body: req)
+    }
+
+    // MARK: - Personalized Prompts
+
+    func generatePrompts(count: Int = 3, context: String = "") async throws -> [String] {
+        struct Req: Codable { let count: Int; let context: String }
+        struct Resp: Codable { let prompts: [String] }
+        let resp: Resp = try await post("/prompts/generate", body: Req(count: count, context: context))
+        return resp.prompts
+    }
+
+    func getGreeting() async throws -> String {
+        struct Resp: Codable { let greeting: String }
+        let resp: Resp = try await get("/greeting")
+        return resp.greeting
+    }
+
+    // MARK: - Proactive Events
+
+    func checkEvents() async throws -> [OmeEvent] {
+        try await get("/events")
+    }
+
     // MARK: - HTTP Helpers
 
     private func makeRequest(_ path: String, method: String = "GET") throws -> URLRequest {

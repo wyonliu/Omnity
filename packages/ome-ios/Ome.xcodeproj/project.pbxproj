@@ -17,6 +17,8 @@
 		55F507D8028A9F22CF554E98 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4B5CFE88050B0DDC6AB2B8C /* ChatView.swift */; };
 		664419E96F06F95CD9BC936E /* NotificationPermissionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B4AD8B688B2719EB9AE2433 /* NotificationPermissionSheet.swift */; };
 		6A8E6061DAFD46FB3A53068D /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37CD02B57AA4DD21F58F064C /* NotificationManager.swift */; };
+						CS02CHATSTORE0002BUILDF01 /* ChatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CS01CHATSTORE0001FILEREF01 /* ChatStore.swift */; };
+		C76723830B8D877670EEE80B /* SpeechRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E690CD58FE0784B717604671 /* SpeechRecognizer.swift */; };
 		72E5943F4B408B2D5F90E003 /* SessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A3E5B767B7F6A8EE2A3E9B /* SessionManager.swift */; };
 		8278A9B3083DF8095F8995EE /* PromptManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56B8E7B6D03C920DD86F58F4 /* PromptManager.swift */; };
 		8E754CDEE3169C56128AB1C6 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D42438502FE70433E00EF55B /* MainTabView.swift */; };
@@ -43,6 +45,8 @@
 		03F1281639CC8BE145F195A8 /* OmeOrb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmeOrb.swift; sourceTree = "<group>"; };
 		0495D2C050511AC52FDD9D87 /* SoftRegisterSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoftRegisterSheet.swift; sourceTree = "<group>"; };
 		103AA964F0D2589A12EB6B96 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+						CS01CHATSTORE0001FILEREF01 /* ChatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatStore.swift; sourceTree = "<group>"; };
+		E690CD58FE0784B717604671 /* SpeechRecognizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognizer.swift; sourceTree = "<group>"; };
 		14A3E5B767B7F6A8EE2A3E9B /* SessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionManager.swift; sourceTree = "<group>"; };
 		14F9D7C820617F9D2305DE46 /* TypewriterText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypewriterText.swift; sourceTree = "<group>"; };
 		2B68FE77768E5548371BDB42 /* GreetingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GreetingManager.swift; sourceTree = "<group>"; };
@@ -98,7 +102,9 @@
 				FAA9A1AD2CE9136AAF5FBE3B /* KeychainHelper.swift */,
 				37CD02B57AA4DD21F58F064C /* NotificationManager.swift */,
 				56B8E7B6D03C920DD86F58F4 /* PromptManager.swift */,
+				CS01CHATSTORE0001FILEREF01 /* ChatStore.swift */,
 				14A3E5B767B7F6A8EE2A3E9B /* SessionManager.swift */,
+				E690CD58FE0784B717604671 /* SpeechRecognizer.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -253,6 +259,8 @@
 				8278A9B3083DF8095F8995EE /* PromptManager.swift in Sources */,
 				A53C210B4F8AF9F08728216A /* RootView.swift in Sources */,
 				72E5943F4B408B2D5F90E003 /* SessionManager.swift in Sources */,
+				C76723830B8D877670EEE80B /* SpeechRecognizer.swift in Sources */,
+				CS02CHATSTORE0002BUILDF01 /* ChatStore.swift in Sources */,
 				F0F14C232439C8440CA7B1D5 /* SettingsView.swift in Sources */,
 				B74810661089D0FD0D56BEFC /* SkeletonView.swift in Sources */,
 				0352EC4A9F52CCF0C22BA3BF /* SoftRegisterSheet.swift in Sources */,
@@ -326,7 +334,7 @@
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				SWIFT_VERSION = 6.0;
+				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
 		};
@@ -408,7 +416,7 @@
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
-				SWIFT_VERSION = 6.0;
+				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
 		};

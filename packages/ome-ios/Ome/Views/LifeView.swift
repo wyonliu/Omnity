@@ -272,7 +272,7 @@ struct LifeView: View {
 
     private func dayLabel(daysAgo: Int) -> String {
         if daysAgo == 0 { return "今" }
-        let date = Calendar.current.date(byAdding: .day, value: -daysAgo, to: Date())!
+        guard let date = Calendar.current.date(byAdding: .day, value: -daysAgo, to: Date()) else { return "?" }
         let formatter = DateFormatter()
         formatter.dateFormat = "E"
         formatter.locale = Locale(identifier: "zh_CN")

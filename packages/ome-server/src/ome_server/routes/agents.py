@@ -6,6 +6,7 @@ forming the basis of the OmeTown symbiotic world.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -48,26 +49,36 @@ async def introduce(
     """Exchange identity cards with another Ome. First contact."""
     try:
         target_ome = ome_manager.get_ome(target_id)
-    except FileNotFoundError:
+    except (FileNotFoundError, KeyError, Exception) as e:
         raise HTTPException(status_code=404, detail=f"Ome '{target_id}' not found")
 
     # Exchange identity cards
     my_card = ome.identity_card(protocol="generic")
     their_card = target_ome.identity_card(protocol="generic")
 
-    # Both Omes remember the introduction
-    ome.remember(
-        f"Met {target_ome.name} (Ome of {target_id}). "
-        f"Traits: {', '.join(target_ome.traits)}. "
-        f"Bond level: {target_ome.bond.level}.",
-        source="agent-introduction",
-    )
-    target_ome.remember(
-        f"Met {ome.name} (Ome of {user_id}). "
-        f"Traits: {', '.join(ome.traits)}. "
-        f"{req.greeting}" if req.greeting else "",
-        source="agent-introduction",
-    )
+    # Both Omes remember the introduction (non-blocking)
+    async def _remember():
+        await asyncio.to_thread(
+            ome.remember,
+            f"Met {target_ome.name} (Ome of {target_id}). "
+            f"Traits: {', '.join(target_ome.traits)}. "
+            f"Bond level: {target_ome.bond.level}.",
+            "agent-introduction",
+        )
+        greeting_text = (
+            f"Met {ome.name} (Ome of {user_id}). "
+            f"Traits: {', '.join(ome.traits)}. "
+            f"{req.greeting}" if req.greeting else ""
+        )
+        if greeting_text:
+            await asyncio.to_thread(
+                target_ome.remember, greeting_text, "agent-introduction",
+            )
+
+    try:
+        await asyncio.wait_for(_remember(), timeout=10.0)
+    except asyncio.TimeoutError:
+        pass  # Don't block response for memory writes
 
     return {
         "success": True,
@@ -87,31 +98,56 @@ async def send_message(
     user_id: str = Depends(get_current_user),
 ):
     """Send a message from your Ome to another Ome. Agent-to-agent communication."""
+    if not req.message.strip():
+        raise HTTPException(status_code=400, detail="消息不能为空")
+
     try:
         target_ome = ome_manager.get_ome(target_id)
-    except FileNotFoundError:
+    except (FileNotFoundError, KeyError, Exception) as e:
         raise HTTPException(status_code=404, detail=f"Ome '{target_id}' not found")
 
-    # Your Ome crafts a message in your voice
-    my_message = ome.mirror_chat(
-        f"Write a message to {target_ome.name}: {req.message}"
-    )
+    # Your Ome crafts a message in your voice (with timeout)
+    try:
+        my_message = await asyncio.wait_for(
+            asyncio.to_thread(
+                ome.mirror_chat,
+                f"Write a message to {target_ome.name}: {req.message}"
+            ),
+            timeout=30.0,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="消息生成超时，请稍后再试")
 
-    # Target Ome responds
+    # Target Ome responds (with timeout)
     context = f"[Message from {ome.name} (Ome of {user_id})]: {my_message}"
     if req.context:
         context += f"\n[Context: {req.context}]"
-    target_reply = target_ome.chat(context)
 
-    # Both remember the exchange
-    ome.remember(
-        f"Sent message to {target_ome.name}: {my_message[:200]}",
-        source="agent-message",
-    )
-    target_ome.remember(
-        f"Received message from {ome.name}: {my_message[:200]}",
-        source="agent-message",
-    )
+    try:
+        target_reply = await asyncio.wait_for(
+            asyncio.to_thread(target_ome.chat, context),
+            timeout=30.0,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="对方回复超时，请稍后再试")
+
+    # Both remember the exchange (non-blocking, best effort)
+    async def _remember():
+        await asyncio.to_thread(
+            ome.remember,
+            f"Sent message to {target_ome.name}: {my_message[:200]}",
+            "agent-message",
+        )
+        await asyncio.to_thread(
+            target_ome.remember,
+            f"Received message from {ome.name}: {my_message[:200]}",
+            "agent-message",
+        )
+
+    try:
+        await asyncio.wait_for(_remember(), timeout=10.0)
+    except asyncio.TimeoutError:
+        pass
 
     return {
         "my_message": my_message,
@@ -127,7 +163,7 @@ async def agent_profile(target_id: str, _: str = Depends(get_current_user)):
     """View another Ome's public profile."""
     try:
         target_ome = ome_manager.get_ome(target_id)
-    except FileNotFoundError:
+    except (FileNotFoundError, KeyError, Exception) as e:
         raise HTTPException(status_code=404, detail=f"Ome '{target_id}' not found")
 
     return {

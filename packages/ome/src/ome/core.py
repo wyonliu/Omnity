@@ -244,6 +244,122 @@ class Ome:
 
         return reply
 
+    def suggest_follow_ups(self, user_msg: str, ome_reply: str, count: int = 3) -> list[str]:
+        """Generate contextual follow-up suggestions using LLM.
+
+        Returns a list of short follow-up prompts the user might say next.
+        Uses memory + emotion + bond state for personalization.
+        """
+        phase = get_growth_phase(self.bond.total_interactions)
+        mood = self.emotion.mood
+
+        system = (
+            f"你是{self.name}的AI分身（Ome），正在和{self.name}聊天。\n"
+            f"当前关系阶段：{phase['name']}，心情：{mood}。\n\n"
+            f"刚刚的对话：\n"
+            f"用户说：{user_msg}\n"
+            f"你回复了：{ome_reply}\n\n"
+            f"请生成{count}个用户可能想说的后续内容，作为快捷回复按钮。\n"
+            f"要求：\n"
+            f"- 每个不超过8个字\n"
+            f"- 自然、口语化，像发微信\n"
+            f"- 至少一个是追问/深入，一个是肯定/共鸣\n"
+            f"- 用中文\n"
+            f"- 直接输出{count}行，每行一个，不要编号不要标点\n"
+        )
+        try:
+            raw = self._generate(system, "生成跟进建议", "")
+            lines = [l.strip() for l in raw.strip().split("\n") if l.strip()]
+            # Clean: remove numbering, bullets, quotes
+            clean = []
+            for l in lines:
+                l = l.lstrip("0123456789.、-·•\"'「」")
+                l = l.strip()
+                if l and len(l) <= 15:
+                    clean.append(l)
+            return clean[:count]
+        except Exception as e:
+            log.warning("Failed to generate follow-ups: %s", e)
+            return []
+
+    def generate_prompts(self, count: int = 3, context: str = "") -> list[str]:
+        """Generate personalized conversation starters using LLM + memory.
+
+        Returns prompts tailored to the user's history, mood, and growth phase.
+        """
+        phase = get_growth_phase(self.bond.total_interactions)
+        mood = self.emotion.mood
+
+        # Recall recent memories for context
+        query = context if context else "最近发生的事"
+        memories = self.soul.recall(query, top_k=5)
+        mem_summary = "\n".join(
+            f"- {m.get('content', '')}" for m in (memories or [])
+        )[:500]
+
+        system = (
+            f"你是{self.name}的AI分身（Ome），了解{self.name}的一切。\n"
+            f"关系阶段：{phase['name']}（共{self.bond.total_interactions}次对话），心情：{mood}。\n"
+            f"相关记忆：\n{mem_summary or '(暂无记忆)'}\n\n"
+            f"请生成{count}个你想问{self.name}的问题或话题，作为今天的对话入口。\n"
+            f"要求：\n"
+            f"- 基于你对ta的了解，不要泛泛而谈\n"
+            f"- 简短自然，像朋友发微信\n"
+            f"- 每个一句话，不超过20字\n"
+            f"- 如果有记忆，至少一个要引用记忆中的细节\n"
+            f"- 用中文\n"
+            f"- 直接输出{count}行，每行一个，不要编号\n"
+        )
+        try:
+            raw = self._generate(system, "生成今日话题", "")
+            lines = [l.strip() for l in raw.strip().split("\n") if l.strip()]
+            clean = []
+            for l in lines:
+                l = l.lstrip("0123456789.、-·•\"'「」")
+                l = l.strip()
+                if l and len(l) <= 40:
+                    clean.append(l)
+            return clean[:count]
+        except Exception as e:
+            log.warning("Failed to generate prompts: %s", e)
+            return []
+
+    def generate_greeting(self) -> str:
+        """Generate a personalized greeting using LLM + memory + time context."""
+        phase = get_growth_phase(self.bond.total_interactions)
+        mood = self.emotion.mood
+        now = datetime.now()
+        hour = now.hour
+        time_hint = "早上" if hour < 12 else ("下午" if hour < 18 else "晚上")
+        streak = self.bond.streak_days
+
+        # Grab recent memories for context
+        memories = self.soul.recall("最近发生的事", top_k=3)
+        mem_summary = "\n".join(
+            f"- {m.get('content', '')}" for m in (memories or [])
+        )[:300]
+
+        system = (
+            f"你是{self.name}的AI分身（Ome），现在是{time_hint}。\n"
+            f"关系阶段：{phase['name']}（共{self.bond.total_interactions}次对话），"
+            f"连续{streak}天，心情：{mood}。\n"
+            f"相关记忆：\n{mem_summary or '(暂无记忆)'}\n\n"
+            f"请用一两句话跟{self.name}打招呼。\n"
+            f"要求：\n- 像老朋友发微信，温暖自然\n"
+            f"- 如果有记忆，可以引用细节\n"
+            f"- 根据时间和心情调整语气\n"
+            f"- 不要超过40字\n- 用中文\n- 直接输出，不要编号\n"
+        )
+        try:
+            raw = self._generate(system, "生成问候", "")
+            # Clean up: take first line, strip quotes/punctuation artifacts
+            line = raw.strip().split("\n")[0].strip()
+            line = line.strip("\"'「」")
+            return line if line else ""
+        except Exception as e:
+            log.warning("Failed to generate greeting: %s", e)
+            return ""
+
     def remember(self, text: str, source: str = "manual") -> dict[str, Any]:
         """Teach your Ome something directly."""
         self.growth.record_action("recall", success=True, quality=0.6)

@@ -14,11 +14,27 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# Load .env BEFORE anything reads os.environ — search upward from this file
+# so that both `ome-server` CLI and `uvicorn ome_server.main:app` pick it up.
+_env_candidates = [
+    Path(__file__).resolve().parent.parent.parent / ".env",  # packages/ome-server/.env
+    Path(__file__).resolve().parent.parent.parent.parent.parent / ".env",  # omnity/.env
+    Path.cwd() / ".env",
+]
+for _p in _env_candidates:
+    if _p.exists():
+        load_dotenv(_p, override=False)
+        break
+else:
+    load_dotenv(override=False)  # fallback: search from cwd upward
+
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from ome_server.routes import agents, anon, auth, chat, life, memories, skills, viral
+from ome_server.routes import agents, anon, auth, chat, life, memories, prompts, skills, viral
 
 log = logging.getLogger("ome_server")
 
@@ -60,6 +76,7 @@ app.include_router(memories.router, prefix="/api", tags=["memories"])
 app.include_router(skills.router, prefix="/api", tags=["skills"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 app.include_router(viral.router, prefix="/api/viral", tags=["viral"])
+app.include_router(prompts.router, prefix="/api", tags=["prompts"])
 
 
 @app.get("/")

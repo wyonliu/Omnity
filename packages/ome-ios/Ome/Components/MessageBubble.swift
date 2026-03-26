@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Chat message bubble — user on right (gold), Ome on left with orb avatar.
+/// Chat message bubble — user on right (gold), Ome on left with orb avatar + mood.
 struct MessageBubble: View {
     let message: Message
 
@@ -10,14 +10,14 @@ struct MessageBubble: View {
         HStack(alignment: .top, spacing: 8) {
             if isUser { Spacer(minLength: 60) }
 
-            // Ome avatar: mini orb instead of emoji
+            // Ome avatar: mini orb
             if !isUser {
                 OmeOrbMini(size: 28)
                     .padding(.top, 4)
             }
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
-                Text(message.text + (message.isStreaming ? "▌" : ""))
+                Text(message.text + (message.isStreaming ? "\u{258C}" : ""))
                     .font(.body)
                     .foregroundStyle(isUser ? Theme.bg : Theme.textPrimary)
                     .lineSpacing(4)
@@ -29,6 +29,13 @@ struct MessageBubble: View {
                         RoundedRectangle(cornerRadius: 18)
                             .stroke(isUser ? Color.clear : Theme.border, lineWidth: 1)
                     )
+
+                // Mood emoji for Ome messages
+                if !isUser, let emoji = message.moodEmoji, !emoji.isEmpty {
+                    Text(emoji)
+                        .font(.system(size: 11))
+                        .padding(.leading, 8)
+                }
             }
 
             if !isUser { Spacer(minLength: 60) }

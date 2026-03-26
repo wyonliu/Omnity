@@ -1,10 +1,11 @@
 import SwiftUI
 
 /// Progressive tab layout — unlocks tabs as bond level grows.
-/// Tab selection persists across app launches.
-/// Shows level-up celebration on bond level change.
+/// v2: All tabs always rendered to prevent TabView structural changes from destroying state.
+/// Locked tabs show an overlay prompt instead of being removed.
 struct MainTabView: View {
     @EnvironmentObject var session: SessionManager
+    @EnvironmentObject var chatStore: ChatStore
     @AppStorage("ome_selected_tab") private var selectedTab = 0
     @AppStorage("ome_should_request_notifications") private var shouldRequestNotif = false
     @State private var previousBondLevel: Int?
@@ -25,33 +26,23 @@ struct MainTabView: View {
                     .tabItem { Label("灵境", systemImage: "sparkles") }
                     .tag(1)
 
-                if session.bondLevel >= 1 {
-                    MemoryView()
-                        .tabItem { Label("记忆", systemImage: "brain.head.profile") }
-                        .tag(2)
-                }
+                tabContent(for: 2, requiredLevel: 1) { MemoryView() }
+                    .tabItem { Label("记忆", systemImage: "brain.head.profile") }
+                    .tag(2)
 
-                if session.bondLevel >= 2 {
-                    LifeView()
-                        .tabItem { Label("成长", systemImage: "chart.line.uptrend.xyaxis") }
-                        .tag(3)
-                }
-
-                if session.bondLevel >= 3 {
-                    AgentsView()
-                        .tabItem { Label("广场", systemImage: "person.3") }
-                        .tag(4)
-                }
+                tabContent(for: 3, requiredLevel: 2) { LifeView() }
+                    .tabItem { Label("成长", systemImage: "chart.line.uptrend.xyaxis") }
+                    .tag(3)
 
                 SettingsView()
-                    .tabItem { Label("设置", systemImage: "gearshape") }
+                    .tabItem { Label("我的", systemImage: "person.crop.circle") }
                     .tag(9)
             }
             .tint(Theme.accent)
 
             // Level-up celebration overlay
             if showLevelUp {
-                let level = min(session.bondLevel, 6)
+                let level = min(max(session.bondLevel, 0), stageNames.count - 1)
                 LevelUpCelebration(
                     level: level,
                     stageName: stageNames[level],
@@ -61,29 +52,14 @@ struct MainTabView: View {
             }
         }
         .onChange(of: session.bondLevel) { _, newLevel in
-            // Detect level-up
             if let prev = previousBondLevel, newLevel > prev {
                 showLevelUp = true
             }
             previousBondLevel = newLevel
-
-            // Tab availability check
-            let validTabs: Set<Int> = {
-                var tabs: Set<Int> = [0, 1, 9]
-                if newLevel >= 1 { tabs.insert(2) }
-                if newLevel >= 2 { tabs.insert(3) }
-                if newLevel >= 3 { tabs.insert(4) }
-                return tabs
-            }()
-            if !validTabs.contains(selectedTab) {
-                selectedTab = 0
-            }
         }
         .onAppear {
             previousBondLevel = session.bondLevel
-            // Update last active date
             UserDefaults.standard.set(Date(), forKey: "ome_last_active_date")
-            // Notification permission request (delayed)
             if shouldRequestNotif {
                 shouldRequestNotif = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
@@ -105,5 +81,44 @@ struct MainTabView: View {
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
         }
+    }
+
+    /// Wraps tab content with a locked overlay when bond level is insufficient.
+    @ViewBuilder
+    private func tabContent<Content: View>(for tag: Int, requiredLevel: Int, @ViewBuilder content: () -> Content) -> some View {
+        if session.bondLevel >= requiredLevel {
+            content()
+        } else {
+            lockedView(requiredLevel: requiredLevel)
+        }
+    }
+
+    private func lockedView(requiredLevel: Int) -> some View {
+        VStack(spacing: 20) {
+            Spacer()
+            Image(systemName: "lock.fill")
+                .font(.system(size: 40))
+                .foregroundStyle(Theme.textMuted)
+            Text("需要亲密度 Lv.\(requiredLevel) 解锁")
+                .font(.headline)
+                .foregroundStyle(Theme.textSecondary)
+            Text("继续和 Ome 聊天来提升关系")
+                .font(.subheadline)
+                .foregroundStyle(Theme.textMuted)
+            Button {
+                selectedTab = 0
+            } label: {
+                Text("去聊天")
+                    .font(.subheadline.bold())
+                    .foregroundStyle(Theme.bg)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 10)
+                    .background(Theme.accent)
+                    .clipShape(Capsule())
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .background(Theme.bg)
     }
 }

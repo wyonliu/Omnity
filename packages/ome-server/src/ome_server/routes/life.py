@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -17,7 +18,7 @@ router = APIRouter()
 @router.get("/dashboard")
 async def dashboard(ome: Ome = Depends(get_ome)) -> dict[str, Any]:
     """Full life dashboard: bond, achievements, skills, streak, emotion, highlights."""
-    return ome.life_dashboard()
+    return await asyncio.to_thread(ome.life_dashboard)
 
 
 @router.get("/status")
@@ -43,7 +44,7 @@ async def soul_card(ome: Ome = Depends(get_ome)) -> dict[str, Any]:
     """Get Soul Card data (JSON). Use /soul-card/image for the rendered PNG."""
     if not ome.soul_card_ready():
         return {"ready": False, "conversations_needed": 10 - ome.bond.total_interactions}
-    card = ome.soul_card()
+    card = await asyncio.to_thread(ome.soul_card)
     return {"ready": True, **card.to_dict()}
 
 
@@ -51,9 +52,8 @@ async def soul_card(ome: Ome = Depends(get_ome)) -> dict[str, Any]:
 async def soul_card_image(ome: Ome = Depends(get_ome)):
     """Get Soul Card as a rendered PNG image."""
     if not ome.soul_card_ready():
-        from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="需要至少10次对话才能生成灵魂卡片")
-    png_bytes = ome.soul_card_image()
+    png_bytes = await asyncio.to_thread(ome.soul_card_image)
     return Response(content=png_bytes, media_type="image/png")
 
 
