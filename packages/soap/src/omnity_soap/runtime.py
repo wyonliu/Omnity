@@ -832,6 +832,13 @@ class SOAPRuntime:
 
         target_obj_id = target_uri.rsplit("/", 1)[-1]
         anchor = self.get_object(target_obj_id)
+        # Fallback: resolve anchor by matching object URI if ID lookup missed.
+        if anchor is None:
+            for candidate in self.list_objects():
+                if candidate.get("uri") == target_uri:
+                    anchor = candidate
+                    target_obj_id = candidate.get("id", target_obj_id)
+                    break
         anchor_region = self.get_region(target_obj_id)
 
         dest_desc = target_uri
