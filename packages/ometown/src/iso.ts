@@ -11,8 +11,9 @@
 
 // ─── Constants ───
 
-export const TILE_W = 128
-export const TILE_H = 64
+// Kenney isometric tiles: 132px wide, 66px diamond height (2:1), ~17px block depth
+export const TILE_W = 132
+export const TILE_H = 66
 export const HALF_W = TILE_W / 2
 export const HALF_H = TILE_H / 2
 
