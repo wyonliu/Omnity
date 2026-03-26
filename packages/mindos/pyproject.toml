@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mindos"
-version = "0.4.0"
+name = "omnity-mindos"
+version = "0.4.1"
 description = "Portable Digital Soul Protocol — your AI knows you, everywhere."
 readme = "README.md"
 license = "Apache-2.0"
