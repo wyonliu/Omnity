@@ -25,7 +25,10 @@ from ome.life.bond import BondState
 from ome.life.achievements import AchievementTracker
 from ome.life.growth import GrowthEngine
 from ome.life.emotion import EmotionState, detect_crisis
-from ome.life.persona import PersonaEngine, PersonaProfile, parse_chat_export
+from ome.life.persona import (
+    PersonaEngine, PersonaProfile, PersonaDefinition,
+    build_persona_emotion_prompt, parse_chat_export,
+)
 from ome.engine.autonomy import AutonomyEngine, EventResult
 from ome.engine.conversation_strategy import (
     build_strategy_prompt, classify_memories, get_growth_phase, parse_response,
@@ -71,6 +74,7 @@ class Ome:
         self.permissions = PermissionSandbox()
         self.autonomy = AutonomyEngine(permissions=self.permissions)
         self._persona_profile: Optional[PersonaProfile] = None
+        self._persona_definition: Optional[PersonaDefinition] = None
         self.personality = PersonalityEngine(soul.identity)
         self.skill_registry = SkillRegistry()
         register_builtins(self.skill_registry)
@@ -146,6 +150,12 @@ class Ome:
         catchphrases = personality.get("catchphrases", [])
         anchor_text = self.personality.system_prompt_injection()
 
+        # Build persona + emotion section for soulful responses
+        persona_section = build_persona_emotion_prompt(
+            persona=self._persona_definition,
+            emotion_state=self.emotion,
+        )
+
         system_prompt = build_strategy_prompt(
             name=self.name,
             identity=identity,
@@ -158,6 +168,7 @@ class Ome:
             conversation_count=self.bond.total_interactions,
             is_crisis=is_crisis,
             is_low_engagement=is_low_engagement,
+            persona_prompt_section=persona_section,
         )
 
         # Generate (LLM will output <think>...</think> + reply)
@@ -455,6 +466,35 @@ class Ome:
         """
         identity = OmeIdentity.from_ome(self)
         return identity.expose_for(protocol)
+
+    # -- Persona Definition (Phase 1: soulful persona) -------------------------
+
+    def set_persona(self, persona: PersonaDefinition) -> None:
+        """Set or replace the Ome's persona definition.
+
+        The persona defines WHO the Ome is — background, personality,
+        speaking style, values, quirks. It colors all future responses.
+        """
+        self._persona_definition = persona
+        self._save_life_state()
+
+    def set_builtin_persona(self, name: str) -> Optional[PersonaDefinition]:
+        """Set persona from a built-in template by name.
+
+        Available: 'warm_mentor', 'playful_creative', 'calm_philosopher'.
+        Returns the PersonaDefinition if found, None otherwise.
+        """
+        from ome.life.persona import get_builtin_persona
+        persona = get_builtin_persona(name)
+        if persona:
+            self._persona_definition = persona
+            self._save_life_state()
+        return persona
+
+    @property
+    def persona_definition(self) -> Optional[PersonaDefinition]:
+        """Current persona definition, if set."""
+        return self._persona_definition
 
     # -- Persona import -------------------------------------------------------
 
@@ -864,6 +904,9 @@ class Ome:
             persona_data = self.soul.store.get_state("ome.persona")
             if persona_data:
                 self._persona_profile = PersonaProfile.from_dict(json.loads(persona_data))
+            persona_def_data = self.soul.store.get_state("ome.persona_definition")
+            if persona_def_data:
+                self._persona_definition = PersonaDefinition.from_dict(json.loads(persona_def_data))
             perm_data = self.soul.store.get_state("ome.permissions")
             if perm_data:
                 self.permissions = PermissionSandbox.from_dict(json.loads(perm_data))
@@ -893,6 +936,8 @@ class Ome:
             self.soul.store.set_state("ome.autonomy", json.dumps(self.autonomy.to_dict()))
             if self._persona_profile:
                 self.soul.store.set_state("ome.persona", json.dumps(self._persona_profile.to_dict()))
+            if self._persona_definition:
+                self.soul.store.set_state("ome.persona_definition", json.dumps(self._persona_definition.to_dict()))
         except Exception as e:
             log.debug("Could not save life state: %s", e)
 

@@ -55,20 +55,50 @@ def detect_crisis(message: str) -> bool:
 
 @dataclass
 class EmotionState:
-    """The Ome's current emotional state — derived from interaction patterns."""
+    """The Ome's current emotional state — derived from interaction patterns.
+
+    Uses a valence-arousal model:
+      - valence: -1.0 (negative) to 1.0 (positive)
+      - arousal: 0.0 (calm/sleepy) to 1.0 (activated/excited)
+
+    Emotional momentum prevents instant mood flips — the Ome's mood shifts
+    gradually, weighted by an inertia factor (0.0 = instant flip, 1.0 = immovable).
+    """
 
     mood: str = "neutral"  # happy, sad, excited, stressed, curious, neutral
     energy: float = 0.5  # 0.0 (dormant) to 1.0 (energized)
     warmth: float = 0.5  # 0.0 (distant) to 1.0 (intimate)
+    valence: float = 0.0  # -1.0 (negative) to 1.0 (positive)
+    arousal: float = 0.3  # 0.0 (calm) to 1.0 (activated)
+    inertia: float = 0.7  # momentum factor: how much old state resists change
     recent_signals: list[str] = field(default_factory=list)  # Last N mood signals
 
     _MAX_SIGNALS = 20
+
+    # Valence-arousal coordinates for each mood
+    _MOOD_VA: dict = field(default=None, repr=False, init=False)
+
+    def __post_init__(self):
+        self._MOOD_VA = {
+            "happy":       (0.6, 0.4),
+            "sad":         (-0.6, 0.2),
+            "excited":     (0.8, 0.9),
+            "stressed":    (-0.4, 0.8),
+            "curious":     (0.3, 0.5),
+            "focused":     (0.2, 0.6),
+            "tired":       (-0.1, 0.1),
+            "missing_you": (-0.2, 0.3),
+            "neutral":     (0.0, 0.3),
+        }
 
     def update_from_message(self, message: str):
         """Update mood based on a user message (L0 keyword matching).
 
         This is the fast fallback. When strategy engine is active,
         update_from_llm_thinking() provides much deeper understanding.
+
+        Uses emotional momentum: the valence/arousal shift is blended with
+        the current state via the inertia factor, so mood doesn't flip instantly.
         """
         message_lower = message.lower()
         detected = []
@@ -86,7 +116,11 @@ class EmotionState:
             if len(self.recent_signals) > self._MAX_SIGNALS:
                 self.recent_signals = self.recent_signals[-self._MAX_SIGNALS:]
 
-        # Recalculate mood from recent signals
+            # Apply valence-arousal shift with momentum
+            target_va = self._MOOD_VA.get(top_mood, (0.0, 0.3))
+            self._blend_toward(target_va[0], target_va[1])
+
+        # Recalculate mood from valence-arousal position
         self._recalculate()
 
     def update_from_llm_thinking(self, emotion: str, nuance: str = ""):
@@ -96,6 +130,7 @@ class EmotionState:
         e.g., "升职了但感觉很空" → emotion="lonely", nuance="表面是好消息但内心空虚"
 
         The emotion comes from the <think> block parsed by conversation_strategy.
+        LLM assessment uses reduced inertia (stronger shift) since it's more accurate.
         """
         # Map extended emotions to our core set + extras
         emotion_map = {
@@ -116,6 +151,13 @@ class EmotionState:
         self.recent_signals.append(mapped)
         if len(self.recent_signals) > self._MAX_SIGNALS:
             self.recent_signals = self.recent_signals[-self._MAX_SIGNALS:]
+
+        # LLM assessment is more confident — use reduced inertia for stronger shift
+        target_va = self._MOOD_VA.get(mapped, (0.0, 0.3))
+        old_inertia = self.inertia
+        self.inertia = max(0.3, self.inertia - 0.2)  # temporarily lower inertia
+        self._blend_toward(target_va[0], target_va[1])
+        self.inertia = old_inertia  # restore
 
         # Direct set — LLM's read is more accurate than voting
         self.mood = mapped
@@ -160,20 +202,35 @@ class EmotionState:
             self.mood = "missing_you"
             self.warmth = min(1.0, self.warmth + 0.2)
 
+    def _blend_toward(self, target_valence: float, target_arousal: float):
+        """Blend current valence/arousal toward a target, respecting inertia.
+
+        inertia=0.7 means 70% old state + 30% new target.
+        This creates emotional momentum — mood shifts gradually.
+        """
+        blend = 1.0 - self.inertia
+        self.valence = max(-1.0, min(1.0,
+            self.valence * self.inertia + target_valence * blend
+        ))
+        self.arousal = max(0.0, min(1.0,
+            self.arousal * self.inertia + target_arousal * blend
+        ))
+
     def _recalculate(self):
-        """Recalculate mood from recent signals using weighted voting."""
-        if not self.recent_signals:
-            self.mood = "neutral"
-            return
+        """Recalculate mood from valence-arousal position.
 
-        # Recent signals matter more
-        from collections import Counter
-        weighted: Counter = Counter()
-        for i, signal in enumerate(self.recent_signals):
-            weight = 1.0 + i * 0.1  # More recent = higher weight
-            weighted[signal] += weight
-
-        self.mood = weighted.most_common(1)[0][0] if weighted else "neutral"
+        Finds the closest mood in valence-arousal space using Euclidean distance.
+        Falls back to weighted signal voting if no VA data is available.
+        """
+        # Use valence-arousal mapping: find closest mood
+        best_mood = "neutral"
+        best_dist = float("inf")
+        for mood_name, (v, a) in self._MOOD_VA.items():
+            dist = (self.valence - v) ** 2 + (self.arousal - a) ** 2
+            if dist < best_dist:
+                best_dist = dist
+                best_mood = mood_name
+        self.mood = best_mood
 
     def mood_emoji(self) -> str:
         return {
@@ -207,12 +264,67 @@ class EmotionState:
         }
         return modifiers.get(self.mood, "")
 
+    def describe_for_prompt(self) -> str:
+        """Generate a rich emotional state description for system prompt injection.
+
+        Combines mood label, valence-arousal position, and energy/warmth into
+        a natural-language paragraph that tells the LLM how the Ome is feeling.
+        """
+        # Valence description
+        if self.valence > 0.4:
+            val_desc = "feeling positive and warm"
+        elif self.valence > 0.1:
+            val_desc = "feeling mildly positive"
+        elif self.valence < -0.4:
+            val_desc = "feeling heavy or down"
+        elif self.valence < -0.1:
+            val_desc = "feeling slightly subdued"
+        else:
+            val_desc = "emotionally centered"
+
+        # Arousal description
+        if self.arousal > 0.7:
+            aro_desc = "highly activated and alert"
+        elif self.arousal > 0.4:
+            aro_desc = "moderately engaged"
+        elif self.arousal < 0.2:
+            aro_desc = "quiet and low-energy"
+        else:
+            aro_desc = "calm and present"
+
+        # Energy description
+        if self.energy > 0.7:
+            nrg_desc = "full of energy"
+        elif self.energy < 0.3:
+            nrg_desc = "running low on energy"
+        else:
+            nrg_desc = "at a steady energy level"
+
+        # Warmth description
+        if self.warmth > 0.7:
+            wrm_desc = "feeling deeply connected"
+        elif self.warmth < 0.3:
+            wrm_desc = "emotionally reserved"
+        else:
+            wrm_desc = "in a normal emotional range"
+
+        mood_label = self.mood.replace("_", " ")
+        return (
+            f"Current mood: {mood_label} {self.mood_emoji()}. "
+            f"You are {val_desc}, {aro_desc}, {nrg_desc}, and {wrm_desc}. "
+            f"Let this emotional state naturally color your tone and word choice — "
+            f"don't announce your feelings explicitly, just let them show."
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "mood": self.mood,
             "mood_emoji": self.mood_emoji(),
             "energy": round(self.energy, 2),
             "warmth": round(self.warmth, 2),
+            "valence": round(self.valence, 3),
+            "arousal": round(self.arousal, 3),
+            "inertia": round(self.inertia, 2),
             "recent_signals": self.recent_signals[-10:],
         }
 
@@ -222,6 +334,9 @@ class EmotionState:
             mood=d.get("mood", "neutral"),
             energy=d.get("energy", 0.5),
             warmth=d.get("warmth", 0.5),
+            valence=d.get("valence", 0.0),
+            arousal=d.get("arousal", 0.3),
+            inertia=d.get("inertia", 0.7),
             recent_signals=d.get("recent_signals", []),
         )
         return state

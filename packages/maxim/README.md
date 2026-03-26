@@ -1,60 +1,87 @@
-# Maxim — Multi-Agent Society Simulator with Economics
+# omnity-maxim
 
-**The first open-source AI civilization engine with a working economy.**
+**Multi-Agent Society Simulator with economics -- the first open-source AI civilization engine.**
 
-![Maxim Dashboard](dashboard_preview.png)
+Agents don't just chat -- they work, earn, spend, trade, marry, have children, age, and die. Run 100 years of civilization history in 30 minutes for ~$0.40.
 
-Agents don't just chat — they work, earn, spend, trade, marry, have children, age, and die. Run 100 years of civilization history in 30 minutes. Watch economies boom and crash, alliances form and break, and cultures emerge from nothing but a handful of AI agents and a set of rules.
+## Install
 
-> **Maxim** = **M**ulti-**A**gent Society: **I**nteraction, e**X**change & **M**ulti-economy **M**odeler
+```bash
+pip install omnity-maxim
+```
+
+Requires `DEEPSEEK_API_KEY` in environment for LLM mode. Without it, use `--no-llm` for rules-only simulation (instant, free).
 
 ## Quick Start
 
 ```bash
-pip install -e .
-maxim run examples/village.yaml --no-llm    # Rules-only (instant, free)
-maxim run examples/village.yaml              # With DeepSeek LLM (richer narrative, ~$0.40)
+# Rules-only mode (instant, free)
+maxim run examples/village.yaml --no-llm
+
+# With LLM Game Master (richer narrative, ~$0.40 for 100 years)
+export DEEPSEEK_API_KEY=sk-...
+maxim run examples/village.yaml
+
+# Export chronicle + open dashboard
+maxim run examples/village.yaml --export chronicle.json
+maxim dashboard chronicle.json
 ```
 
-Requires `DEEPSEEK_API_KEY` in environment for LLM mode.
+### Python API
 
-## What Makes Maxim Different
+```python
+from maxim.config import load_scenario
+from maxim.engine import Simulation
 
-| Feature | Stanford Generative Agents | AI Town (a16z) | Project Sid | **Maxim** |
-|---------|--------------------------|-----------------|-------------|-----------|
-| Working economy | No | No | Emergent roles only | **Supply/demand market, wages, tax, GDP, Gini** |
-| Scale | 25 agents | ~10 agents | 500-1000 | **12+ (designed for 100+)** |
-| Lifecycle | Static | Static | Static | **Birth, aging, marriage, death, inheritance** |
-| Cost per run | $$$$ | $$ | $$$$ | **~$0.40 for 100 years** |
-| Open source | Research artifact | MIT demo | Partial | **Apache-2.0, pip-installable** |
+# Load a YAML scenario
+world, ticks = load_scenario("village.yaml")
+
+# Run the simulation
+sim = Simulation(world, use_llm=False)
+chronicle = sim.run(ticks)
+
+# Inspect results
+print(f"GDP: {world.gdp:.0f}, Gini: {world.gini:.2f}")
+for milestone in chronicle.milestones:
+    print(f"  Year {milestone.year}: {milestone.text}")
+
+# Export for visualization
+chronicle.export("output.json")
+```
+
+### CLI
+
+```bash
+maxim run <scenario.yaml>                    # full simulation with LLM
+maxim run <scenario.yaml> --no-llm           # rules only (fast, free)
+maxim run <scenario.yaml> --export out.json  # export chronicle
+maxim dashboard out.json                     # interactive web dashboard
+```
+
+## API Overview
+
+| Class / Module | What it does |
+|----------------|-------------|
+| **`Simulation`** | The core engine. Takes a `World` and runs tick-by-tick: needs decay, intention selection, GM arbitration, economy clearing, social events, chronicle recording. Call `sim.run(ticks)` to execute. |
+| **`World` / `Agent`** | Data models. Each Agent has Maslow needs, traits, skills, occupation, wealth, relationships, and age. The World tracks GDP, Gini coefficient, treasury, and market state. |
+| **`load_scenario()`** | Parses a YAML file into a `(World, ticks)` tuple ready for simulation. |
+| **`Chronicle`** | Records every event, auto-detects milestones (first trade, first marriage, economic crisis, population peaks), and exports JSON for the web dashboard. |
 
 ## Architecture
 
 ```
-Agent Needs (Maslow)     → Rule-based intention selection (zero LLM cost)
-     ↓
-Game Master (LLM)        → Arbitrates all intentions per tick (1 DeepSeek call)
-     ↓
-Economy Engine           → Production, market clearing, wages, tax (pure math)
-     ↓
-Social System            → Relationships, marriage, births, deaths, teaching
-     ↓
-Chronicle                → Auto-detect milestones, export JSON for visualization
+Agent Needs (Maslow)     -> Rule-based intention selection (zero LLM cost)
+     |
+Game Master (LLM)        -> Arbitrates all intentions per tick (1 DeepSeek call)
+     |
+Economy Engine           -> Production, market clearing, wages, tax (pure math)
+     |
+Social System            -> Relationships, marriage, births, deaths, teaching
+     |
+Chronicle                -> Auto-detect milestones, export JSON for visualization
 ```
 
-### Key Design Decisions
-
-1. **Needs-driven behavior**: Agents have Maslow hierarchy (survival → safety → belonging → esteem → actualization). Wealth and relationships feed back into needs. Behavior emerges from needs, not from prompts.
-
-2. **GM pattern** (inspired by [Concordia](https://github.com/google-deepmind/concordia)): One LLM call per tick arbitrates all agent intentions together. The GM considers traits, skills, economic constraints, and recent history. This keeps LLM costs at ~$0.40 per 100-year run.
-
-3. **Real economy**: Supply/demand pricing, labor market, property, tax, treasury. GDP and Gini coefficient are calculated each tick. Economic crises and booms emerge naturally.
-
-4. **Full lifecycle**: Agents age, marry (based on mutual affinity), have children (who inherit traits and grow up to work), and die (with wealth inheritance). The village is a living system.
-
 ## Scenario Format
-
-Scenarios are YAML files defining the initial world state:
 
 ```yaml
 name: "Willowbrook Village"
@@ -69,73 +96,42 @@ agents:
     traits: [hardworking, cautious, kind]
     occupation: farmer
     skills: {farming: 0.7, cooking: 0.3}
-  # ... more agents
 
 goods:
   - name: food
     base_price: 5
     producers: [farmer, hunter]
-  # ... more goods
 ```
 
 See [`examples/village.yaml`](examples/village.yaml) for a complete 12-agent village.
 
-## CLI
+## Dashboard
 
 ```bash
-maxim run <scenario.yaml>                 # Full simulation with LLM
-maxim run <scenario.yaml> --no-llm        # Rules only (fast, free)
-maxim run <scenario.yaml> --export out.json  # Export chronicle
-maxim run <scenario.yaml> --quiet         # Minimal output
-maxim run <scenario.yaml> --verbose       # Debug logs
+maxim dashboard chronicle.json
 ```
 
-## Output
-
-Each run produces:
-- **Terminal UI**: Rich tables showing agent status, economy, milestones
-- **Chronicle JSON**: Full event log, snapshots, GDP history (for visualization)
-- **Milestone detection**: First trade, first marriage, population milestones, economic crises
-- **Web Dashboard**: Interactive civilization dashboard with social graph, economy charts, and timeline playback
-
-### Dashboard
-
-```bash
-maxim dashboard chronicle.json          # Open in browser
-maxim run village.yaml --export out.json && maxim dashboard out.json
-```
-
-The dashboard shows:
-- **Social network** (force-directed graph: node size = wealth, color = occupation, pink = marriage)
-- **Economy charts** (GDP + Gini dual-axis, population over time)
-- **Citizen cards** (click to see Maslow needs radar)
-- **Event feed + milestones**
-- **Time slider** with playback controls (1×/2×/4×)
+Interactive web UI with social network graph, economy charts (GDP + Gini), citizen cards with Maslow radar, event timeline, and playback controls.
 
 ## Cost
 
-| Mode | Cost | Speed | Quality |
-|------|------|-------|---------|
-| `--no-llm` | Free | <1 second | Deterministic, less narrative |
-| Default (DeepSeek) | ~$0.40 / 100 years | ~10-15 minutes | Rich narrative, emergent drama |
-
-## Roadmap
-
-- [x] **Dashboard**: Web UI with social graph, economy charts, timeline
-- [ ] **Governance**: Voting, laws, community resource allocation
-- [ ] **Variable speed**: 1sec=1day to 1sec=1year
-- [ ] **Templates**: Coffee town, campus, design studio presets
-- [ ] **Ome integration**: Swap rule-based agents for full Ome instances
-- [ ] **SOAP integration**: Agents in 3D spatial environments
+| Mode | Cost | Speed |
+|------|------|-------|
+| `--no-llm` | Free | <1 second |
+| Default (DeepSeek) | ~$0.40 / 100 years | ~10-15 minutes |
 
 ## Part of Omnity
 
-Maxim is Layer 4 of the [Omnity](../../README.md) stack:
+```
+SOAP            spatial protocol for 3D environments
+  Mindos        persistent multi-layer brain
+    Ome           individual AI agent (persona, skills, growth)
+      Maxim     <-- you are here
+        OmeTown   the integrated world
+```
 
-```
-SOAP (spatial protocol) → Mindos (brain) → Ome (individual agent) → Maxim (society) → OmeTown (world)
-```
+`pip install omnity-soap omnity-mindos omnity-ome omnity-maxim`
 
 ## License
 
-Apache-2.0 — same as the [Omnity monorepo](../../LICENSE).
+[Apache-2.0](../../LICENSE)

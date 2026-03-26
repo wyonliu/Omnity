@@ -72,7 +72,7 @@ Each layer is independently useful. Use one, or use them all. Lower layers ship 
 SOAP is an open protocol that defines how any AI agent understands, queries, and manipulates real 3D environments. Four verbs: **OBSERVE**, **NAVIGATE**, **MANIPULATE**, **REARRANGE**. One Spatial URI scheme. Works across phone, PC, MR headset, embodied robot, and AI glasses — all sharing the same spatial protocol.
 
 ```bash
-pip install soap-tools
+pip install omnity-soap
 soap-validate examples/mall-mixed-reality.json    # validate a scene
 soap-explore examples/mall-mixed-reality.json      # interactive 6-role walkthrough
 soap-view                                          # browser visualization + autonomous agent demo
@@ -101,7 +101,7 @@ Every AI forgets you after every conversation. Mindos fixes that. A five-layer b
 The layer router automatically dispatches to the cheapest layer that can handle each request. Persistent memory means agents get better the more you use them. The reflection loop means personality **emerges from experience**, not configuration.
 
 ```bash
-pip install mindos
+pip install omnity-mindos
 mindos quickstart                    # create your soul
 mindos serve --mcp                   # expose to Claude/Cursor via MCP
 mindos serve                         # HTTP API for any app
@@ -127,7 +127,7 @@ What OpenClaw does for one-shot agent calls, Ome does for **persistent digital l
 | Step 4+ | Self-learning + cross-platform + physical world | **Digital worker**: AI labor market |
 
 ```bash
-pip install ome
+pip install omnity-ome
 ome create        # 5 questions, your twin is born
 ome chat          # talk to it (it remembers everything)
 ome serve --mcp   # connect to Claude/Cursor
@@ -144,8 +144,8 @@ ome serve --mcp   # connect to Claude/Cursor
 The first open-source AI civilization engine **with a working economy**. Agents don't just chat — they work, earn, spend, trade, marry, have children, and die. Run 100 years of civilization history in 30 minutes for ~$0.40.
 
 ```bash
-pip install -e packages/maxim
-maxim run packages/maxim/examples/village.yaml
+pip install omnity-maxim
+maxim run examples/village.yaml
 ```
 
 **Ships with:** Maslow needs-driven agent behavior (zero LLM cost) · LLM Game Master arbitration (1 call/tick) · Supply/demand market + wages + tax + GDP/Gini tracking · Full lifecycle (birth, aging, marriage, death, inheritance) · Chronicle with auto-milestone detection · Rich terminal UI · JSON export for visualization.
@@ -199,12 +199,18 @@ A product that combines 3DGS spatial capability with deep AI agent architecture 
 
 ---
 
+## Quick Install All
+
+```bash
+pip install omnity-soap omnity-mindos omnity-ome omnity-maxim
+```
+
 ## Quick Start
 
 **Mindos** (fastest path to value):
 
 ```bash
-pip install mindos
+pip install omnity-mindos
 mindos quickstart
 mindos commit "user: I'm a Python developer working on distributed systems"
 mindos recall "Python"
@@ -214,7 +220,7 @@ mindos serve --mcp    # now Claude/Cursor remembers you
 **SOAP** (put agents in 3D space):
 
 ```bash
-cd packages/soap && pip install -e .
+pip install omnity-soap
 soap-explore examples/mall-mixed-reality.json
 soap-view    # open browser, watch agents explore a mall
 ```
@@ -248,15 +254,15 @@ soul.commit(conversation_text, source="openclaw")
 
 ## Status
 
-| Package | Version | Status |
-|---------|---------|--------|
-| **SOAP** | v0.1 | Spec + runtime + MCP + visualizer. **Ready to use.** |
-| **Mindos** | v0.3 | Five-layer brain + cross-device sync + MCP + 22 tests. **Ready to use.** |
-| **Ome** | v0.5 | Strategy engine + persona evolution + life system + LLM-generated content + 119 tests. **Ready to use.** |
-| **Ome Server** | v0.5 | FastAPI + SSE streaming + LLM prompts/greeting API + OmeTown agents. **Ready to use.** |
-| **Ome iOS** | v0.5 | Native SwiftUI app. Voice-first input, growth system, zero hardcoded content. |
-| **Maxim** | v0.1 | Needs-driven agents + GM arbitration + economy engine + chronicle + **web dashboard**. **First run complete.** |
-| **OmeTown** | — | Design complete. PixiJS 8 + AI isometric art pipeline. MVP: one street, async Ome life. |
+| Package | PyPI | Version | Status |
+|---------|------|---------|--------|
+| **SOAP** | [`omnity-soap`](https://pypi.org/project/omnity-soap/) | v0.1.0 | Spec + runtime + MCP + visualizer. **Ready to use.** |
+| **Mindos** | [`omnity-mindos`](https://pypi.org/project/omnity-mindos/) | v0.4.1 | Five-layer brain + cross-device sync + MCP + 22 tests. **Ready to use.** |
+| **Ome** | [`omnity-ome`](https://pypi.org/project/omnity-ome/) | v0.3.0 | Strategy engine + persona evolution + life system + LLM-generated content + 119 tests. **Ready to use.** |
+| **Ome Server** | — | v0.5 | FastAPI + SSE streaming + LLM prompts/greeting API + OmeTown agents. **Ready to use.** |
+| **Ome iOS** | — | v0.5 | Native SwiftUI app. Voice-first input, growth system, zero hardcoded content. |
+| **Maxim** | [`omnity-maxim`](https://pypi.org/project/omnity-maxim/) | v0.1.1 | Needs-driven agents + GM arbitration + economy engine + chronicle + **web dashboard**. **First run complete.** |
+| **OmeTown** | — | — | Design complete. PixiJS 8 + AI isometric art pipeline. MVP: one street, async Ome life. |
 
 ## Monorepo Layout
 

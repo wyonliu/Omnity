@@ -3,5 +3,7 @@
 __version__ = "0.4.0"
 
 from ome.core import Ome
+from ome.life.persona import PersonaDefinition, BigFive, BUILTIN_PERSONAS
+from ome.life.emotion import EmotionState
 
-__all__ = ["Ome"]
+__all__ = ["Ome", "PersonaDefinition", "BigFive", "BUILTIN_PERSONAS", "EmotionState"]

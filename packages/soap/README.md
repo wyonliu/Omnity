@@ -1,86 +1,106 @@
-# `packages/soap` — SOAP
+# omnity-soap
 
-**SOAP** = **S**patial **O**mnity **A**gentic **P**rotocol — **空间智能体时代的 HTTP**：开放规范 + 参考实现 + `soap-mcp`，让任意 AI Agent 用统一方式理解、查询与操作真实 3D 空间。
+**SOAP -- Spatial Omnity Agentic Protocol: the HTTP for spatial AI agents.**
 
-## 已实现
+An open protocol + reference implementation for AI agents to understand, query, and manipulate real 3D environments. Four verbs: **OBSERVE**, **NAVIGATE**, **MANIPULATE**, **REARRANGE**.
 
-| 组件 | 说明 |
-|------|------|
-| **规范 v0.1** | [`spec/SOAP-v0.1.md`](./spec/SOAP-v0.1.md) + [JSON Schema](./spec/schemas/) — 四动词（OBSERVE / NAVIGATE / MANIPULATE / REARRANGE）、Spatial URI、虚实标签 |
-| **样例场景** | [`examples/`](./examples/) — `minimal-scene.json`、`mall-mixed-reality.json`（六角色活商场）、`sample-action-observe.json` |
-| **SOAPRuntime** | 内存可变运行时：加载场景 → 接收 Agent 动作 → 修改状态 → 事件日志 |
-| **soap-validate** | CLI 校验场景 JSON 是否符合 Schema |
-| **soap-explore** | 交互式 CLI，六角色视角检验场景可见性 |
-| **soap-mcp** | MCP Server（[README](./soap-mcp/README.md)）— 让 Cursor / Claude 等宿主通过标准 MCP 查询和操作空间 |
-| **soap-view** | 浏览器可视化（[`web/viewer/`](./web/viewer/)）— 商场平面图 + Agent 头像 + 动作动画 + 自主巡游演示 |
-
-### soap-view 亮点
-
-- **Canvas 2D 像素级清晰渲染**：商场楼层布局 + 实体图标 + 虚实颜色编码
-- **Agent 实时可视化**：绿色头像 + 思维气泡（💭 斯坦福小镇风格）
-- **平滑移动动画**：所有动作（OBSERVE / NAVIGATE / MANIPULATE）在 1s 内沿路径平滑移动，不跳变
-- **动作特效**：OBSERVE 扫描波纹、NAVIGATE 虚线路径 + 箭头、MANIPULATE 冲击波
-- **自主巡游**：一键启动 `explorer` Agent，自动规划 12 步探索商场（观察→逛店→聊天→喝咖啡→战斗）
-- **HTTP API**：`/api/scene`、`/api/roles`、`/api/events`、`/api/act`（POST）— 外部 Agent 通过 HTTP 即可交互
-
-## 快速开始
+## Install
 
 ```bash
-cd packages/soap
-
-# 1. Python 环境
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"      # 校验与测试
-pip install -e ".[mcp]"      # MCP Server（需 Python ≥3.10）
-
-# 2. 构建前端
-(cd web/viewer && npm ci && npm run build)
-
-# 3. 启动可视化
-export SOAP_SCENE_PATH=examples/mall-mixed-reality.json
-soap-view
-# 浏览器打开 http://127.0.0.1:8765/
-
-# 4. 校验 & 测试
-soap-validate examples/mall-mixed-reality.json
-pytest tests/ -q
+pip install omnity-soap                   # core (validation + CLI)
+pip install "omnity-soap[mcp]"            # + MCP server (Python >=3.10)
+pip install "omnity-soap[server]"         # + HTTP server + soap-view visualizer
 ```
 
-### 通过 HTTP 控制 Agent
+## Quick Start
 
 ```bash
-# 观察中庭
+# Validate a scene file against the SOAP spec
+soap-validate examples/mall-mixed-reality.json
+
+# Interactive walkthrough — explore a scene from 6 different roles
+soap-explore examples/mall-mixed-reality.json
+
+# Launch browser visualizer with autonomous agent demo
+pip install "omnity-soap[server]"
+export SOAP_SCENE_PATH=examples/mall-mixed-reality.json
+soap-view
+# Open http://127.0.0.1:8765/
+```
+
+### Python API
+
+```python
+from omnity_soap.runtime import SOAPRuntime
+
+# Load a scene into the mutable runtime
+rt = SOAPRuntime.from_file("scene.json")
+
+# Execute an agent action
+result = rt.act(
+    agent_id="my_bot",
+    verb="OBSERVE",
+    target_id="atrium",
+    params={},
+)
+print(result.ok, result.detail)
+
+# Navigate to a store
+rt.act("my_bot", "NAVIGATE", "store_102",
+       {"target_uri": "soap://mall_01/store_102"})
+```
+
+### HTTP API (with soap-view running)
+
+```bash
+# Observe the atrium
 curl -X POST http://127.0.0.1:8765/api/act \
   -H "Content-Type: application/json" \
   -d '{"agent_id":"my_bot","verb":"OBSERVE","target_id":"atrium","params":{}}'
 
-# 导航到店铺
+# Navigate to a store
 curl -X POST http://127.0.0.1:8765/api/act \
   -H "Content-Type: application/json" \
   -d '{"agent_id":"my_bot","verb":"NAVIGATE","target_id":"store_102","params":{"target_uri":"soap://mall_01/store_102"}}'
-
-# 与 NPC 对话
-curl -X POST http://127.0.0.1:8765/api/act \
-  -H "Content-Type: application/json" \
-  -d '{"agent_id":"my_bot","verb":"MANIPULATE","target_id":"store_102_ai_clerk","params":{"action":"speak","message":"推荐一下？"}}'
 ```
 
-## 文档
+### MCP (Claude Desktop / Cursor)
 
-- [SOAP 规范 v0.1](./spec/SOAP-v0.1.md)
-- [五层协议栈愿景](../../docs/soap/PROTOCOL_VISION_AND_EXECUTION.md)
-- [活商场思想实验](../../docs/soap/THOUGHT_EXPERIMENT_THE_LIVING_MALL.md)
-- [工作计划](../../docs/soap/WORK_PLAN.md)
+```json
+{
+  "mcpServers": {
+    "soap": { "command": "soap-mcp" }
+  }
+}
+```
+
+## API Overview
+
+| Class / CLI | What it does |
+|-------------|-------------|
+| **`SOAPRuntime`** | In-memory mutable scene graph. Load a scene JSON, execute agent actions (OBSERVE/NAVIGATE/MANIPULATE/REARRANGE), track events. The core runtime that powers all other tools. |
+| **`soap-validate`** | CLI that checks whether a scene JSON conforms to the SOAP v0.1 JSON Schema. |
+| **`soap-explore`** | Interactive CLI to walk through a scene from six different role perspectives, testing visibility and access. |
+| **`soap-view`** | Browser-based Canvas 2D visualizer: floor plan + agent avatars + thought bubbles + smooth movement + autonomous exploration demo. Also exposes an HTTP API at `/api/act`. |
+| **`soap-mcp`** | MCP server exposing SOAP spatial tools to Claude Desktop, Cursor, or any MCP-compatible host. |
+
+## Part of Omnity
+
+```
+SOAP         <-- you are here
+  Mindos        persistent multi-layer brain
+    Ome           individual AI agent (persona, skills, growth)
+      Maxim         multi-agent society + economy
+        OmeTown       the integrated world
+```
+
+`pip install omnity-soap omnity-mindos omnity-ome omnity-maxim`
+
+## Docs
+
+- [SOAP Spec v0.1](./spec/SOAP-v0.1.md)
 - [soap-mcp README](./soap-mcp/README.md)
-- [可视化灵感与合规](../../docs/soap/VISUALIZER_INSPIRATION.md)
 
-## 后续规划
-
-- `soap-scan` — 照片 → 3DGS + SOAP 场景
-- `soap-sem` — 3D 语义分割
-- `soap-edit` — 自然语言空间编辑
-- `soap-render` — 跨端 3DGS 渲染
-
-## 许可
+## License
 
 [Apache-2.0](../../LICENSE)

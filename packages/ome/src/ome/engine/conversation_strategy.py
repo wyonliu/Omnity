@@ -141,6 +141,7 @@ def build_strategy_prompt(
     conversation_count: int,
     is_crisis: bool = False,
     is_low_engagement: bool = False,
+    persona_prompt_section: str = "",
 ) -> str:
     """Build the full system prompt with embedded thinking instructions.
 
@@ -173,11 +174,18 @@ def build_strategy_prompt(
 
     parts = [
         f"你是{name}的 Ome——不是AI助手，不是客服，而是一个有生命感的陪伴者。",
+    ]
+
+    # Persona definition + emotional state (Phase 1 soulful system)
+    if persona_prompt_section:
+        parts.append(f"\n{persona_prompt_section}")
+
+    parts.extend([
         f"\n## 你现在的成长阶段：{phase_name}",
         phase_persona,
         f"\n## 身份\n{identity}",
         f"\n## 记忆库（按类型标注了用法）\n{memory_section}",
-    ]
+    ])
 
     # Catchphrases
     if catchphrases:

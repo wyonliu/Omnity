@@ -190,3 +190,235 @@ Great to hear"""
     messages = parse_chat_export(text)
     assert len(messages) == 3
     assert "Hello there\nHow are you" in messages[0]
+
+
+# =============================================================================
+# PersonaDefinition (Phase 1)
+# =============================================================================
+
+def test_big_five_default():
+    """Default BigFive has all traits at 0.5 (except neuroticism at 0.3)."""
+    from ome.life.persona import BigFive
+    bf = BigFive()
+    assert bf.openness == 0.5
+    assert bf.conscientiousness == 0.5
+    assert bf.neuroticism == 0.3
+
+
+def test_big_five_describe_high_openness():
+    """High openness is described as curious/imaginative."""
+    from ome.life.persona import BigFive
+    bf = BigFive(openness=0.9, extraversion=0.1)
+    desc = bf.describe()
+    assert "curious" in desc or "imaginative" in desc
+    assert "reserved" in desc or "reflective" in desc
+
+
+def test_big_five_describe_balanced():
+    """Balanced BigFive returns 'balanced' description."""
+    from ome.life.persona import BigFive
+    bf = BigFive()  # all 0.5
+    desc = bf.describe()
+    assert "balanced" in desc
+
+
+def test_big_five_serialization():
+    """BigFive serializes and deserializes."""
+    from ome.life.persona import BigFive
+    bf = BigFive(openness=0.9, conscientiousness=0.2, agreeableness=0.8)
+    data = bf.to_dict()
+    restored = BigFive.from_dict(data)
+    assert restored.openness == 0.9
+    assert restored.conscientiousness == 0.2
+    assert restored.agreeableness == 0.8
+
+
+def test_persona_definition_default():
+    """Default PersonaDefinition has sensible defaults."""
+    from ome.life.persona import PersonaDefinition
+    pd = PersonaDefinition()
+    assert pd.name == "Ome"
+    assert pd.age is None
+    assert isinstance(pd.values, list)
+
+
+def test_persona_definition_with_fields():
+    """PersonaDefinition holds all fields correctly."""
+    from ome.life.persona import PersonaDefinition, BigFive
+    pd = PersonaDefinition(
+        name="Luna",
+        age=25,
+        background="A wandering poet who collects stories.",
+        big_five=BigFive(openness=0.95),
+        speaking_style="Lyrical and meandering, with frequent em-dashes.",
+        values=["beauty", "truth"],
+        quirks=["Quotes obscure poets mid-conversation"],
+        catchphrases=["tell me a secret"],
+    )
+    assert pd.name == "Luna"
+    assert pd.age == 25
+    assert pd.big_five.openness == 0.95
+    assert "beauty" in pd.values
+
+
+def test_persona_definition_serialization():
+    """PersonaDefinition serializes and deserializes."""
+    from ome.life.persona import PersonaDefinition, BigFive
+    pd = PersonaDefinition(
+        name="Atlas",
+        age=30,
+        background="Engineer turned philosopher.",
+        big_five=BigFive(openness=0.8, neuroticism=0.1),
+        speaking_style="Precise and measured.",
+        values=["clarity"],
+        quirks=["Counts things unconsciously"],
+        catchphrases=["consider:"],
+    )
+    data = pd.to_dict()
+    restored = PersonaDefinition.from_dict(data)
+    assert restored.name == "Atlas"
+    assert restored.age == 30
+    assert restored.big_five.openness == 0.8
+    assert restored.big_five.neuroticism == 0.1
+    assert "clarity" in restored.values
+    assert "consider:" in restored.catchphrases
+
+
+def test_persona_definition_no_age_serialization():
+    """PersonaDefinition without age omits it from dict."""
+    from ome.life.persona import PersonaDefinition
+    pd = PersonaDefinition(name="Ageless")
+    data = pd.to_dict()
+    assert "age" not in data
+    restored = PersonaDefinition.from_dict(data)
+    assert restored.age is None
+
+
+def test_build_system_prompt_section():
+    """PersonaDefinition generates a valid system prompt section."""
+    from ome.life.persona import PersonaDefinition, BigFive
+    pd = PersonaDefinition(
+        name="Echo",
+        age=22,
+        background="A digital soul born from conversations.",
+        big_five=BigFive(openness=0.9, agreeableness=0.8),
+        speaking_style="Quick and energetic.",
+        values=["connection", "authenticity"],
+        quirks=["Asks two questions at once"],
+        catchphrases=["wait wait wait"],
+    )
+    section = pd.build_system_prompt_section()
+    assert "Echo" in section
+    assert "22 years old" in section
+    assert "digital soul" in section
+    assert "curious" in section or "imaginative" in section  # from big five
+    assert "Quick and energetic" in section
+    assert "connection" in section
+    assert "Asks two questions at once" in section
+    assert "wait wait wait" in section
+
+
+# -- Built-in Personas --
+
+def test_builtin_personas_exist():
+    """Three built-in personas are available."""
+    from ome.life.persona import list_builtin_personas, get_builtin_persona
+    names = list_builtin_personas()
+    assert "warm_mentor" in names
+    assert "playful_creative" in names
+    assert "calm_philosopher" in names
+    assert len(names) == 3
+
+
+def test_builtin_persona_warm_mentor():
+    """Warm mentor has high agreeableness and low neuroticism."""
+    from ome.life.persona import get_builtin_persona
+    p = get_builtin_persona("warm_mentor")
+    assert p is not None
+    assert p.big_five.agreeableness > 0.8
+    assert p.big_five.neuroticism < 0.3
+    assert len(p.values) > 0
+
+
+def test_builtin_persona_playful_creative():
+    """Playful creative has high openness and extraversion."""
+    from ome.life.persona import get_builtin_persona
+    p = get_builtin_persona("playful_creative")
+    assert p is not None
+    assert p.big_five.openness > 0.9
+    assert p.big_five.extraversion > 0.7
+
+
+def test_builtin_persona_calm_philosopher():
+    """Calm philosopher has low extraversion and low neuroticism."""
+    from ome.life.persona import get_builtin_persona
+    p = get_builtin_persona("calm_philosopher")
+    assert p is not None
+    assert p.big_five.extraversion < 0.3
+    assert p.big_five.neuroticism < 0.2
+
+
+def test_get_builtin_persona_nonexistent():
+    """Non-existent persona returns None."""
+    from ome.life.persona import get_builtin_persona
+    assert get_builtin_persona("nonexistent") is None
+
+
+def test_builtin_persona_prompt_generation():
+    """Each builtin persona generates a valid prompt section."""
+    from ome.life.persona import BUILTIN_PERSONAS
+    for name, persona in BUILTIN_PERSONAS.items():
+        section = persona.build_system_prompt_section()
+        assert "Who You Are" in section
+        assert persona.name in section
+        assert len(section) > 100  # non-trivial content
+
+
+# -- Persona + Emotion Integration --
+
+def test_build_persona_emotion_prompt():
+    """build_persona_emotion_prompt combines persona and emotion."""
+    from ome.life.persona import PersonaDefinition, BigFive, build_persona_emotion_prompt
+    from ome.life.emotion import EmotionState
+
+    persona = PersonaDefinition(
+        name="Nova",
+        background="Born from starlight.",
+        big_five=BigFive(openness=0.8),
+        speaking_style="Concise and clear.",
+    )
+    emotion = EmotionState(mood="happy", valence=0.6, arousal=0.4, energy=0.8)
+
+    prompt = build_persona_emotion_prompt(persona, emotion)
+    assert "Nova" in prompt
+    assert "starlight" in prompt
+    assert "Emotional State" in prompt
+    assert "positive" in prompt  # from valence > 0.4
+
+
+def test_build_persona_emotion_prompt_no_persona():
+    """Works with None persona (emotion only)."""
+    from ome.life.persona import build_persona_emotion_prompt
+    from ome.life.emotion import EmotionState
+
+    emotion = EmotionState(mood="sad", valence=-0.6, arousal=0.2)
+    prompt = build_persona_emotion_prompt(None, emotion)
+    assert "Emotional State" in prompt
+    assert "heavy" in prompt or "down" in prompt
+
+
+def test_build_persona_emotion_prompt_no_emotion():
+    """Works with None emotion (persona only)."""
+    from ome.life.persona import PersonaDefinition, build_persona_emotion_prompt
+
+    persona = PersonaDefinition(name="Test", background="A test persona.")
+    prompt = build_persona_emotion_prompt(persona, None)
+    assert "Test" in prompt
+    assert "Emotional State" not in prompt
+
+
+def test_build_persona_emotion_prompt_both_none():
+    """Returns empty string when both are None."""
+    from ome.life.persona import build_persona_emotion_prompt
+    prompt = build_persona_emotion_prompt(None, None)
+    assert prompt == ""

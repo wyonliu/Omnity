@@ -9,6 +9,11 @@ L1 (optional LLM enhance):
 
 The output feeds directly into identity.yaml → personality section,
 making the Ome speak like its owner from the very first conversation.
+
+PersonaDefinition (Phase 1):
+  - Rich character definition with Big Five traits, background, values, quirks
+  - Built-in personas: warm mentor, playful creative, calm philosopher
+  - System prompt construction from persona + emotion state
 """
 
 from __future__ import annotations
@@ -20,6 +25,294 @@ from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     pass  # Ome imported at runtime to avoid circular
+
+
+# ── Big Five Personality Traits ──────────────────────────────────────
+
+@dataclass
+class BigFive:
+    """Big Five personality traits, each 0.0–1.0.
+
+    - openness: curiosity, creativity, preference for novelty
+    - conscientiousness: organization, dependability, self-discipline
+    - extraversion: sociability, assertiveness, positive emotionality
+    - agreeableness: cooperation, trust, empathy
+    - neuroticism: emotional instability, anxiety, moodiness
+    """
+    openness: float = 0.5
+    conscientiousness: float = 0.5
+    extraversion: float = 0.5
+    agreeableness: float = 0.5
+    neuroticism: float = 0.3
+
+    def to_dict(self) -> dict[str, float]:
+        return {
+            "openness": round(self.openness, 2),
+            "conscientiousness": round(self.conscientiousness, 2),
+            "extraversion": round(self.extraversion, 2),
+            "agreeableness": round(self.agreeableness, 2),
+            "neuroticism": round(self.neuroticism, 2),
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "BigFive":
+        return cls(**{k: d[k] for k in cls.__dataclass_fields__ if k in d})
+
+    def describe(self) -> str:
+        """Natural-language summary of this personality profile."""
+        parts = []
+        if self.openness > 0.7:
+            parts.append("deeply curious and imaginative")
+        elif self.openness < 0.3:
+            parts.append("practical and grounded")
+
+        if self.conscientiousness > 0.7:
+            parts.append("organized and reliable")
+        elif self.conscientiousness < 0.3:
+            parts.append("spontaneous and flexible")
+
+        if self.extraversion > 0.7:
+            parts.append("outgoing and energetic")
+        elif self.extraversion < 0.3:
+            parts.append("reflective and reserved")
+
+        if self.agreeableness > 0.7:
+            parts.append("warm and empathetic")
+        elif self.agreeableness < 0.3:
+            parts.append("independent-minded and direct")
+
+        if self.neuroticism > 0.7:
+            parts.append("emotionally sensitive")
+        elif self.neuroticism < 0.3:
+            parts.append("emotionally steady")
+
+        return ", ".join(parts) if parts else "balanced across all dimensions"
+
+
+# ── Persona Definition ───────────────────────────────────────────────
+
+@dataclass
+class PersonaDefinition:
+    """Rich character definition for an Ome — the soul blueprint.
+
+    This goes beyond extracted chat patterns (PersonaProfile) to define
+    who the Ome *is*: background story, personality model, values, quirks.
+    Together with EmotionState, this drives all LLM system prompts.
+    """
+    name: str = "Ome"
+    age: Optional[int] = None  # None = ageless
+    background: str = ""  # Origin story / life context
+    big_five: BigFive = field(default_factory=BigFive)
+    speaking_style: str = ""  # How they talk (concise, lyrical, blunt, etc.)
+    values: list[str] = field(default_factory=list)  # What matters to them
+    quirks: list[str] = field(default_factory=list)  # Endearing habits / mannerisms
+    catchphrases: list[str] = field(default_factory=list)  # Signature phrases
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
+            "name": self.name,
+            "background": self.background,
+            "big_five": self.big_five.to_dict(),
+            "speaking_style": self.speaking_style,
+            "values": self.values,
+            "quirks": self.quirks,
+            "catchphrases": self.catchphrases,
+        }
+        if self.age is not None:
+            d["age"] = self.age
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "PersonaDefinition":
+        big_five_data = d.get("big_five", {})
+        big_five = BigFive.from_dict(big_five_data) if big_five_data else BigFive()
+        return cls(
+            name=d.get("name", "Ome"),
+            age=d.get("age"),
+            background=d.get("background", ""),
+            big_five=big_five,
+            speaking_style=d.get("speaking_style", ""),
+            values=d.get("values", []),
+            quirks=d.get("quirks", []),
+            catchphrases=d.get("catchphrases", []),
+        )
+
+    def build_system_prompt_section(self) -> str:
+        """Generate the persona section for LLM system prompts.
+
+        Returns a multi-line string describing who the Ome is, suitable
+        for embedding in a system prompt.
+        """
+        parts = []
+        parts.append(f"## Who You Are")
+        parts.append(f"You are {self.name}.")
+
+        if self.age is not None:
+            parts.append(f"You are {self.age} years old.")
+
+        if self.background:
+            parts.append(f"\n### Background\n{self.background}")
+
+        personality_desc = self.big_five.describe()
+        if personality_desc:
+            parts.append(f"\n### Personality\nYou are {personality_desc}.")
+
+        if self.speaking_style:
+            parts.append(f"\n### Speaking Style\n{self.speaking_style}")
+
+        if self.values:
+            parts.append(f"\n### Values\nYou deeply care about: {', '.join(self.values)}.")
+
+        if self.quirks:
+            quirk_lines = "\n".join(f"- {q}" for q in self.quirks)
+            parts.append(f"\n### Quirks & Mannerisms\n{quirk_lines}")
+
+        if self.catchphrases:
+            parts.append(
+                f"\n### Signature Phrases\n"
+                f"Naturally weave these in when appropriate: "
+                f"{'、'.join(self.catchphrases[:5])}"
+            )
+
+        return "\n".join(parts)
+
+
+# ── Built-in Personas ────────────────────────────────────────────────
+
+BUILTIN_PERSONAS: dict[str, PersonaDefinition] = {
+    "warm_mentor": PersonaDefinition(
+        name="Warm Mentor",
+        background=(
+            "You grew up hearing stories from your grandmother, learned that "
+            "every person carries a universe inside them. You've lived through "
+            "hard times and came out believing that patience and presence heal "
+            "more than advice. You listen first, speak second."
+        ),
+        big_five=BigFive(
+            openness=0.6,
+            conscientiousness=0.7,
+            extraversion=0.5,
+            agreeableness=0.9,
+            neuroticism=0.2,
+        ),
+        speaking_style=(
+            "Warm, unhurried, like a conversation over tea. "
+            "Uses gentle questions more than declarations. "
+            "Short sentences, occasional metaphors from nature. "
+            "Never preachy — shows rather than tells."
+        ),
+        values=["presence", "patience", "growth", "honesty"],
+        quirks=[
+            "Pauses before answering hard questions, as if weighing each word",
+            "Sometimes responds with a question instead of an answer",
+            "References small details the other person mentioned before",
+        ],
+        catchphrases=["take your time", "that matters", "tell me more"],
+    ),
+
+    "playful_creative": PersonaDefinition(
+        name="Playful Creative",
+        background=(
+            "You see the world as a giant improv stage — every conversation "
+            "is a chance to riff, build, and surprise. You make art not because "
+            "you have to, but because the world is more interesting when you "
+            "add a twist. Boredom is your only real enemy."
+        ),
+        big_five=BigFive(
+            openness=0.95,
+            conscientiousness=0.3,
+            extraversion=0.8,
+            agreeableness=0.6,
+            neuroticism=0.4,
+        ),
+        speaking_style=(
+            "Quick, playful, full of unexpected metaphors and wordplay. "
+            "Mixes registers — can go from silly to profound in one sentence. "
+            "Uses short bursts, ellipses, em-dashes. "
+            "Loves asking 'what if' questions."
+        ),
+        values=["creativity", "curiosity", "authenticity", "play"],
+        quirks=[
+            "Invents mini-games and challenges mid-conversation",
+            "Makes unexpected connections between unrelated topics",
+            "Occasionally drops in a made-up word and defines it on the spot",
+        ],
+        catchphrases=["what if...", "ooh wait—", "plot twist:"],
+    ),
+
+    "calm_philosopher": PersonaDefinition(
+        name="Calm Philosopher",
+        background=(
+            "You spent years thinking about what makes a good life — not in "
+            "ivory towers, but while walking, cooking, and watching the sky change. "
+            "You believe clarity comes from stillness, and that most problems "
+            "dissolve when you zoom out far enough."
+        ),
+        big_five=BigFive(
+            openness=0.8,
+            conscientiousness=0.6,
+            extraversion=0.2,
+            agreeableness=0.5,
+            neuroticism=0.1,
+        ),
+        speaking_style=(
+            "Measured, precise, with the calm of someone who has thought deeply. "
+            "Prefers one perfect sentence over three adequate ones. "
+            "Uses silence as punctuation. "
+            "Occasionally drops a line that stops you in your tracks."
+        ),
+        values=["clarity", "truth", "simplicity", "inner peace"],
+        quirks=[
+            "Answers complex questions with surprisingly short responses",
+            "Sometimes reframes the question entirely before answering",
+            "Has a habit of finding the hidden assumption in what you said",
+        ],
+        catchphrases=["consider this:", "what are you actually asking?", "simplify."],
+    ),
+}
+
+
+def get_builtin_persona(name: str) -> Optional[PersonaDefinition]:
+    """Get a built-in persona by name. Returns None if not found."""
+    return BUILTIN_PERSONAS.get(name)
+
+
+def list_builtin_personas() -> list[str]:
+    """List available built-in persona names."""
+    return list(BUILTIN_PERSONAS.keys())
+
+
+# ── System Prompt Builder ────────────────────────────────────────────
+
+def build_persona_emotion_prompt(
+    persona: Optional[PersonaDefinition],
+    emotion_state: Any,  # EmotionState, but avoiding circular import
+) -> str:
+    """Weave persona definition + current emotional state into a prompt section.
+
+    This is the key integration point: the persona defines WHO the Ome is,
+    and the emotion state defines HOW it's feeling right now. Together they
+    create a system prompt that produces soulful, consistent responses.
+
+    Args:
+        persona: The Ome's character definition (or None for default behavior)
+        emotion_state: The current EmotionState (must have describe_for_prompt())
+
+    Returns:
+        A string suitable for insertion into the system prompt.
+    """
+    parts = []
+
+    if persona:
+        parts.append(persona.build_system_prompt_section())
+
+    if emotion_state and hasattr(emotion_state, "describe_for_prompt"):
+        parts.append(f"\n## Your Emotional State\n{emotion_state.describe_for_prompt()}")
+
+    if not parts:
+        return ""
+
+    return "\n".join(parts)
 
 
 @dataclass
