@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Maxim — Civilization Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0a16;
+    --panel: #12132a;
+    --border: #1e2048;
+    --gold: #c8a96e;
+    --blue: #4a90d9;
+    --green: #48b88c;
+    --red: #e05555;
+    --purple: #9b72cf;
+    --text: #ccc;
+    --text-dim: #666;
+    --text-bright: #eee;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI', sans-serif;
+    overflow-x: hidden;
+  }
+  header {
+    padding: 20px 32px 12px;
+    display: flex; align-items: center; gap: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 { font-size: 22px; color: var(--gold); font-weight: 600; letter-spacing: 1px; }
+  header .subtitle { color: var(--text-dim); font-size: 13px; }
+  .time-display {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 16px;
+  }
+  .time-display .year {
+    font-size: 28px; font-weight: 700; color: var(--gold);
+    font-variant-numeric: tabular-nums;
+  }
+  .time-display .pop {
+    font-size: 14px; color: var(--text-dim);
+  }
+  .time-display .pop span { color: var(--green); font-weight: 600; }
+
+  /* Timeline slider */
+  .slider-container {
+    padding: 8px 32px 16px;
+    display: flex; align-items: center; gap: 16px;
+  }
+  .slider-container input[type=range] {
+    flex: 1; height: 6px; -webkit-appearance: none; background: var(--border);
+    border-radius: 3px; outline: none;
+  }
+  .slider-container input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px;
+    background: var(--gold); border-radius: 50%; cursor: pointer;
+    box-shadow: 0 0 8px rgba(200,169,110,0.4);
+  }
+  .play-btn {
+    background: var(--gold); color: var(--bg); border: none;
+    width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
+    font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  }
+  .play-btn:hover { opacity: 0.85; }
+  .speed-btn {
+    background: var(--panel); color: var(--text-dim); border: 1px solid var(--border);
+    padding: 4px 10px; border-radius: 12px; cursor: pointer; font-size: 12px;
+  }
+  .speed-btn.active { color: var(--gold); border-color: var(--gold); }
+
+  /* Grid layout */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 16px;
+    padding: 0 32px 32px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .panel h3 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 2px;
+    color: var(--text-dim); margin-bottom: 12px;
+  }
+  .panel-full { grid-column: 1 / -1; }
+
+  /* Social graph */
+  #social-graph { width: 100%; height: 420px; }
+  /* Economy chart */
+  #economy-chart { width: 100%; height: 320px; }
+  /* Population chart */
+  #population-chart { width: 100%; height: 320px; }
+  /* Needs radar */
+  #needs-radar { width: 100%; height: 320px; }
+
+  /* Agent cards */
+  .agents-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+  }
+  .agent-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, transform 0.1s;
+  }
+  .agent-card:hover { border-color: var(--gold); transform: translateY(-1px); }
+  .agent-card.selected { border-color: var(--gold); background: rgba(200,169,110,0.08); }
+  .agent-card.dead { opacity: 0.35; }
+  .agent-card .name { font-weight: 600; color: var(--text-bright); font-size: 14px; }
+  .agent-card .meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .agent-card .wealth-bar {
+    margin-top: 6px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden;
+  }
+  .agent-card .wealth-bar .fill { height: 100%; background: var(--gold); border-radius: 2px; transition: width 0.5s; }
+  .agent-card .occ-badge {
+    display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 10px;
+    margin-top: 4px; font-weight: 500;
+  }
+
+  /* Milestones */
+  .milestones { max-height: 320px; overflow-y: auto; }
+  .milestone-item {
+    padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+    display: flex; gap: 12px; align-items: flex-start;
+  }
+  .milestone-item .yr {
+    color: var(--gold); font-weight: 600; font-size: 13px; min-width: 48px;
+    font-variant-numeric: tabular-nums;
+  }
+  .milestone-item .desc { font-size: 13px; color: var(--text); }
+
+  /* Events feed */
+  .events-feed { max-height: 320px; overflow-y: auto; }
+  .event-item {
+    padding: 4px 0; font-size: 12px; color: var(--text-dim);
+    border-bottom: 1px solid rgba(255,255,255,0.02);
+  }
+  .event-item .tag {
+    display: inline-block; padding: 0 6px; border-radius: 6px; font-size: 10px;
+    margin-right: 6px; font-weight: 500;
+  }
+  .tag-marriage { background: rgba(233,100,155,0.2); color: #e9649b; }
+  .tag-birth { background: rgba(72,184,140,0.2); color: var(--green); }
+  .tag-death { background: rgba(224,85,85,0.2); color: var(--red); }
+  .tag-trade { background: rgba(74,144,217,0.2); color: var(--blue); }
+  .tag-milestone { background: rgba(200,169,110,0.2); color: var(--gold); }
+  .tag-festival { background: rgba(155,114,207,0.2); color: var(--purple); }
+  .tag-drought { background: rgba(224,165,85,0.2); color: #e0a555; }
+
+  /* Stat cards */
+  .stat-row {
+    display: flex; gap: 12px; margin-bottom: 16px; padding: 0 32px;
+  }
+  .stat-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 18px; flex: 1; text-align: center;
+  }
+  .stat-card .label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+  .stat-card .value { font-size: 24px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .stat-card .value.gold { color: var(--gold); }
+  .stat-card .value.green { color: var(--green); }
+  .stat-card .value.blue { color: var(--blue); }
+  .stat-card .value.red { color: var(--red); }
+  .stat-card .value.purple { color: var(--purple); }
+
+  /* Loading */
+  .loading {
+    display: flex; align-items: center; justify-content: center;
+    height: 100vh; font-size: 18px; color: var(--gold);
+  }
+  .drop-zone {
+    border: 2px dashed var(--border); border-radius: 16px;
+    padding: 80px 40px; text-align: center; cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--gold); }
+  .drop-zone h2 { color: var(--gold); margin-bottom: 12px; }
+  .drop-zone p { color: var(--text-dim); font-size: 14px; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div id="app-loading" class="loading">
+  <div style="text-align:center">
+    <div class="drop-zone" id="drop-zone">
+      <h2>Maxim Civilization Dashboard</h2>
+      <p>Drag & drop a chronicle JSON here<br>or click to select file</p>
+      <p style="margin-top:20px; font-size:12px; color:var(--text-dim)">
+        Generate with: <code style="color:var(--gold)">maxim run village.yaml --export chronicle.json</code>
+      </p>
+    </div>
+    <input type="file" id="file-input" accept=".json" style="display:none">
+  </div>
+</div>
+
+<div id="app-main" style="display:none">
+  <header>
+    <h1>MAXIM</h1>
+    <span class="subtitle" id="world-name">Willowbrook Village</span>
+    <div class="time-display">
+      <div class="pop">Population: <span id="pop-count">12</span></div>
+      <div class="year" id="year-display">Year 1</div>
+    </div>
+  </header>
+
+  <div class="slider-container">
+    <button class="play-btn" id="play-btn">▶</button>
+    <input type="range" id="time-slider" min="0" max="100" value="0">
+    <button class="speed-btn active" data-speed="1">1×</button>
+    <button class="speed-btn" data-speed="2">2×</button>
+    <button class="speed-btn" data-speed="4">4×</button>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat-card"><div class="label">GDP</div><div class="value gold" id="stat-gdp">0</div></div>
+    <div class="stat-card"><div class="label">Avg Wealth</div><div class="value green" id="stat-wealth">0</div></div>
+    <div class="stat-card"><div class="label">Gini Index</div><div class="value purple" id="stat-gini">0</div></div>
+    <div class="stat-card"><div class="label">Treasury</div><div class="value blue" id="stat-treasury">0</div></div>
+    <div class="stat-card"><div class="label">Unemployment</div><div class="value red" id="stat-unemp">0%</div></div>
+  </div>
+
+  <div class="grid">
+    <!-- Social Graph -->
+    <div class="panel">
+      <h3>Social Network</h3>
+      <div id="social-graph"></div>
+    </div>
+
+    <!-- Economy -->
+    <div class="panel">
+      <h3>Economy</h3>
+      <div id="economy-chart"></div>
+    </div>
+
+    <!-- Agent cards -->
+    <div class="panel">
+      <h3>Citizens</h3>
+      <div class="agents-grid" id="agents-grid"></div>
+    </div>
+
+    <!-- Needs Radar (for selected agent) -->
+    <div class="panel">
+      <h3>Agent Detail — <span id="selected-name" style="color:var(--gold)">select a citizen</span></h3>
+      <div id="needs-radar"></div>
+    </div>
+
+    <!-- Events feed -->
+    <div class="panel">
+      <h3>Events</h3>
+      <div class="events-feed" id="events-feed"></div>
+    </div>
+
+    <!-- Milestones -->
+    <div class="panel">
+      <h3>Milestones</h3>
+      <div class="milestones" id="milestones-list"></div>
+    </div>
+
+    <!-- Population chart -->
+    <div class="panel panel-full">
+      <h3>Population & Economy Over Time</h3>
+      <div id="population-chart"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================
+// Maxim Dashboard — ECharts-powered
+// ============================================
+
+const OCC_COLORS = {
+  farmer: '#48b88c', blacksmith: '#e0a555', merchant: '#c8a96e',
+  healer: '#e9649b', teacher: '#9b72cf', builder: '#4a90d9',
+  hunter: '#e05555', weaver: '#6ec8c8', innkeeper: '#b8a048',
+  elder: '#888', none: '#444',
+};
+
+let DATA = null;
+let currentSnap = 0;
+let selectedAgent = null;
+let playing = false;
+let playSpeed = 1;
+let playTimer = null;
+
+// Charts
+let socialChart, economyChart, populationChart, needsChart;
+
+// ---- File loading ----
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) loadFile(file);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      DATA = JSON.parse(e.target.result);
+      initDashboard();
+    } catch (err) {
+      alert('Invalid JSON file');
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ---- Init ----
+function initDashboard() {
+  document.getElementById('app-loading').style.display = 'none';
+  document.getElementById('app-main').style.display = 'block';
+
+  const slider = document.getElementById('time-slider');
+  slider.max = DATA.snapshots.length - 1;
+  slider.value = 0;
+  slider.addEventListener('input', () => { currentSnap = parseInt(slider.value); render(); });
+
+  // Play/pause
+  document.getElementById('play-btn').addEventListener('click', togglePlay);
+
+  // Speed buttons
+  document.querySelectorAll('.speed-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      playSpeed = parseInt(btn.dataset.speed);
+      document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  // Init ECharts
+  socialChart = echarts.init(document.getElementById('social-graph'), 'dark');
+  economyChart = echarts.init(document.getElementById('economy-chart'), 'dark');
+  populationChart = echarts.init(document.getElementById('population-chart'), 'dark');
+  needsChart = echarts.init(document.getElementById('needs-radar'), 'dark');
+
+  // Responsive
+  window.addEventListener('resize', () => {
+    socialChart.resize(); economyChart.resize();
+    populationChart.resize(); needsChart.resize();
+  });
+
+  // Click on social graph node
+  socialChart.on('click', params => {
+    if (params.dataType === 'node') {
+      selectedAgent = params.data.id;
+      render();
+    }
+  });
+
+  renderTimeline();
+  render();
+}
+
+// ---- Play ----
+function togglePlay() {
+  playing = !playing;
+  document.getElementById('play-btn').textContent = playing ? '⏸' : '▶';
+  if (playing) {
+    playTimer = setInterval(() => {
+      if (currentSnap < DATA.snapshots.length - 1) {
+        currentSnap++;
+        document.getElementById('time-slider').value = currentSnap;
+        render();
+      } else {
+        togglePlay();
+      }
+    }, 800 / playSpeed);
+  } else {
+    clearInterval(playTimer);
+  }
+}
+
+// ---- Render ----
+function render() {
+  const snap = DATA.snapshots[currentSnap];
+  if (!snap) return;
+
+  // Header
+  document.getElementById('year-display').textContent = `Year ${snap.year}`;
+  document.getElementById('pop-count').textContent = snap.population;
+
+  // Stats
+  document.getElementById('stat-gdp').textContent = Math.round(snap.gdp).toLocaleString();
+  document.getElementById('stat-wealth').textContent = Math.round(snap.avg_wealth).toLocaleString();
+  document.getElementById('stat-gini').textContent = snap.gini.toFixed(3);
+  document.getElementById('stat-treasury').textContent = Math.round(snap.treasury).toLocaleString();
+  document.getElementById('stat-unemp').textContent = (snap.unemployment * 100).toFixed(0) + '%';
+
+  renderSocialGraph(snap);
+  renderAgentCards(snap);
+  renderNeedsRadar(snap);
+  renderEconomy(snap);
+  renderEvents(snap);
+  renderMilestones(snap);
+}
+
+// ---- Social Graph ----
+function renderSocialGraph(snap) {
+  const agents = snap.agents;
+  const nodes = [];
+  const edges = [];
+
+  for (const [id, a] of Object.entries(agents)) {
+    if (!a.alive) continue;
+    const occ = a.occupation || 'none';
+    nodes.push({
+      id: id,
+      name: a.name,
+      symbolSize: 20 + Math.min(a.wealth / 30, 30),
+      itemStyle: { color: OCC_COLORS[occ] || '#888' },
+      label: { show: true, color: '#ccc', fontSize: 11 },
+      category: occ,
+    });
+  }
+
+  // Relationships + spouse bonds
+  const seen = new Set();
+  for (const [id, a] of Object.entries(agents)) {
+    if (!a.alive || !a.relationships) continue;
+    for (const [tid, strength] of Object.entries(a.relationships)) {
+      if (!agents[tid] || !agents[tid].alive) continue;
+      const key = [id, tid].sort().join('-');
+      if (seen.has(key) || strength < 0.1) continue;
+      seen.add(key);
+      const isSpouse = a.spouse === tid;
+      edges.push({
+        source: id, target: tid,
+        lineStyle: {
+          width: isSpouse ? 3 : Math.max(0.5, strength * 3),
+          color: isSpouse ? '#e9649b' : `rgba(200,169,110,${Math.min(strength, 0.7)})`,
+          type: isSpouse ? 'solid' : 'dashed',
+        },
+      });
+    }
+  }
+
+  // Categories for legend
+  const categories = [...new Set(Object.values(agents).filter(a => a.alive).map(a => a.occupation || 'none'))];
+
+  socialChart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: {
+      formatter: params => {
+        if (params.dataType === 'node') {
+          const a = agents[params.data.id];
+          return `<b>${a.name}</b><br>Age: ${a.age} · ${a.occupation}<br>Wealth: ${Math.round(a.wealth)}<br>${a.spouse ? '💑 Married' : ''}`;
+        }
+        return '';
+      }
+    },
+    legend: [{
+      data: categories.map(c => ({ name: c, icon: 'circle' })),
+      textStyle: { color: '#888', fontSize: 10 },
+      bottom: 0, itemWidth: 10, itemHeight: 10,
+    }],
+    series: [{
+      type: 'graph', layout: 'force',
+      data: nodes, links: edges,
+      categories: categories.map(c => ({ name: c })),
+      roam: true, draggable: true,
+      force: { repulsion: 220, gravity: 0.12, edgeLength: [60, 180], friction: 0.6 },
+      emphasis: { focus: 'adjacency', lineStyle: { width: 4 } },
+      animationDuration: 600,
+    }],
+  }, { notMerge: true });
+}
+
+// ---- Agent Cards ----
+function renderAgentCards(snap) {
+  const grid = document.getElementById('agents-grid');
+  const agents = snap.agents;
+  const maxWealth = Math.max(...Object.values(agents).map(a => a.wealth), 1);
+
+  let html = '';
+  for (const [id, a] of Object.entries(agents)) {
+    const occ = a.occupation || 'none';
+    const color = OCC_COLORS[occ] || '#888';
+    const sel = id === selectedAgent ? ' selected' : '';
+    const dead = !a.alive ? ' dead' : '';
+    html += `
+      <div class="agent-card${sel}${dead}" onclick="selectAgent('${id}')">
+        <div class="name">${a.name}${a.spouse ? ' 💑' : ''}${!a.alive ? ' ☠️' : ''}</div>
+        <div class="meta">Age ${a.age} · W:${Math.round(a.wealth)}</div>
+        <span class="occ-badge" style="background:${color}22;color:${color}">${occ}</span>
+        <div class="wealth-bar"><div class="fill" style="width:${(a.wealth/maxWealth*100).toFixed(1)}%;background:${color}"></div></div>
+      </div>`;
+  }
+  grid.innerHTML = html;
+}
+
+function selectAgent(id) {
+  selectedAgent = id;
+  render();
+}
+
+// ---- Needs Radar ----
+function renderNeedsRadar(snap) {
+  const a = selectedAgent ? snap.agents[selectedAgent] : null;
+  document.getElementById('selected-name').textContent = a ? a.name : 'select a citizen';
+
+  if (!a || !a.needs) {
+    needsChart.setOption({ series: [] }, { notMerge: true });
+    return;
+  }
+
+  const needs = a.needs;
+  needsChart.setOption({
+    backgroundColor: 'transparent',
+    radar: {
+      indicator: [
+        { name: 'Survival', max: 100 },
+        { name: 'Safety', max: 100 },
+        { name: 'Belonging', max: 100 },
+        { name: 'Esteem', max: 100 },
+        { name: 'Actualization', max: 100 },
+      ],
+      shape: 'polygon',
+      axisLine: { lineStyle: { color: 'rgba(200,169,110,0.15)' } },
+      splitLine: { lineStyle: { color: 'rgba(200,169,110,0.1)' } },
+      axisName: { color: '#888', fontSize: 11 },
+    },
+    tooltip: {},
+    series: [{
+      type: 'radar',
+      data: [{
+        value: [
+          Math.min(needs.survival, 100), Math.min(needs.safety, 100),
+          Math.min(needs.belonging, 100), Math.min(needs.esteem, 100),
+          Math.min(needs.actualization, 100),
+        ],
+        name: a.name,
+        areaStyle: { color: 'rgba(200,169,110,0.25)' },
+        lineStyle: { color: '#c8a96e', width: 2 },
+        itemStyle: { color: '#c8a96e' },
+      }],
+    }],
+  }, { notMerge: true });
+
+  // Also show skills, memory, relationships below radar
+  // Using a simple HTML overlay in the chart area isn't ideal,
+  // so we put extra info via tooltip already
+}
+
+// ---- Economy Chart ----
+function renderEconomy(snap) {
+  // GDP history up to current snapshot tick
+  const tickIndex = currentSnap * 4; // approximate
+  const gdpSlice = DATA.gdp_history.slice(0, tickIndex + 1);
+  const years = gdpSlice.map((_, i) => (Math.floor(i / 4) + 1));
+
+  // Also get gini from snapshots
+  const giniData = DATA.snapshots.slice(0, currentSnap + 1).map(s => [s.year, s.gini]);
+  const wealthData = DATA.snapshots.slice(0, currentSnap + 1).map(s => [s.year, s.avg_wealth]);
+
+  economyChart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'axis' },
+    legend: { textStyle: { color: '#888', fontSize: 10 }, bottom: 0 },
+    grid: { top: 30, right: 50, bottom: 40, left: 50 },
+    xAxis: { type: 'value', name: 'Year', nameTextStyle: { color: '#666' }, axisLabel: { color: '#666' }, axisLine: { lineStyle: { color: '#333' } } },
+    yAxis: [
+      { type: 'value', name: 'GDP', nameTextStyle: { color: '#666' }, axisLabel: { color: '#666' }, splitLine: { lineStyle: { color: '#1e2048' } } },
+      { type: 'value', name: 'Gini', max: 1, nameTextStyle: { color: '#666' }, axisLabel: { color: '#666' }, splitLine: { show: false } },
+    ],
+    series: [
+      {
+        name: 'GDP', type: 'line', smooth: true,
+        data: gdpSlice.map((g, i) => [Math.floor(i / 4) + 1, Math.round(g)]),
+        lineStyle: { color: '#c8a96e', width: 2 },
+        itemStyle: { color: '#c8a96e' }, showSymbol: false,
+        areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: 'rgba(200,169,110,0.3)' },
+          { offset: 1, color: 'rgba(200,169,110,0)' },
+        ])},
+      },
+      {
+        name: 'Gini', type: 'line', yAxisIndex: 1, smooth: true,
+        data: giniData, lineStyle: { color: '#9b72cf', width: 1.5 },
+        itemStyle: { color: '#9b72cf' }, showSymbol: false,
+      },
+    ],
+  }, { notMerge: true });
+}
+
+// ---- Events Feed ----
+function renderEvents(snap) {
+  const feed = document.getElementById('events-feed');
+  const year = snap.year;
+  // Show events up to this year
+  const evts = DATA.events.filter(e => e.year <= year);
+  const recent = evts.slice(-40).reverse();
+
+  feed.innerHTML = recent.map(e => {
+    const tagClass = `tag-${e.type}`;
+    return `<div class="event-item"><span class="tag ${tagClass}">${e.type}</span>Y${e.year} · ${e.description}</div>`;
+  }).join('');
+}
+
+// ---- Milestones ----
+function renderMilestones(snap) {
+  const list = document.getElementById('milestones-list');
+  const year = snap.year;
+  const ms = DATA.milestones.filter(m => m.year <= year);
+
+  list.innerHTML = ms.map(m =>
+    `<div class="milestone-item"><div class="yr">Y${m.year}</div><div class="desc">${m.description}</div></div>`
+  ).join('');
+}
+
+// ---- Population timeline (full, always shows all data) ----
+function renderTimeline() {
+  const popData = DATA.snapshots.map(s => [s.year, s.population]);
+  const gdpData = DATA.snapshots.map(s => [s.year, Math.round(s.gdp)]);
+  const treasuryData = DATA.snapshots.map(s => [s.year, Math.round(s.treasury)]);
+
+  // Delay init slightly
+  setTimeout(() => {
+    populationChart.setOption({
+      backgroundColor: 'transparent',
+      tooltip: { trigger: 'axis' },
+      legend: { textStyle: { color: '#888', fontSize: 10 }, bottom: 0 },
+      grid: { top: 30, right: 50, bottom: 40, left: 50 },
+      xAxis: { type: 'value', name: 'Year', nameTextStyle: { color: '#666' }, axisLabel: { color: '#666' }, axisLine: { lineStyle: { color: '#333' } } },
+      yAxis: [
+        { type: 'value', name: 'Count / GDP', nameTextStyle: { color: '#666' }, axisLabel: { color: '#666' }, splitLine: { lineStyle: { color: '#1e2048' } } },
+      ],
+      series: [
+        {
+          name: 'Population', type: 'line', smooth: true,
+          data: popData, lineStyle: { color: '#48b88c', width: 2 },
+          itemStyle: { color: '#48b88c' }, showSymbol: false,
+          areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(72,184,140,0.3)' },
+            { offset: 1, color: 'rgba(72,184,140,0)' },
+          ])},
+        },
+        {
+          name: 'GDP', type: 'line', smooth: true,
+          data: gdpData, lineStyle: { color: '#c8a96e', width: 1.5 },
+          itemStyle: { color: '#c8a96e' }, showSymbol: false,
+        },
+        {
+          name: 'Treasury', type: 'line', smooth: true,
+          data: treasuryData, lineStyle: { color: '#4a90d9', width: 1.5, type: 'dashed' },
+          itemStyle: { color: '#4a90d9' }, showSymbol: false,
+        },
+      ],
+    });
+  }, 100);
+}
+</script>
+</body>
+</html>

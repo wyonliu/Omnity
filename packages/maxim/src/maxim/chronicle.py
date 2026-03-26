@@ -98,6 +98,13 @@ class Chronicle:
                     "occupation": a.occupation,
                     "wealth": round(a.wealth, 1),
                     "alive": a.alive,
+                    "spouse": a.spouse,
+                    "children": a.children,
+                    "traits": a.traits,
+                    "needs": a.needs.to_dict(),
+                    "relationships": {k: round(v, 2) for k, v in a.relationships.items()},
+                    "skills": {k: round(v, 2) for k, v in a.skills.items()},
+                    "memory": a.memory[-5:],
                 }
                 for a in world.agents.values()
             },

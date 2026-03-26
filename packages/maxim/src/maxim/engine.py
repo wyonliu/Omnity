@@ -48,8 +48,8 @@ class Simulation:
             if self._on_tick:
                 self._on_tick(self.world, self.tick_count, narration)
 
-            # Snapshot every 10 ticks (2.5 years)
-            if self.tick_count % 10 == 0:
+            # Snapshot every 4 ticks (1 year)
+            if self.tick_count % 4 == 0:
                 self.chronicle.snapshot(self.world)
 
             # Stop if everyone is dead

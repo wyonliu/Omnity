@@ -255,8 +255,8 @@ soul.commit(conversation_text, source="openclaw")
 | **Ome** | v0.5 | Strategy engine + persona evolution + life system + LLM-generated content + 119 tests. **Ready to use.** |
 | **Ome Server** | v0.5 | FastAPI + SSE streaming + LLM prompts/greeting API + OmeTown agents. **Ready to use.** |
 | **Ome iOS** | v0.5 | Native SwiftUI app. Voice-first input, growth system, zero hardcoded content. |
-| **Maxim** | v0.1 | Needs-driven agents + GM arbitration + economy engine + chronicle. **First run complete.** |
-| **OmeTown** | — | Design phase |
+| **Maxim** | v0.1 | Needs-driven agents + GM arbitration + economy engine + chronicle + **web dashboard**. **First run complete.** |
+| **OmeTown** | — | Design complete. PixiJS 8 + AI isometric art pipeline. MVP: one street, async Ome life. |
 
 ## Monorepo Layout
 

@@ -94,6 +94,21 @@ Each run produces:
 - **Terminal UI**: Rich tables showing agent status, economy, milestones
 - **Chronicle JSON**: Full event log, snapshots, GDP history (for visualization)
 - **Milestone detection**: First trade, first marriage, population milestones, economic crises
+- **Web Dashboard**: Interactive civilization dashboard with social graph, economy charts, and timeline playback
+
+### Dashboard
+
+```bash
+maxim dashboard chronicle.json          # Open in browser
+maxim run village.yaml --export out.json && maxim dashboard out.json
+```
+
+The dashboard shows:
+- **Social network** (force-directed graph: node size = wealth, color = occupation, pink = marriage)
+- **Economy charts** (GDP + Gini dual-axis, population over time)
+- **Citizen cards** (click to see Maslow needs radar)
+- **Event feed + milestones**
+- **Time slider** with playback controls (1×/2×/4×)
 
 ## Cost
 
@@ -104,7 +119,7 @@ Each run produces:
 
 ## Roadmap
 
-- [ ] **Dashboard**: Web UI with social graph, economy charts, timeline
+- [x] **Dashboard**: Web UI with social graph, economy charts, timeline
 - [ ] **Governance**: Voting, laws, community resource allocation
 - [ ] **Variable speed**: 1sec=1day to 1sec=1year
 - [ ] **Templates**: Coffee town, campus, design studio presets

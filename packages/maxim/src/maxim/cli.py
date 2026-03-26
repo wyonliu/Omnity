@@ -120,6 +120,60 @@ def run(scenario: str, no_llm: bool, quiet: bool, export: str, verbose: bool):
     console.print()
 
 
+@main.command()
+@click.argument("chronicle_json", type=click.Path(exists=True), required=False)
+@click.option("--port", default=8765, help="HTTP server port")
+def dashboard(chronicle_json: str, port: int):
+    """Open the civilization dashboard in your browser."""
+    import http.server
+    import threading
+    import webbrowser
+    import json
+    import os
+
+    # Find dashboard.html
+    pkg_dir = Path(__file__).resolve().parent.parent.parent
+    html_path = pkg_dir / "dashboard.html"
+    if not html_path.exists():
+        console.print(f"[red]dashboard.html not found at {html_path}[/]")
+        return
+
+    html_content = html_path.read_text()
+
+    # If chronicle JSON provided, inline it so it auto-loads
+    if chronicle_json:
+        json_data = Path(chronicle_json).read_text()
+        inject = f"""<script>
+        window.addEventListener('load', () => {{
+          DATA = {json_data};
+          initDashboard();
+        }});
+        </script></body>"""
+        html_content = html_content.replace('</body>', inject)
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html')
+            self.end_headers()
+            self.wfile.write(html_content.encode())
+        def log_message(self, *args):
+            pass  # Silence logs
+
+    server = http.server.HTTPServer(('localhost', port), Handler)
+    url = f'http://localhost:{port}'
+    console.print(f"\n[bold cyan]Maxim Dashboard[/] serving at [yellow]{url}[/]")
+    console.print("[dim]Press Ctrl+C to stop[/]\n")
+
+    webbrowser.open(url)
+
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        console.print("\n[dim]Dashboard stopped.[/]")
+        server.shutdown()
+
+
 def _print_agents(world: World):
     table = Table(title=f"Citizens of {world.name} — Year {world.year}")
     table.add_column("Name", style="cyan")
