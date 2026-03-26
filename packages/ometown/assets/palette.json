@@ -1,0 +1,65 @@
+{
+  "brand": {
+    "gold": "#c8a96e",
+    "navy": "#0a0a16",
+    "dark": "#12132a"
+  },
+  "day": {
+    "sky": "#87CEEB",
+    "bg": "#f5e6d3",
+    "text": "#2d2d2d"
+  },
+  "night": {
+    "sky": "#1a1a2e",
+    "bg": "#0a0a16",
+    "text": "#e0e0e0"
+  },
+  "ground": {
+    "grass_light": "#a0c060",
+    "grass_mid": "#6d8b4e",
+    "grass_dark": "#4a7c59",
+    "dirt_light": "#c4a882",
+    "dirt_dark": "#8b7355",
+    "stone": "#a0936e",
+    "sand": "#d4c5a0"
+  },
+  "buildings": {
+    "wood_light": "#d4a574",
+    "wood_dark": "#8b6914",
+    "stone": "#b8b0a0",
+    "stucco": "#e8d8c4",
+    "brick": "#c87050",
+    "roof_clay": "#b8520b",
+    "roof_thatch": "#cd853f",
+    "roof_slate": "#708090"
+  },
+  "nature": {
+    "leaf_spring": "#90c040",
+    "leaf_summer": "#4a8030",
+    "leaf_autumn": "#d4a020",
+    "leaf_winter": "#8a8070",
+    "trunk": "#6b4226",
+    "flower_pink": "#e88ca0",
+    "flower_blue": "#6090d0",
+    "flower_yellow": "#e8c840"
+  },
+  "water": {
+    "light": "#5ba3e6",
+    "mid": "#4a90d9",
+    "dark": "#3070b0"
+  },
+  "character_palettes": [
+    { "name": "default",  "skin": "#f0c8a0", "hair": "#4a3020", "primary": "#5080c0", "secondary": "#e8e0d0" },
+    { "name": "warm",     "skin": "#e8b890", "hair": "#8b4513", "primary": "#c85040", "secondary": "#f0e8d8" },
+    { "name": "cool",     "skin": "#f0d0b8", "hair": "#2a2a3a", "primary": "#4070a0", "secondary": "#c8d8e8" },
+    { "name": "earth",    "skin": "#d8a878", "hair": "#3a2818", "primary": "#6b8050", "secondary": "#d8d0b8" },
+    { "name": "sunset",   "skin": "#f0c8a8", "hair": "#c86030", "primary": "#d07040", "secondary": "#f8e8c8" },
+    { "name": "forest",   "skin": "#e0b890", "hair": "#304020", "primary": "#507040", "secondary": "#d0d8c0" },
+    { "name": "ocean",    "skin": "#f0d0c0", "hair": "#1a2a3a", "primary": "#3080a0", "secondary": "#d8e8f0" },
+    { "name": "plum",     "skin": "#f0c8b0", "hair": "#4a2040", "primary": "#805080", "secondary": "#e0d0e0" },
+    { "name": "gold",     "skin": "#e8c090", "hair": "#6a4a20", "primary": "#c8a040", "secondary": "#f0e8d0" },
+    { "name": "mint",     "skin": "#f0d8c8", "hair": "#2a3a2a", "primary": "#50a080", "secondary": "#d0e8d8" },
+    { "name": "rose",     "skin": "#f0c8b8", "hair": "#5a2a2a", "primary": "#c07080", "secondary": "#f0d8d8" },
+    { "name": "storm",    "skin": "#e0c0a0", "hair": "#1a1a2a", "primary": "#505870", "secondary": "#c8c8d0" }
+  ]
+}
