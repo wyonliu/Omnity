@@ -1,36 +1,36 @@
 import { useState, useEffect, useCallback } from 'react'
 import { TownCanvas } from './TownCanvas'
 import { ChatPanel } from './ChatPanel'
-import { DailyReport } from './DailyReport'
+import { ClueNotebook } from './ClueNotebook'
+import { AccusePanel } from './AccusePanel'
 import type { CharacterData } from './iso'
 
 /**
- * OmeTown — Main App Shell
+ * OmeTown — 影子之谜 · Mystery of the Shadows
  *
- * Layout:
- *   ┌────────────────────────────────┐
- *   │         Town Canvas            │
- *   │   (isometric PixiJS view)      │
- *   │                                │
- *   ├──────────────┬─────────────────┤
- *   │  Chat Panel  │  Daily Report   │
- *   └──────────────┴─────────────────┘
+ * A Westworld-style mystery investigation: talk to NPCs, gather clues,
+ * find the thief who stole the Star of OmeTown.
  */
 export function App() {
   const [selectedOme, setSelectedOme] = useState<CharacterData | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
-  const [reportOpen, setReportOpen] = useState(false)
+  const [cluesOpen, setCluesOpen] = useState(false)
+  const [accuseOpen, setAccuseOpen] = useState(false)
+  const [scenario, setScenario] = useState<{ name: string; brief: string } | null>(null)
 
-  // Open chat when clicking on an Ome character
   const handleOmeClick = useCallback((ome: CharacterData) => {
     setSelectedOme(ome)
     setChatOpen(true)
   }, [])
 
-  // Check for daily report on mount
+  // Fetch scenario info on mount
   useEffect(() => {
-    // TODO: Fetch from ome-server /api/daily-report
-    // If there's a new report since last visit, show it
+    fetch('/api/town/scenario', { signal: AbortSignal.timeout(3000) })
+      .then(r => r.json())
+      .then(d => setScenario(d))
+      .catch(() => {
+        setScenario({ name: '影子之谜 · Mystery of the Shadows', brief: 'The Star of OmeTown was stolen. Talk to the townspeople to find the thief.' })
+      })
   }, [])
 
   return (
@@ -46,29 +46,36 @@ export function App() {
       <div style={{ flex: 1, position: 'relative' }}>
         <TownCanvas onOmeClick={handleOmeClick} />
 
-        {/* Overlay: Town name + time */}
+        {/* Overlay: Town name + scenario */}
         <div style={{
           position: 'absolute', top: 16, left: 16,
           color: '#c8a96e', fontSize: 14, fontFamily: 'system-ui',
           textShadow: '0 1px 4px rgba(0,0,0,0.8)',
+          maxWidth: 280,
         }}>
           <div style={{ fontSize: 20, fontWeight: 600 }}>OmeTown</div>
-          <div style={{ opacity: 0.6, fontSize: 12, marginTop: 2 }}>
-            {new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })}
+          {scenario && (
+            <div style={{ opacity: 0.8, fontSize: 12, marginTop: 4, lineHeight: 1.4 }}>
+              {scenario.name}
+            </div>
+          )}
+          <div style={{ opacity: 0.5, fontSize: 11, marginTop: 2 }}>
+            Click on characters to investigate
           </div>
         </div>
 
-        {/* Daily report button */}
+        {/* Clue notebook button */}
         <button
-          onClick={() => setReportOpen(true)}
+          onClick={() => setCluesOpen(true)}
           style={{
             position: 'absolute', top: 16, right: 16,
             background: 'rgba(200,169,110,0.15)', border: '1px solid rgba(200,169,110,0.3)',
             color: '#c8a96e', padding: '8px 16px', borderRadius: 20,
             cursor: 'pointer', fontSize: 13, fontFamily: 'system-ui',
+            display: 'flex', alignItems: 'center', gap: 6,
           }}
         >
-          Today's Report
+          <span>📓</span> Clues
         </button>
       </div>
 
@@ -80,9 +87,17 @@ export function App() {
         />
       )}
 
-      {/* Daily report overlay */}
-      {reportOpen && (
-        <DailyReport onClose={() => setReportOpen(false)} />
+      {/* Clue notebook overlay */}
+      {cluesOpen && (
+        <ClueNotebook
+          onClose={() => setCluesOpen(false)}
+          onAccuse={() => { setCluesOpen(false); setAccuseOpen(true) }}
+        />
+      )}
+
+      {/* Accusation overlay */}
+      {accuseOpen && (
+        <AccusePanel onClose={() => setAccuseOpen(false)} />
       )}
     </div>
   )

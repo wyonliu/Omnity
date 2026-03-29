@@ -35,6 +35,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from ome_server.routes import agents, anon, auth, chat, life, memories, prompts, skills, viral
+from ome_server.town.routes import router as town_router
+from ome_server.town.simulation import get_simulation
 
 log = logging.getLogger("ome_server")
 
@@ -47,7 +49,15 @@ async def lifespan(app: FastAPI):
     """Startup / shutdown."""
     OME_DATA_ROOT.mkdir(parents=True, exist_ok=True)
     log.info("Ome Server starting — data root: %s", OME_DATA_ROOT)
+
+    # Initialize OmeTown simulation
+    sim = get_simulation()
+    await sim.initialize()
+    sim.start_loop()
+    log.info("OmeTown simulation started")
+
     yield
+
     log.info("Ome Server shutting down")
 
 
@@ -77,6 +87,7 @@ app.include_router(skills.router, prefix="/api", tags=["skills"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 app.include_router(viral.router, prefix="/api/viral", tags=["viral"])
 app.include_router(prompts.router, prefix="/api", tags=["prompts"])
+app.include_router(town_router)  # /api/town/* — OmeTown simulation
 
 
 @app.get("/")
