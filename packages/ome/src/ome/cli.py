@@ -485,7 +485,7 @@ def main():
         prog="ome",
         description="Ome — your AI twin that remembers everything.",
     )
-    parser.add_argument("--version", action="version", version="ome 0.3.1")
+    parser.add_argument("--version", action="version", version="ome 0.4.0")
     sub = parser.add_subparsers(dest="command")
 
     def _add_path(p):

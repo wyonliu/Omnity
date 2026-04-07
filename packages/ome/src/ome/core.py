@@ -907,7 +907,7 @@ class Ome:
     def status(self) -> dict[str, Any]:
         """What does your Ome know?"""
         s = self.soul.status()
-        s["ome_version"] = "0.3.1"
+        s["ome_version"] = "0.4.0"
         s["life"] = self.life_dashboard()
         return s
 
