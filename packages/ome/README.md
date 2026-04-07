@@ -4,51 +4,81 @@
 
 Not a pet. Not a tool. A digital life that inherits your personality, memory, knowledge, and relationships. It grows every time you (or any AI) talk to it.
 
+## Why Ome vs Mem0 / Khoj / MemGPT?
+
+| | Ome | Mem0 | Khoj | MemGPT (Letta) |
+|---|---|---|---|---|
+| Memory storage | ✅ SQLite + FTS5 + vector | ✅ ChromaDB | ✅ Postgres | ✅ Postgres |
+| Semantic recall | ✅ 40% weight in scoring | ✅ vector only | ✅ | ✅ |
+| Cognitive layers | ✅ **5 layers (L0-L4)** | ❌ flat store | ❌ | ❌ |
+| Personality + growth | ✅ **BigFive + bond + achievements** | ❌ | ❌ | ❌ |
+| Emotional intelligence | ✅ **valence/arousal + mood-aware recall** | ❌ | ❌ | ❌ |
+| Self-reflection | ✅ **L4 auto-reflect + drift detection** | ❌ | ❌ | ✅ self-edit |
+| LLM failover chain | ✅ **auto retry A→B→C** | ❌ single | ❌ single | ❌ single |
+| Zero-config setup | ✅ **from_env() auto-detect** | ❌ needs ChromaDB | ❌ needs Postgres | ❌ needs Postgres |
+| Extra dependencies | **0** (just pyyaml) | chromadb + more | postgres + more | postgres + more |
+| Privacy | ✅ **local-only, no cloud** | ✅ | ✅ | ✅ |
+
+**Mem0 is a memory warehouse. Ome is a cognitive brain with memory, personality, emotion, and growth.**
+
 ## Install
 
 ```bash
 pip install omnity-ome                    # core (pulls in omnity-mindos)
 pip install "omnity-ome[llm]"             # + chat via OpenAI/DeepSeek
-pip install "omnity-ome[anthropic]"       # + chat via Anthropic
 pip install "omnity-ome[all]"             # everything
 ```
 
 Requires Python 3.9+.
 
-## Quick Start
+## Quick Start (3 minutes)
 
 ```bash
-ome create        # 5 questions, your twin is born
-ome chat          # talk to it (it remembers everything)
-ome serve --mcp   # connect to Claude/Cursor
+# 1. Set any LLM API key
+export DEEPSEEK_API_KEY="sk-..."   # or OPENAI_API_KEY, OPENROUTER_API_KEY
+
+# 2. Create your twin
+ome create
+
+# 3. Talk to it
+ome chat
 ```
 
-### Python API
+### Python API (3 lines)
 
 ```python
 from ome import Ome
 
-# Create a new Ome
 twin = Ome.create("~/.ome", name="Alice", traits=["curious", "direct"])
-
-# Or load an existing one
-twin = Ome.load("~/.ome")
-
-# Chat (auto-remembers everything)
 reply = twin.chat("What do you know about my Python projects?")
+```
 
-# Teach it something directly
-twin.remember("I prefer pytest over unittest")
+### Rich Response (for apps)
 
-# Search its memory
-results = twin.recall("Python testing")
+```python
+# chat_rich() returns memories recalled, emotion, bond — everything your UI needs
+result = twin.chat_rich("Tell me about my work")
+print(result["reply"])                    # The response text
+print(result["memories_recalled"])        # Which memories were used
+print(result["emotion"])                  # Current mood/energy/warmth
+print(result["evolution_pending"])        # Ready for personality evolution?
+```
 
-# Check proactive events (morning greeting, streak reminders, etc.)
-events = twin.check_events()
+### On-Demand Evolution
 
-# Export persona for any platform
-persona = twin.export()                              # JSON
-prompt = twin.export_system_prompt(context="code review")  # system prompt string
+```python
+if twin.evolution_pending:
+    reflection = twin.evolve()            # Trigger L4 self-reflection
+    print(reflection["summary"])          # What changed
+```
+
+### Smart Extraction
+
+```python
+# Extract structured data from natural language
+data = twin.smart_extract("帮我记住张三的电话 13800138000，明天下午开会")
+print(data["contacts"])                   # [{"name": "张三", "info": "13800138000"}]
+print(data["tasks"])                      # [{"title": "开会", "due": "明天下午"}]
 ```
 
 ### MCP (Claude Desktop / Cursor)
@@ -71,37 +101,31 @@ ome create                                  # interactive setup
 ome chat                                    # conversation mode
 ome remember "I'm working on a Go compiler" # teach it a fact
 ome recall "compiler"                       # search memory
+ome dashboard                               # bond, emotion, achievements
+ome mirror                                  # talk to "yourself"
 ome export --prompt                         # system prompt for any AI
-ome export                                  # full persona JSON
 ome forget "sensitive_topic"                # GDPR hard delete
 ```
 
-## API Overview
+## Architecture
 
-| Class / Module | What it does |
-|----------------|-------------|
-| **`Ome`** | The main class. `Ome.create()` / `Ome.load()` to get an instance. Provides `chat()`, `remember()`, `recall()`, `forget()`, `check_events()`, `export()`, and `export_system_prompt()`. Wraps Mindos with persona-aware conversation and a full life system. |
-| **`ConversationStrategy`** | Zero-extra-cost structured thinking block injected into every chat. Handles deep emotion detection (LLM-level, not keywords), 4-phase growth arc, memory classification, and continuous persona evolution. |
-| **`BondState`** | 7-level relationship system (Stranger to Soulmate). Dual-threshold progression based on interaction count + days together. Bond level gates skill unlocks and conversation depth. |
-| **`AutonomyEngine`** | Proactive event system: morning greetings, streak reminders, idle check-ins, milestone celebrations. Your Ome reaches out to you, not just responds. |
-| **`SkillRegistry`** | 7 skills with competence tracking, unlocked by bond level. Skills represent what your Ome can do for you. |
-
-## Robust LLM Pipeline (v0.3.1+)
-
-Ome's brain (`_generate()`) uses Mindos's ModelRouter with automatic failover:
-- **Timeout**: Every LLM call has a 30s timeout (no more hung requests)
-- **Fallback chain**: If provider A fails, automatically tries B, then C
-- **Zero-config**: `MindosConfig.from_env()` auto-detects API keys from environment
-- **Clear errors**: When all providers fail, you get an honest message — not silent degradation
-
-```python
-# Minimal setup — just set your API key as an env var
-import os
-os.environ["DEEPSEEK_API_KEY"] = "sk-..."
-
-from ome import Ome
-twin = Ome.create("~/.ome", name="Alice", traits=["curious"])
-reply = twin.chat("Hello!")  # Uses DeepSeek, falls back to Ollama if down
+```
+┌─────────────────────────────────────────┐
+│ Ome — Your AI Twin                       │
+│   chat() / chat_rich() / evolve()       │
+│   bond / emotion / achievements / skills │
+├─────────────────────────────────────────┤
+│ Mindos — 5-Layer Cognitive Brain        │
+│   L0 Memory    (recall + semantic rank) │
+│   L1 Instinct  (routing + emotion)      │
+│   L2 Cognition (fact extraction)        │
+│   L3 Decision  (deep reasoning)         │
+│   L4 Self      (reflection + drift)     │
+├─────────────────────────────────────────┤
+│ ModelRouter — LLM Failover Chain        │
+│   Provider A → B → C (30s timeout each) │
+│   from_env() / from_dict() / config.yaml│
+└─────────────────────────────────────────┘
 ```
 
 ## Life System
@@ -114,6 +138,36 @@ Your Ome grows through real interaction:
 - **Daily challenges** + streak tracking with milestone rewards
 - **Deep emotion**: LLM-parsed nuance, not keyword matching
 - **Persona evolution**: learns your personality markers every conversation
+
+## Server Integration (FastAPI / Flask)
+
+```python
+from ome import Ome
+
+ome = Ome.load("~/.ome/myapp")
+
+@app.post("/api/ai")
+async def chat(req: dict):
+    result = ome.chat_rich(req["message"])
+    return result  # reply + memories + emotion + bond — all in one call
+
+@app.get("/api/growth")
+async def growth():
+    return ome.life_dashboard()
+
+@app.post("/api/evolve")
+async def evolve():
+    return ome.evolve()
+
+@app.post("/api/smart-input")
+async def smart_input(req: dict):
+    return ome.smart_extract(req["text"])
+
+@app.get("/api/proactive")
+async def proactive():
+    events = ome.check_events()
+    return [{"name": e.event_name, "message": e.message} for e in events]
+```
 
 ## Privacy
 

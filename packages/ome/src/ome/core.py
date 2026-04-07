@@ -255,6 +255,279 @@ class Ome:
 
         return reply
 
+    def chat_rich(self, message: str, provider: str = "") -> dict[str, Any]:
+        """Like chat(), but returns a rich dict with memories recalled, thinking, etc.
+
+        This is the preferred API for Ome365 and other apps that need to display
+        "记忆命中" (which memories were recalled) alongside the reply.
+
+        Returns:
+            {
+                "reply": str,           # The Ome's response text
+                "memories_recalled": [   # Which memories were used (for "记忆命中" display)
+                    {"type": "fact", "content": "用户住在上海", "score": 0.85},
+                    ...
+                ],
+                "emotion": {...},        # Current emotion state
+                "bond": {...},           # Current bond level info
+                "evolution_pending": bool,  # Whether L4 reflection is ready to trigger
+                "phase": {...},          # Current growth phase
+                "thinking": {...} | None,  # LLM's internal reasoning (if available)
+            }
+        """
+        # L0 keyword emotion (fast fallback, always runs)
+        self.emotion.update_from_message(message)
+
+        # Crisis detection
+        is_crisis = detect_crisis(message)
+
+        # Low-engagement detection
+        stripped = message.strip()
+        is_low_engagement = len(stripped) <= 4 and not any(
+            c in stripped for c in "？?！!…"
+        )
+
+        # Recall and classify memories (15 for richer context)
+        memories = self.soul.recall(message, top_k=15)
+        classified = classify_memories(memories) if memories else []
+        memory_context = "\n".join(
+            f"- [{m.get('type', '?')}] {m.get('content', '')}"
+            for m in memories
+        ) if memories else "(no relevant memories yet)"
+
+        # Build memories_recalled for the response
+        memories_recalled = []
+        for m in (memories or []):
+            memories_recalled.append({
+                "type": m.get("type", "unknown"),
+                "content": m.get("content", ""),
+                "created_at": m.get("created_at", ""),
+                "source": m.get("source", ""),
+            })
+
+        # Determine growth phase
+        phase = get_growth_phase(self.bond.total_interactions)
+
+        # Build strategy-aware system prompt
+        identity = self.soul.hydrate(context=message, max_tokens=1500)
+        personality = self.soul.identity.get("personality", {})
+        catchphrases = personality.get("catchphrases", [])
+        anchor_text = self.personality.system_prompt_injection()
+
+        persona_section = build_persona_emotion_prompt(
+            persona=self._persona_definition,
+            emotion_state=self.emotion,
+        )
+
+        system_prompt = build_strategy_prompt(
+            name=self.name,
+            identity=identity,
+            memory_context=memory_context,
+            classified_memories=classified,
+            emotion_state=self.emotion.to_dict(),
+            phase=phase,
+            personality_injection=anchor_text,
+            catchphrases=catchphrases,
+            conversation_count=self.bond.total_interactions,
+            is_crisis=is_crisis,
+            is_low_engagement=is_low_engagement,
+            persona_prompt_section=persona_section,
+        )
+
+        # Generate
+        raw_reply = self._generate(system_prompt, message, provider)
+
+        # Parse thinking block
+        reply, thinking = parse_response(raw_reply)
+
+        # L1 deep emotion update from LLM's assessment
+        thinking_dict = None
+        if thinking:
+            self.emotion.update_from_llm_thinking(
+                emotion=thinking.emotion,
+                nuance=thinking.emotion_nuance,
+            )
+            if thinking.persona_markers and self._persona_profile:
+                self._persona_profile = PersonaEngine.evolve_from_markers(
+                    self._persona_profile,
+                    thinking.persona_markers,
+                )
+            elif thinking.persona_markers and not self._persona_profile:
+                from ome.life.persona import PersonaProfile as PP
+                self._persona_profile = PP(raw_traits=thinking.persona_markers[:5])
+            thinking_dict = {
+                "emotion": thinking.emotion,
+                "emotion_nuance": thinking.emotion_nuance,
+                "persona_markers": thinking.persona_markers,
+            }
+
+        # Validate response against personality
+        ok, reply = self.personality.validate(reply, context=message)
+
+        conversation = f"user: {message}\nassistant: {reply}"
+        self._chat_history.append({"role": "user", "content": message})
+        self._chat_history.append({"role": "assistant", "content": reply})
+
+        try:
+            self.soul.commit(conversation, source="ome-chat")
+        except Exception as e:
+            log.warning("Failed to commit chat: %s", e)
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        level_result = self.bond.record_interaction(today)
+        self.growth.record_action("chat", success=True, quality=0.5)
+
+        # Update emotion from interaction patterns
+        idle_days = 0
+        if self.bond.last_interaction_date:
+            try:
+                last_dt = datetime.strptime(self.bond.last_interaction_date, "%Y-%m-%d")
+                idle_days = max(0, (datetime.now() - last_dt).days - 1)
+            except (ValueError, TypeError):
+                pass
+        self.emotion.update_from_interaction(
+            streak_days=self.bond.streak_days,
+            bond_level=self.bond.level,
+            idle_days=idle_days,
+            actions_today=self.autonomy.actions_today,
+            action_budget=self.autonomy.daily_action_budget,
+        )
+
+        self._record_daily_stat(message)
+
+        suppress_gamification = is_crisis or (
+            self.emotion.mood in ("sad", "stressed") and is_low_engagement
+        )
+        self._check_achievements(message=message)
+        streak_rewards = self._check_streak_rewards() if not suppress_gamification else []
+        self._save_life_state()
+
+        if not suppress_gamification:
+            for reward in streak_rewards:
+                reply += f"\n\n🎁 {reward['name']}：{reward['description']}"
+
+        if level_result.get("level_changed") and not suppress_gamification:
+            lvl_name = level_result["level_name"]
+            new_level = level_result["new_level"]
+            reply += f"\n\n✨ 我们的关系升级了：{lvl_name}！"
+            if new_level >= 3:
+                self.permissions.raise_trust(TrustLevel.ASSISTANT)
+            if new_level >= 5:
+                self.permissions.raise_trust(TrustLevel.DEPUTY)
+
+        return {
+            "reply": reply,
+            "memories_recalled": memories_recalled,
+            "emotion": self.emotion.to_dict(),
+            "bond": self.bond.current_level_info(),
+            "evolution_pending": self.evolution_pending,
+            "phase": phase,
+            "thinking": thinking_dict,
+        }
+
+    # -- Evolution (L4 self-reflection on demand) ------------------------------
+
+    @property
+    def evolution_pending(self) -> bool:
+        """Whether enough commits have accumulated for L4 self-reflection.
+
+        Returns True when ≥ 20 commits since last reflection.
+        Use evolve() to trigger it.
+        """
+        l4 = self.soul.layers.l4
+        return l4._commit_count_since_reflect >= 20
+
+    @property
+    def commits_since_reflection(self) -> int:
+        """Number of commits since last L4 reflection."""
+        return self.soul.layers.l4._commit_count_since_reflect
+
+    def evolve(self) -> dict[str, Any]:
+        """Trigger L4 self-reflection on demand.
+
+        Returns the reflection result including:
+        - summary: what was reflected on
+        - drift_detected: whether personality drift was found
+        - new_traits_observed: any new traits emerging
+        - method: "llm" or "heuristic"
+
+        For POST /api/growth/evolve — Ome365 can call this when user taps "evolve".
+        """
+        result = self.soul.reflect()
+        if result is None:
+            result = {
+                "summary": "No episodes to reflect on yet.",
+                "drift_detected": None,
+                "method": "skipped",
+            }
+        self._save_life_state()
+        return result
+
+    # -- Smart extraction (structured data from text) --------------------------
+
+    def smart_extract(self, text: str) -> dict[str, Any]:
+        """Extract structured data (contacts, tasks, notes) from natural language.
+
+        For POST /api/ai/smart-input — AI-powered extraction for quick entry.
+
+        Returns:
+            {
+                "contacts": [{"name": "...", "info": "..."}],
+                "tasks": [{"title": "...", "due": "...", "priority": "..."}],
+                "notes": [{"content": "..."}],
+                "raw_facts": ["...", "..."],  # Mindos L2 extracted facts
+            }
+        """
+        router = getattr(self.soul.layers.l2, "router", None)
+        if router is None:
+            # No LLM — do basic extraction via Mindos commit
+            result = self.soul.commit(f"user: {text}", source="smart-input")
+            return {
+                "contacts": [],
+                "tasks": [],
+                "notes": [{"content": text}],
+                "raw_facts": result.get("facts", []),
+            }
+
+        system = (
+            "你是一个信息提取助手。从用户输入中提取结构化数据。\n"
+            "严格按JSON格式返回：\n"
+            '{"contacts": [{"name": "姓名", "info": "电话/邮箱/关系"}], '
+            '"tasks": [{"title": "任务描述", "due": "截止日期或空", "priority": "high/medium/low"}], '
+            '"notes": [{"content": "备注内容"}]}\n'
+            "如果某类没有数据，返回空数组。只返回JSON，不要其他文字。"
+        )
+
+        try:
+            raw = router.call_llm(
+                task="commit_digest",
+                system=system,
+                user=text,
+                max_tokens=512,
+                json_mode=True,
+            )
+            if raw:
+                parsed = json.loads(raw)
+                # Also commit to memory
+                self.soul.commit(f"user: {text}", source="smart-input")
+                return {
+                    "contacts": parsed.get("contacts", []),
+                    "tasks": parsed.get("tasks", []),
+                    "notes": parsed.get("notes", []),
+                    "raw_facts": [],
+                }
+        except (json.JSONDecodeError, Exception) as e:
+            log.warning("smart_extract LLM parse failed: %s", e)
+
+        # Fallback: commit to memory, return as note
+        result = self.soul.commit(f"user: {text}", source="smart-input")
+        return {
+            "contacts": [],
+            "tasks": [],
+            "notes": [{"content": text}],
+            "raw_facts": result.get("facts", []),
+        }
+
     def suggest_follow_ups(self, user_msg: str, ome_reply: str, count: int = 3) -> list[str]:
         """Generate contextual follow-up suggestions using LLM.
 
@@ -634,7 +907,7 @@ class Ome:
     def status(self) -> dict[str, Any]:
         """What does your Ome know?"""
         s = self.soul.status()
-        s["ome_version"] = "0.4.0"
+        s["ome_version"] = "0.3.1"
         s["life"] = self.life_dashboard()
         return s
 
