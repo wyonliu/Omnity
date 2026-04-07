@@ -93,11 +93,12 @@ class LayerRouter:
         """Digest conversation into memories (L2 → L0).
 
         Triggers L4 reflection when enough commits accumulate.
+        v0.7: passes commit_result to L4 for importance-based reflection trigger.
         """
         existing = [m.content for m in self.l0.recent(20, mem_type="fact")]
         result = self.l2.commit(conversation, source, existing)
 
-        reflection = self.l4.on_commit()
+        reflection = self.l4.on_commit(commit_result=result)
         if reflection:
             result["reflection"] = reflection
 

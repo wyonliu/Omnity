@@ -16,6 +16,9 @@ from mindos.constants import (
     REFLECTION_EPISODES_LIMIT, REFLECTION_MAX_TRAITS, REFLECTION_MAX_TOKENS,
     LOCALE,
 )
+from mindos.constitution import Constitution
+from mindos.damping import WritebackDamper, DampingConfig
+from mindos.importance import ImportanceTrigger, estimate_importance
 from mindos.store import MemoryStore
 
 _REFLECTION_LOCALE_HINTS: dict[str, str] = {
@@ -59,14 +62,42 @@ class Self:
         # Callback for identity writeback (set by Mindos core)
         self._on_identity_changed: Optional[Any] = None
 
-    def on_commit(self) -> Optional[dict[str, Any]]:
-        """Called after each commit. Triggers reflection via adaptive threshold.
+        # v0.7: Constitution — immutable constraints on identity evolution
+        anchors = identity.get("anchors", [])
+        self.constitution = Constitution.from_anchors(anchors) if anchors else Constitution()
 
-        Adaptive: threshold = clamp(total_memories / DIVISOR, MIN, MAX).
-        Early soul (few memories): reflects more often to build personality faster.
-        Mature soul (many memories): reflects less often (personality is stable).
+        # v0.7: Writeback damping — prevents personality oscillation
+        self.damper = WritebackDamper()
+
+        # v0.7: Importance-triggered reflection (alongside commit-count fallback)
+        self.importance_trigger = ImportanceTrigger(threshold=100.0, store=store)
+
+        # Per-trait score history for damping (last N snapshots)
+        self._trait_score_history: dict[str, list[float]] = {}
+
+    def on_commit(self, commit_result: Optional[dict[str, Any]] = None) -> Optional[dict[str, Any]]:
+        """Called after each commit. Triggers reflection via importance OR commit-count.
+
+        Two parallel triggers (whichever fires first):
+        1. Importance accumulator (Stanford Generative Agents pattern):
+           accumulate importance of extracted facts → reflect when threshold crossed.
+        2. Adaptive commit-count fallback:
+           threshold = clamp(total_memories / DIVISOR, MIN, MAX).
         """
         self._commit_count_since_reflect += 1
+
+        # Importance trigger: score the commit result
+        if commit_result:
+            facts = commit_result.get("facts", [])
+            if not facts and commit_result.get("facts_added", 0) > 0:
+                # Build minimal fact list from commit result for scoring
+                facts = [{"type": "fact", "confidence": 0.8}] * commit_result["facts_added"]
+            episode = commit_result.get("episode", "")
+            importance = estimate_importance(facts, episode)
+            if self.importance_trigger.accumulate(importance):
+                return self.reflect()
+
+        # Commit-count fallback
         total = self.store.count()
         threshold = max(
             REFLECTION_MIN_COMMITS,
@@ -117,12 +148,39 @@ Analyze for personality consistency and drift. Suggest trait_updates and style_u
                 except json.JSONDecodeError:
                     result = self._reflect_heuristic(episodes)
 
-        # Writeback: apply trait/style updates to identity (respecting anchors)
+        # Writeback: apply trait/style updates with Constitution + Damping
         changed = False
         if result.get("trait_updates"):
             changed = self._apply_trait_updates(result["trait_updates"]) or changed
         if result.get("style_updates"):
             changed = self._apply_style_updates(result["style_updates"]) or changed
+
+        # v0.7: Apply numeric score damping if scores exist in result
+        if result.get("score_updates"):
+            current_scores = self.identity.get("scores", {})
+            proposed_scores = result["score_updates"]
+            damped = self.damper.apply_dict(current_scores, proposed_scores, self._trait_score_history)
+            self.identity["scores"] = damped
+            # Update history for future damping
+            for trait, val in damped.items():
+                hist = self._trait_score_history.setdefault(trait, [])
+                hist.append(val)
+                if len(hist) > 10:
+                    self._trait_score_history[trait] = hist[-10:]
+            changed = True
+
+        # v0.7: Constitution enforcement — validate the full proposed identity
+        current_identity = dict(self.identity)
+        proposed_identity = dict(self.identity)
+        clamped, violations = self.constitution.validate_writeback(current_identity, proposed_identity)
+        if violations:
+            # Apply clamped values back
+            self.identity["traits"] = clamped.get("traits", self.identity.get("traits", []))
+            if "scores" in clamped:
+                self.identity["scores"] = clamped["scores"]
+            if "values" in clamped:
+                self.identity["values"] = clamped["values"]
+            result["constitution_violations"] = violations
 
         traits = self.identity.get("traits", [])
         style = self.identity.get("style", "")
@@ -134,6 +192,9 @@ Analyze for personality consistency and drift. Suggest trait_updates and style_u
 
         if changed and self._on_identity_changed:
             self._on_identity_changed()
+
+        # Reset importance accumulator after successful reflection
+        self.importance_trigger.reset()
 
         result["identity_updated"] = changed
         return result

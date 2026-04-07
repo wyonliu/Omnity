@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "omnity-mindos"
-version = "0.6.0"
+version = "0.7.0"
 description = "Portable Digital Soul Protocol — your AI knows you, everywhere."
 readme = "README.md"
 license = "Apache-2.0"

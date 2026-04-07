@@ -27,6 +27,8 @@ from ome.life.bond import BondState
 from ome.life.achievements import AchievementTracker
 from ome.life.growth import GrowthEngine
 from ome.life.emotion import EmotionState, detect_crisis
+from ome.life.stages import GrowthGate, Capability
+from ome.life.maturity import MaturityScorer, MaturitySnapshot
 from ome.life.persona import (
     PersonaEngine, PersonaProfile, PersonaDefinition,
     build_persona_emotion_prompt, parse_chat_export,
@@ -143,6 +145,9 @@ class Ome:
         self.personality = PersonalityEngine(soul.identity)
         self.skill_registry = SkillRegistry()
         register_builtins(self.skill_registry)
+        # v0.7: Growth stage gating + maturity scorer
+        self.growth_gate = GrowthGate()
+        self._maturity_scorer = MaturityScorer()
         self._load_life_state()
 
     # -- Context manager & cleanup -------------------------------------------
@@ -1039,6 +1044,30 @@ class Ome:
         self._save_life_state()
         return {"status": "ok"}
 
+    def maturity(self) -> dict[str, Any]:
+        """Compute the maturity score — read-only diagnostic of soul development.
+
+        Returns:
+            {"score": 0.0-1.0, "reflection_depth": ..., "memory_complexity": ...,
+             "behavioral_consistency": ..., "label": "成长"}
+        """
+        # Gather inputs
+        timeline = self.soul.store.personality_timeline()
+        reflection_count = len(timeline)
+        traits = self.soul.identity.get("personality", {}).get("traits", [])
+        mem_stats = self.memory_stats()
+        competences = [s.competence for s in self.growth.skills.values()]
+
+        return self._maturity_scorer.score(
+            reflection_count=reflection_count,
+            trait_count=len(traits),
+            memory_total=mem_stats["total"],
+            memory_by_type=mem_stats["by_type"],
+            streak_days=self.bond.streak_days,
+            skill_competences=competences,
+            total_interactions=self.bond.total_interactions,
+        ).to_dict()
+
     def forget(self, pattern: str) -> dict[str, Any]:
         """Make your Ome forget something. Permanent."""
         return self.soul.forget(pattern)
@@ -1272,7 +1301,7 @@ class Ome:
     def status(self) -> dict[str, Any]:
         """What does your Ome know?"""
         s = self.soul.status()
-        s["ome_version"] = "0.6.0"
+        s["ome_version"] = "0.7.0"
         s["life"] = self.life_dashboard()
         return s
 
@@ -1294,6 +1323,7 @@ class Ome:
         next_milestone — everything the nurture page needs in one call.
         """
         phase = get_growth_phase(self.bond.total_interactions)
+        self.growth_gate.update_phase(phase.get("phase_id", 0))
         bond_info = self.bond.current_level_info()
 
         # Build next_milestone from bond + streak + achievements
@@ -1332,6 +1362,9 @@ class Ome:
                 "strategy_hint": phase.get("strategy_hint", ""),
             },
             "next_milestone": next_milestone,
+            # --- New fields for v0.7 ---
+            "capabilities": self.growth_gate.to_dict(),
+            "maturity": self.maturity(),
         }
 
     def _compute_next_milestone(self, bond_info: dict) -> dict[str, Any]:
