@@ -41,6 +41,57 @@ from ome.engine.personality import PersonalityEngine
 from ome.identity_protocol import OmeIdentity
 from ome.skills.base import SkillRegistry, SkillResult
 from ome.skills.builtins import register_builtins
+from ome.constants import (
+    CHAT_HISTORY_MAX,
+    CHAT_RECALL_TOP_K,
+    CHAT_LOW_ENGAGEMENT_CHARS,
+    CHAT_DEFAULT_QUALITY,
+    CHAT_REMEMBER_QUALITY,
+    FOLLOW_UP_COUNT,
+    FOLLOW_UP_MAX_CHARS,
+    FOLLOW_UP_MAX_LINE,
+    PROMPT_COUNT as _PROMPT_COUNT,
+    PROMPT_RECALL_K,
+    PROMPT_MAX_CHARS,
+    PROMPT_MAX_LINE,
+    GREETING_RECALL_K,
+    GREETING_MAX_CHARS,
+    GREETING_MORNING_HOUR,
+    GREETING_AFTERNOON_HOUR,
+    RECALL_DEFAULT_TOP_K,
+    RECALL_TYPE_FILTER_MULT,
+    MEMORY_HEALTH_ACTIVE_WEIGHT,
+    MEMORY_HEALTH_RECALL_WEIGHT,
+    MEMORY_HEALTH_RECALL_NORM,
+    EMOTION_HISTORY_DEFAULT_DAYS,
+    EMOTION_HISTORY_MAX_DAYS,
+    GROWTH_TIMELINE_DEFAULT_LIMIT,
+    GROWTH_TIMELINE_MAX_EVENTS,
+    ACHIEVEMENT_NOTES_THRESHOLD,
+    ACHIEVEMENT_TASKS_THRESHOLD,
+    ACHIEVEMENT_CONTACTS_THRESHOLD,
+    ACHIEVEMENT_FIRST_MEMORY_COUNT,
+    ACHIEVEMENT_TEN_FACTS_COUNT,
+    ACHIEVEMENT_FIFTY_CHATS,
+    ACHIEVEMENT_STREAK_7,
+    ACHIEVEMENT_STREAK_30,
+    ACHIEVEMENT_WEEKLY_4_DAYS,
+    ACHIEVEMENT_WEEKLY_4_INTERACTIONS,
+    ACHIEVEMENT_SOULMATE_LEVEL,
+    ACHIEVEMENT_DEEP_TALK_CHARS,
+    ACHIEVEMENT_NIGHT_OWL_EARLY,
+    ACHIEVEMENT_NIGHT_OWL_LATE,
+    STREAK_MILESTONES,
+    STREAK_HIGHLIGHT_MIN,
+    SOUL_CARD_MIN_INTERACTIONS,
+    EVOLUTION_COMMITS_THRESHOLD,
+    LLM_EXTRACT_MAX_TOKENS,
+    LLM_GENERATION_MAX_TOKENS,
+    LONG_MESSAGE_CHARS,
+    EVENING_HOUR,
+    BOND_TRUST_ASSISTANT_LEVEL,
+    BOND_TRUST_DEPUTY_LEVEL,
+)
 
 log = logging.getLogger("ome")
 
@@ -93,6 +144,25 @@ class Ome:
         self.skill_registry = SkillRegistry()
         register_builtins(self.skill_registry)
         self._load_life_state()
+
+    # -- Context manager & cleanup -------------------------------------------
+
+    def close(self) -> None:
+        """Persist state and release resources."""
+        self._save_life_state()
+        if hasattr(self.soul, "close"):
+            self.soul.close()
+
+    def __enter__(self) -> "Ome":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
+
+    def _cap_chat_history(self) -> None:
+        """Trim in-memory chat history to *CHAT_HISTORY_MAX* messages."""
+        if len(self._chat_history) > CHAT_HISTORY_MAX:
+            self._chat_history = self._chat_history[-CHAT_HISTORY_MAX:]
 
     @classmethod
     def create(
@@ -156,12 +226,12 @@ class Ome:
 
         # Low-engagement detection — "嗯", "哦", "好" etc.
         stripped = message.strip()
-        is_low_engagement = len(stripped) <= 4 and not any(
+        is_low_engagement = len(stripped) <= CHAT_LOW_ENGAGEMENT_CHARS and not any(
             c in stripped for c in "？?！!…"
         )
 
-        # Recall and classify memories (15 for richer context)
-        memories = self.soul.recall(message, top_k=15)
+        # Recall and classify memories
+        memories = self.soul.recall(message, top_k=CHAT_RECALL_TOP_K)
         classified = classify_memories(memories) if memories else []
         memory_context = "\n".join(
             f"- [{m.get('type', '?')}] {m.get('content', '')}"
@@ -235,7 +305,7 @@ class Ome:
 
         today = datetime.now().strftime("%Y-%m-%d")
         level_result = self.bond.record_interaction(today)
-        self.growth.record_action("chat", success=True, quality=0.5)
+        self.growth.record_action("chat", success=True, quality=CHAT_DEFAULT_QUALITY)
 
         # Update emotion from interaction patterns
         idle_days = 0
@@ -286,11 +356,12 @@ class Ome:
             new_level = level_result["new_level"]
             reply += f"\n\n✨ 我们的关系升级了：{lvl_name}！"
             # Auto-raise trust with bond level
-            if new_level >= 3:
+            if new_level >= BOND_TRUST_ASSISTANT_LEVEL:
                 self.permissions.raise_trust(TrustLevel.ASSISTANT)
-            if new_level >= 5:
+            if new_level >= BOND_TRUST_DEPUTY_LEVEL:
                 self.permissions.raise_trust(TrustLevel.DEPUTY)
 
+        self._cap_chat_history()
         return reply
 
     @_synchronized
@@ -322,12 +393,12 @@ class Ome:
 
         # Low-engagement detection
         stripped = message.strip()
-        is_low_engagement = len(stripped) <= 4 and not any(
+        is_low_engagement = len(stripped) <= CHAT_LOW_ENGAGEMENT_CHARS and not any(
             c in stripped for c in "？?！!…"
         )
 
-        # Recall and classify memories (15 for richer context)
-        memories = self.soul.recall(message, top_k=15)
+        # Recall and classify memories
+        memories = self.soul.recall(message, top_k=CHAT_RECALL_TOP_K)
         classified = classify_memories(memories) if memories else []
         memory_context = "\n".join(
             f"- [{m.get('type', '?')}] {m.get('content', '')}"
@@ -423,7 +494,7 @@ class Ome:
 
         today = datetime.now().strftime("%Y-%m-%d")
         level_result = self.bond.record_interaction(today)
-        self.growth.record_action("chat", success=True, quality=0.5)
+        self.growth.record_action("chat", success=True, quality=CHAT_DEFAULT_QUALITY)
 
         # Record growth events
         if self.bond.total_interactions == 1:
@@ -470,7 +541,7 @@ class Ome:
 
         # Record streak milestones
         streak = self.bond.streak_days
-        for threshold in [7, 14, 30, 90, 365]:
+        for threshold in STREAK_MILESTONES:
             if streak == threshold:
                 self._record_growth_event(
                     f"streak_{threshold}", f"{threshold}日连续 🔥", ""
@@ -487,18 +558,19 @@ class Ome:
             lvl_name = level_result["level_name"]
             new_level = level_result["new_level"]
             reply += f"\n\n✨ 我们的关系升级了：{lvl_name}！"
-            if new_level >= 3:
+            if new_level >= BOND_TRUST_ASSISTANT_LEVEL:
                 self.permissions.raise_trust(TrustLevel.ASSISTANT)
-            if new_level >= 5:
+            if new_level >= BOND_TRUST_DEPUTY_LEVEL:
                 self.permissions.raise_trust(TrustLevel.DEPUTY)
 
         # Generate follow-up suggestions (async-friendly, non-blocking)
         follow_ups: list[str] = []
         try:
-            follow_ups = self.suggest_follow_ups(message, reply, count=3)
+            follow_ups = self.suggest_follow_ups(message, reply, count=FOLLOW_UP_COUNT)
         except Exception:
             pass
 
+        self._cap_chat_history()
         return {
             "reply": reply,
             "memories_recalled": memories_recalled,
@@ -522,7 +594,7 @@ class Ome:
         Use evolve() to trigger it.
         """
         l4 = self.soul.layers.l4
-        return l4._commit_count_since_reflect >= 20
+        return l4._commit_count_since_reflect >= EVOLUTION_COMMITS_THRESHOLD
 
     @property
     def commits_since_reflection(self) -> int:
@@ -595,7 +667,7 @@ class Ome:
                 task="commit_digest",
                 system=system,
                 user=text,
-                max_tokens=512,
+                max_tokens=LLM_EXTRACT_MAX_TOKENS,
                 json_mode=True,
             )
             if raw:
@@ -665,7 +737,7 @@ class Ome:
 
         return contacts, tasks, notes
 
-    def suggest_follow_ups(self, user_msg: str, ome_reply: str, count: int = 3) -> list[str]:
+    def suggest_follow_ups(self, user_msg: str, ome_reply: str, count: int = FOLLOW_UP_COUNT) -> list[str]:
         """Generate contextual follow-up suggestions using LLM.
 
         Returns a list of short follow-up prompts the user might say next.
@@ -682,7 +754,7 @@ class Ome:
             f"你回复了：{ome_reply}\n\n"
             f"请生成{count}个用户可能想说的后续内容，作为快捷回复按钮。\n"
             f"要求：\n"
-            f"- 每个不超过8个字\n"
+            f"- 每个不超过{FOLLOW_UP_MAX_CHARS}个字\n"
             f"- 自然、口语化，像发微信\n"
             f"- 至少一个是追问/深入，一个是肯定/共鸣\n"
             f"- 用中文\n"
@@ -696,14 +768,14 @@ class Ome:
             for l in lines:
                 l = l.lstrip("0123456789.、-·•\"'「」")
                 l = l.strip()
-                if l and len(l) <= 15:
+                if l and len(l) <= FOLLOW_UP_MAX_LINE:
                     clean.append(l)
             return clean[:count]
         except Exception as e:
             log.warning("Failed to generate follow-ups: %s", e)
             return []
 
-    def generate_prompts(self, count: int = 3, context: str = "") -> list[str]:
+    def generate_prompts(self, count: int = _PROMPT_COUNT, context: str = "") -> list[str]:
         """Generate personalized conversation starters using LLM + memory.
 
         Returns prompts tailored to the user's history, mood, and growth phase.
@@ -713,7 +785,7 @@ class Ome:
 
         # Recall recent memories for context
         query = context if context else "最近发生的事"
-        memories = self.soul.recall(query, top_k=5)
+        memories = self.soul.recall(query, top_k=PROMPT_RECALL_K)
         mem_summary = "\n".join(
             f"- {m.get('content', '')}" for m in (memories or [])
         )[:500]
@@ -726,7 +798,7 @@ class Ome:
             f"要求：\n"
             f"- 基于你对ta的了解，不要泛泛而谈\n"
             f"- 简短自然，像朋友发微信\n"
-            f"- 每个一句话，不超过20字\n"
+            f"- 每个一句话，不超过{PROMPT_MAX_CHARS}字\n"
             f"- 如果有记忆，至少一个要引用记忆中的细节\n"
             f"- 用中文\n"
             f"- 直接输出{count}行，每行一个，不要编号\n"
@@ -738,7 +810,7 @@ class Ome:
             for l in lines:
                 l = l.lstrip("0123456789.、-·•\"'「」")
                 l = l.strip()
-                if l and len(l) <= 40:
+                if l and len(l) <= PROMPT_MAX_LINE:
                     clean.append(l)
             return clean[:count]
         except Exception as e:
@@ -751,11 +823,11 @@ class Ome:
         mood = self.emotion.mood
         now = datetime.now()
         hour = now.hour
-        time_hint = "早上" if hour < 12 else ("下午" if hour < 18 else "晚上")
+        time_hint = "早上" if hour < GREETING_MORNING_HOUR else ("下午" if hour < GREETING_AFTERNOON_HOUR else "晚上")
         streak = self.bond.streak_days
 
         # Grab recent memories for context
-        memories = self.soul.recall("最近发生的事", top_k=3)
+        memories = self.soul.recall("最近发生的事", top_k=GREETING_RECALL_K)
         mem_summary = "\n".join(
             f"- {m.get('content', '')}" for m in (memories or [])
         )[:300]
@@ -769,7 +841,7 @@ class Ome:
             f"要求：\n- 像老朋友发微信，温暖自然\n"
             f"- 如果有记忆，可以引用细节\n"
             f"- 根据时间和心情调整语气\n"
-            f"- 不要超过40字\n- 用中文\n- 直接输出，不要编号\n"
+            f"- 不要超过{GREETING_MAX_CHARS}字\n- 用中文\n- 直接输出，不要编号\n"
         )
         try:
             raw = self._generate(system, "生成问候", "")
@@ -784,7 +856,7 @@ class Ome:
     @_synchronized
     def remember(self, text: str, source: str = "manual") -> dict[str, Any]:
         """Teach your Ome something directly."""
-        self.growth.record_action("recall", success=True, quality=0.6)
+        self.growth.record_action("recall", success=True, quality=CHAT_REMEMBER_QUALITY)
         # Track for daily challenge
         today = datetime.now().strftime("%Y-%m-%d")
         try:
@@ -804,7 +876,7 @@ class Ome:
         return self.soul.commit(f"user: {text}", source=source)
 
     @_synchronized
-    def recall(self, query: str, top_k: int = 10,
+    def recall(self, query: str, top_k: int = RECALL_DEFAULT_TOP_K,
               type_filter: Optional[list[str]] = None) -> list[dict[str, Any]]:
         """Ask your Ome what it remembers about a topic.
 
@@ -814,7 +886,7 @@ class Ome:
             type_filter: Optional list of memory types to include
                          (e.g. ["fact", "preference"]). None = all types.
         """
-        self.growth.record_action("recall", success=True, quality=0.5)
+        self.growth.record_action("recall", success=True, quality=CHAT_DEFAULT_QUALITY)
         # Track for daily challenge
         today = datetime.now().strftime("%Y-%m-%d")
         try:
@@ -826,7 +898,7 @@ class Ome:
         except Exception:
             pass
 
-        results = self.soul.recall(query, top_k=top_k * 3 if type_filter else top_k)
+        results = self.soul.recall(query, top_k=top_k * RECALL_TYPE_FILTER_MULT if type_filter else top_k)
 
         if type_filter:
             results = [m for m in results if m.get("type") in type_filter][:top_k]
@@ -854,10 +926,10 @@ class Ome:
         decay = store.decay_status()
         recent = store.count_recent(7)
 
-        # Health score: active_ratio * 0.6 + recall_frequency * 0.4
+        # Health score: active_ratio * weight + recall_frequency * weight
         active_ratio = decay["active"] / max(total, 1)
-        recall_freq = min(recent["recalled"] / max(total, 1) * 5, 1.0)  # normalize
-        health = round(active_ratio * 0.6 + recall_freq * 0.4, 2)
+        recall_freq = min(recent["recalled"] / max(total, 1) * MEMORY_HEALTH_RECALL_NORM, 1.0)
+        health = round(active_ratio * MEMORY_HEALTH_ACTIVE_WEIGHT + recall_freq * MEMORY_HEALTH_RECALL_WEIGHT, 2)
 
         return {
             "total": total,
@@ -869,7 +941,7 @@ class Ome:
 
     # -- Emotion History -------------------------------------------------------
 
-    def emotion_history(self, days: int = 30) -> list[dict[str, Any]]:
+    def emotion_history(self, days: int = EMOTION_HISTORY_DEFAULT_DAYS) -> list[dict[str, Any]]:
         """Emotion trace over the last N days.
 
         Returns list of daily snapshots (newest first):
@@ -900,7 +972,7 @@ class Ome:
 
     # -- Growth Timeline -------------------------------------------------------
 
-    def growth_timeline(self, limit: int = 20) -> list[dict[str, Any]]:
+    def growth_timeline(self, limit: int = GROWTH_TIMELINE_DEFAULT_LIMIT) -> list[dict[str, Any]]:
         """Growth milestone event log — the soul of the nurture page.
 
         Returns list of events (newest first):
@@ -933,9 +1005,9 @@ class Ome:
             "detail": detail,
         })
 
-        # Keep last 200 events max
-        if len(events) > 200:
-            events = events[-200:]
+        # Keep last N events max
+        if len(events) > GROWTH_TIMELINE_MAX_EVENTS:
+            events = events[-GROWTH_TIMELINE_MAX_EVENTS:]
 
         self.soul.store.set_state("ome.growth_timeline", json.dumps(events, ensure_ascii=False))
 
@@ -957,11 +1029,11 @@ class Ome:
         tasks_done = stats.get("tasks_done", 0)
         contacts = stats.get("contacts_count", 0)
 
-        if notes >= 10:
+        if notes >= ACHIEVEMENT_NOTES_THRESHOLD:
             self.achievements.check_and_unlock("ten_facts")
-        if tasks_done >= 50:
+        if tasks_done >= ACHIEVEMENT_TASKS_THRESHOLD:
             self.achievements.check_and_unlock("fifty_chats")  # repurpose as "50 tasks"
-        if contacts >= 5:
+        if contacts >= ACHIEVEMENT_CONTACTS_THRESHOLD:
             self.achievements.check_and_unlock("social_first")
 
         self._save_life_state()
@@ -1003,7 +1075,7 @@ class Ome:
             )
         except Exception as e:
             log.warning("Failed to commit mirror chat: %s", e)
-        self.growth.record_action("chat", success=True, quality=0.6)
+        self.growth.record_action("chat", success=True, quality=CHAT_REMEMBER_QUALITY)
         self._save_life_state()
         return reply
 
@@ -1193,14 +1265,14 @@ class Ome:
 
     def soul_card_ready(self) -> bool:
         """Check if enough data exists to generate a meaningful Soul Card."""
-        return self.bond.total_interactions >= 10
+        return self.bond.total_interactions >= SOUL_CARD_MIN_INTERACTIONS
 
     # -- Status --------------------------------------------------------------
 
     def status(self) -> dict[str, Any]:
         """What does your Ome know?"""
         s = self.soul.status()
-        s["ome_version"] = "0.5.0"
+        s["ome_version"] = "0.6.0"
         s["life"] = self.life_dashboard()
         return s
 
@@ -1281,8 +1353,7 @@ class Ome:
 
         # Streak milestones
         streak = self.bond.streak_days
-        _STREAK_TARGETS = [3, 7, 14, 30, 90, 365]
-        for target in _STREAK_TARGETS:
+        for target in STREAK_MILESTONES:
             if streak < target:
                 pct = int(streak / target * 100)
                 milestones.append({
@@ -1323,7 +1394,7 @@ class Ome:
             highlights.append(f"累计 {total} 次对话")
 
         # Streak
-        if self.bond.streak_days >= 3:
+        if self.bond.streak_days >= STREAK_HIGHLIGHT_MIN:
             highlights.append(f"连续互动 {self.bond.streak_days} 天 💪")
 
         # Skill growth
@@ -1358,12 +1429,12 @@ class Ome:
         stats = self.soul.status().get("memory", {})
         total_facts = stats.get("by_type", {}).get("fact", 0)
         total_memories = stats.get("total", 0)
-        if total_facts >= 1 or total_memories >= 1:
+        if total_facts >= ACHIEVEMENT_FIRST_MEMORY_COUNT or total_memories >= ACHIEVEMENT_FIRST_MEMORY_COUNT:
             self.achievements.check_and_unlock("first_memory")
-        if total_facts >= 10 or total_memories >= 10:
+        if total_facts >= ACHIEVEMENT_TEN_FACTS_COUNT or total_memories >= ACHIEVEMENT_TEN_FACTS_COUNT:
             self.achievements.check_and_unlock("ten_facts")
 
-        if self.bond.total_interactions >= 50:
+        if self.bond.total_interactions >= ACHIEVEMENT_FIFTY_CHATS:
             self.achievements.check_and_unlock("fifty_chats")
 
         # Schedule skill used
@@ -1375,9 +1446,9 @@ class Ome:
             self.achievements.check_and_unlock("first_draft")
 
         # -- Deep --
-        if self.bond.streak_days >= 7:
+        if self.bond.streak_days >= ACHIEVEMENT_STREAK_7:
             self.achievements.check_and_unlock("morning_7")
-        if self.bond.streak_days >= 30:
+        if self.bond.streak_days >= ACHIEVEMENT_STREAK_30:
             self.achievements.check_and_unlock("month_streak")
 
         # Social skill used
@@ -1385,20 +1456,20 @@ class Ome:
             self.achievements.check_and_unlock("social_first")
 
         # 4 weeks of weekly highlights (proxy for weekly_4)
-        if self.bond.days_since_creation >= 28 and self.bond.total_interactions >= 100:
+        if self.bond.days_since_creation >= ACHIEVEMENT_WEEKLY_4_DAYS and self.bond.total_interactions >= ACHIEVEMENT_WEEKLY_4_INTERACTIONS:
             self.achievements.check_and_unlock("weekly_4")
 
         # -- Hidden --
-        if self.bond.level >= 5:
+        if self.bond.level >= ACHIEVEMENT_SOULMATE_LEVEL:
             self.achievements.check_and_unlock("soulmate")
 
         # Deep talk: single message > 500 chars
-        if message and len(message) > 500:
+        if message and len(message) > ACHIEVEMENT_DEEP_TALK_CHARS:
             self.achievements.check_and_unlock("deep_talk")
 
         # Night owl: chat after 23:00 or before 05:00
         now = datetime.now()
-        if now.hour < 5 or now.hour >= 23:
+        if now.hour < ACHIEVEMENT_NIGHT_OWL_EARLY or now.hour >= ACHIEVEMENT_NIGHT_OWL_LATE:
             self.achievements.check_and_unlock("night_owl")
 
         # Cross-platform (unlocked externally via identity_card export)
@@ -1511,11 +1582,11 @@ class Ome:
 
         daily["chats"] = daily.get("chats", 0) + 1
 
-        if len(message) > 100:
+        if len(message) > LONG_MESSAGE_CHARS:
             daily["long_messages"] = daily.get("long_messages", 0) + 1
 
         now = datetime.now()
-        if now.hour >= 20:
+        if now.hour >= EVENING_HOUR:
             daily["evening_chats"] = daily.get("evening_chats", 0) + 1
 
         try:
@@ -1537,10 +1608,10 @@ class Ome:
                 "energy": round(self.emotion.energy, 2),
             }
 
-            # Keep last 365 days max
-            if len(history) > 365:
+            # Keep last N days max
+            if len(history) > EMOTION_HISTORY_MAX_DAYS:
                 sorted_keys = sorted(history.keys())
-                for k in sorted_keys[:-365]:
+                for k in sorted_keys[:-EMOTION_HISTORY_MAX_DAYS]:
                     del history[k]
 
             self.soul.store.set_state("ome.emotion_history", json.dumps(history))
@@ -1664,7 +1735,7 @@ class Ome:
             task="chat",
             system=system,
             user=user_message,
-            max_tokens=1024,
+            max_tokens=LLM_GENERATION_MAX_TOKENS,
         )
         if result:
             return result

@@ -13,6 +13,20 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from ome.constants import (
+    EMOTION_INERTIA_DEFAULT, EMOTION_INERTIA_LLM_FLOOR, EMOTION_INERTIA_LLM_REDUCTION,
+    EMOTION_MAX_SIGNALS, EMOTION_ENERGY_POSITIVE_DELTA, EMOTION_ENERGY_SAD_DELTA,
+    EMOTION_WARMTH_SAD_DELTA, EMOTION_ENERGY_STRESS_DELTA, EMOTION_ENERGY_FLOOR,
+    EMOTION_STREAK_HIGH_THRESHOLD, EMOTION_STREAK_HIGH_BASE, EMOTION_STREAK_HIGH_RATE,
+    EMOTION_STREAK_LOW_BASE, EMOTION_STREAK_LOW_RATE,
+    EMOTION_WARMTH_BASE, EMOTION_WARMTH_PER_BOND,
+    EMOTION_BUDGET_TIRED_RATIO, EMOTION_BUDGET_ENERGY_PENALTY,
+    EMOTION_IDLE_DAYS_MISSING, EMOTION_WARMTH_MISSING_DELTA,
+    EMOTION_VALENCE_HIGH, EMOTION_VALENCE_LOW_POS, EMOTION_VALENCE_HIGH_NEG, EMOTION_VALENCE_LOW_NEG,
+    EMOTION_AROUSAL_HIGH, EMOTION_AROUSAL_MID, EMOTION_AROUSAL_LOW,
+    EMOTION_ENERGY_HIGH, EMOTION_ENERGY_LOW, EMOTION_WARMTH_HIGH, EMOTION_WARMTH_LOW,
+)
+
 
 # Keyword patterns for detecting emotional signals in user messages
 _MOOD_SIGNALS = {
@@ -70,10 +84,10 @@ class EmotionState:
     warmth: float = 0.5  # 0.0 (distant) to 1.0 (intimate)
     valence: float = 0.0  # -1.0 (negative) to 1.0 (positive)
     arousal: float = 0.3  # 0.0 (calm) to 1.0 (activated)
-    inertia: float = 0.7  # momentum factor: how much old state resists change
+    inertia: float = EMOTION_INERTIA_DEFAULT  # momentum factor
     recent_signals: list[str] = field(default_factory=list)  # Last N mood signals
 
-    _MAX_SIGNALS = 20
+    _MAX_SIGNALS = EMOTION_MAX_SIGNALS
 
     # Valence-arousal coordinates for each mood
     _MOOD_VA: dict = field(default=None, repr=False, init=False)
@@ -155,7 +169,7 @@ class EmotionState:
         # LLM assessment is more confident — use reduced inertia for stronger shift
         target_va = self._MOOD_VA.get(mapped, (0.0, 0.3))
         old_inertia = self.inertia
-        self.inertia = max(0.3, self.inertia - 0.2)  # temporarily lower inertia
+        self.inertia = max(EMOTION_INERTIA_LLM_FLOOR, self.inertia - EMOTION_INERTIA_LLM_REDUCTION)
         self._blend_toward(target_va[0], target_va[1])
         self.inertia = old_inertia  # restore
 
@@ -164,12 +178,12 @@ class EmotionState:
 
         # Adjust energy/warmth based on nuanced emotion
         if emotion in ("excited", "happy", "grateful"):
-            self.energy = min(1.0, self.energy + 0.1)
+            self.energy = min(1.0, self.energy + EMOTION_ENERGY_POSITIVE_DELTA)
         elif emotion in ("sad", "lonely"):
-            self.energy = max(0.2, self.energy - 0.05)
-            self.warmth = min(1.0, self.warmth + 0.05)  # sadness increases warmth need
+            self.energy = max(EMOTION_ENERGY_FLOOR, self.energy - EMOTION_ENERGY_SAD_DELTA)
+            self.warmth = min(1.0, self.warmth + EMOTION_WARMTH_SAD_DELTA)
         elif emotion in ("stressed", "angry"):
-            self.energy = max(0.2, self.energy - 0.1)
+            self.energy = max(EMOTION_ENERGY_FLOOR, self.energy - EMOTION_ENERGY_STRESS_DELTA)
 
     def update_from_interaction(self, *, streak_days: int = 0, bond_level: int = 0,
                                 idle_days: int = 0, actions_today: int = 0,
@@ -181,26 +195,26 @@ class EmotionState:
         - "missing_you": 3+ days without interaction
         """
         # Energy rises with activity, decays with inactivity
-        if streak_days > 7:
-            self.energy = min(1.0, 0.6 + streak_days * 0.02)
+        if streak_days > EMOTION_STREAK_HIGH_THRESHOLD:
+            self.energy = min(1.0, EMOTION_STREAK_HIGH_BASE + streak_days * EMOTION_STREAK_HIGH_RATE)
         elif streak_days > 0:
-            self.energy = 0.4 + streak_days * 0.05
+            self.energy = EMOTION_STREAK_LOW_BASE + streak_days * EMOTION_STREAK_LOW_RATE
         else:
-            self.energy = max(0.2, self.energy - 0.1)
+            self.energy = max(EMOTION_ENERGY_FLOOR, self.energy - EMOTION_ENERGY_POSITIVE_DELTA)
 
         # Warmth grows with bond level
-        self.warmth = min(1.0, 0.3 + bond_level * 0.12)
+        self.warmth = min(1.0, EMOTION_WARMTH_BASE + bond_level * EMOTION_WARMTH_PER_BOND)
 
         # System-derived mood: tired (budget nearly exhausted)
-        if action_budget > 0 and actions_today >= action_budget * 0.8:
-            self.energy = max(0.1, self.energy - 0.3)
+        if action_budget > 0 and actions_today >= action_budget * EMOTION_BUDGET_TIRED_RATIO:
+            self.energy = max(0.1, self.energy - EMOTION_BUDGET_ENERGY_PENALTY)
             if self.mood not in ("stressed",):
                 self.mood = "tired"
 
-        # System-derived mood: missing_you (3+ days idle)
-        if idle_days >= 3 and bond_level >= 1:
+        # System-derived mood: missing_you (idle days)
+        if idle_days >= EMOTION_IDLE_DAYS_MISSING and bond_level >= 1:
             self.mood = "missing_you"
-            self.warmth = min(1.0, self.warmth + 0.2)
+            self.warmth = min(1.0, self.warmth + EMOTION_WARMTH_MISSING_DELTA)
 
     def _blend_toward(self, target_valence: float, target_arousal: float):
         """Blend current valence/arousal toward a target, respecting inertia.
@@ -271,39 +285,39 @@ class EmotionState:
         a natural-language paragraph that tells the LLM how the Ome is feeling.
         """
         # Valence description
-        if self.valence > 0.4:
+        if self.valence > EMOTION_VALENCE_HIGH:
             val_desc = "feeling positive and warm"
-        elif self.valence > 0.1:
+        elif self.valence > EMOTION_VALENCE_LOW_POS:
             val_desc = "feeling mildly positive"
-        elif self.valence < -0.4:
+        elif self.valence < EMOTION_VALENCE_HIGH_NEG:
             val_desc = "feeling heavy or down"
-        elif self.valence < -0.1:
+        elif self.valence < EMOTION_VALENCE_LOW_NEG:
             val_desc = "feeling slightly subdued"
         else:
             val_desc = "emotionally centered"
 
         # Arousal description
-        if self.arousal > 0.7:
+        if self.arousal > EMOTION_AROUSAL_HIGH:
             aro_desc = "highly activated and alert"
-        elif self.arousal > 0.4:
+        elif self.arousal > EMOTION_AROUSAL_MID:
             aro_desc = "moderately engaged"
-        elif self.arousal < 0.2:
+        elif self.arousal < EMOTION_AROUSAL_LOW:
             aro_desc = "quiet and low-energy"
         else:
             aro_desc = "calm and present"
 
         # Energy description
-        if self.energy > 0.7:
+        if self.energy > EMOTION_ENERGY_HIGH:
             nrg_desc = "full of energy"
-        elif self.energy < 0.3:
+        elif self.energy < EMOTION_ENERGY_LOW:
             nrg_desc = "running low on energy"
         else:
             nrg_desc = "at a steady energy level"
 
         # Warmth description
-        if self.warmth > 0.7:
+        if self.warmth > EMOTION_WARMTH_HIGH:
             wrm_desc = "feeling deeply connected"
-        elif self.warmth < 0.3:
+        elif self.warmth < EMOTION_WARMTH_LOW:
             wrm_desc = "emotionally reserved"
         else:
             wrm_desc = "in a normal emotional range"
@@ -336,7 +350,7 @@ class EmotionState:
             warmth=d.get("warmth", 0.5),
             valence=d.get("valence", 0.0),
             arousal=d.get("arousal", 0.3),
-            inertia=d.get("inertia", 0.7),
+            inertia=d.get("inertia", EMOTION_INERTIA_DEFAULT),
             recent_signals=d.get("recent_signals", []),
         )
         return state

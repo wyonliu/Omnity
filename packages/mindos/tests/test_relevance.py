@@ -9,7 +9,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from mindos.layers.l0_memory import relevance_score, _HALF_LIFE, Hippocampus
+from mindos.layers.l0_memory import relevance_score, Hippocampus
+from mindos.constants import HALF_LIFE
 
 
 def _make_memory(**kwargs):

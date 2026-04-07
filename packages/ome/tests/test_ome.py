@@ -94,7 +94,7 @@ def test_status(ome_dir):
     ome.remember("I work at a startup")
 
     s = ome.status()
-    assert s["ome_version"] == "0.5.0"
+    assert s["ome_version"] == "0.6.0"
     assert "memory" in s
 
 

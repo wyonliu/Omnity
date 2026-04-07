@@ -16,6 +16,7 @@ import logging
 import sqlite3
 import time
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -24,6 +25,13 @@ try:
     import numpy as np
 except ImportError:
     np = None  # vector search disabled
+
+from mindos.constants import (
+    SQLITE_BUSY_TIMEOUT_MS, SQLITE_CACHE_SIZE, EMBEDDING_CACHE_MAX,
+    CONSOLIDATE_THRESHOLD, FACT_MERGE_THRESHOLD,
+    COMPRESS_OLDER_THAN_DAYS, COMPRESS_MIN_LENGTH,
+    ARCHIVE_INACTIVE_DAYS, ARCHIVE_MIN_ACCESS,
+)
 
 log = logging.getLogger("mindos.store")
 
@@ -78,6 +86,13 @@ CREATE INDEX IF NOT EXISTS idx_mem_hash ON memories(content_hash);
 """
 
 _FTS_SCHEMA = """
+CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+    content, content='memories', content_rowid='rowid',
+    tokenize='trigram'
+);
+"""
+
+_FTS_SCHEMA_FALLBACK = """
 CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
     content, content='memories', content_rowid='rowid',
     tokenize='unicode61'
@@ -141,6 +156,9 @@ class MemoryStore:
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
+        self._conn.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
+        self._conn.execute("PRAGMA synchronous=NORMAL")
+        self._conn.execute(f"PRAGMA cache_size={SQLITE_CACHE_SIZE}")
         self._conn.executescript(_SCHEMA)
         self._sync_enabled = sync_enabled
         self._applying_remote = False  # Prevent re-journaling during remote apply
@@ -172,10 +190,42 @@ class MemoryStore:
             self.set_state("device_id", uuid.uuid4().hex[:8])
 
     def _init_fts(self) -> None:
-        """Initialize FTS5 full-text search index."""
+        """Initialize FTS5 full-text search index.
+
+        Prefers trigram tokenizer (best for CJK substring matching).
+        Falls back to unicode61 on older SQLite builds without trigram support.
+        """
+        # Check if FTS table already exists and what tokenizer it uses
+        existing = self._conn.execute(
+            "SELECT sql FROM sqlite_master WHERE name='memories_fts'"
+        ).fetchone()
+
+        need_create = True
+        if existing:
+            sql = existing[0] or ""
+            if "trigram" in sql:
+                need_create = False  # Already using trigram
+            else:
+                # Upgrade from unicode61 to trigram
+                try:
+                    self._conn.execute("DROP TABLE IF EXISTS memories_fts")
+                    self._conn.commit()
+                except Exception:
+                    pass
+
+        if need_create:
+            try:
+                self._conn.executescript(_FTS_SCHEMA)
+            except Exception:
+                # Trigram not available — fall back to unicode61
+                try:
+                    self._conn.executescript(_FTS_SCHEMA_FALLBACK)
+                except Exception:
+                    self._fts_available = False
+                    log.debug("FTS5 not available, falling back to LIKE queries")
+                    return
+
         try:
-            self._conn.executescript(_FTS_SCHEMA)
-            # Rebuild FTS if empty but memories exist
             fts_count = self._conn.execute(
                 "SELECT COUNT(*) FROM memories_fts"
             ).fetchone()[0]
@@ -185,7 +235,7 @@ class MemoryStore:
             self._fts_available = True
         except Exception:
             self._fts_available = False
-            log.debug("FTS5 not available, falling back to LIKE queries")
+            log.debug("FTS5 init failed, falling back to LIKE queries")
 
     def _rebuild_fts(self) -> None:
         """Rebuild FTS index from memories table."""
@@ -244,6 +294,7 @@ class MemoryStore:
                 pass  # FTS sync failure is non-fatal
         if mem.embedding is not None:
             self._embeddings_cache[mem.id] = mem.embedding
+            self._enforce_cache_cap()
         # Auto-journal for sync
         if self._sync_enabled and not self._applying_remote:
             self.journal_append("add_memory", {
@@ -252,6 +303,51 @@ class MemoryStore:
                 "decay_weight": mem.decay_weight,
             })
         return mem.id
+
+    def add_batch(self, memories: list[Memory]) -> list[str]:
+        """Batch insert memories in a single transaction. Returns list of IDs."""
+        ids: list[str] = []
+        now = time.time()
+        with self._transaction():
+            for mem in memories:
+                if not mem.id:
+                    mem.id = uuid.uuid4().hex[:12]
+                if not mem.created_at:
+                    mem.created_at = now
+                mem.accessed_at = now
+                content_hash = self._content_hash(mem.content)
+                emb_blob = mem.embedding.tobytes() if mem.embedding is not None else None
+                self._conn.execute(
+                    "INSERT OR REPLACE INTO memories "
+                    "(id, type, content, content_hash, source, confidence, created_at, accessed_at, "
+                    " access_count, decay_weight, embedding, meta) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (mem.id, mem.type, mem.content, content_hash, mem.source, mem.confidence,
+                     mem.created_at, mem.accessed_at, mem.access_count,
+                     mem.decay_weight, emb_blob, json.dumps(mem.meta, ensure_ascii=False)),
+                )
+                if mem.embedding is not None:
+                    self._embeddings_cache[mem.id] = mem.embedding
+                ids.append(mem.id)
+            # Batch FTS sync
+            if self._fts_available:
+                try:
+                    for mid in ids:
+                        rowid = self._conn.execute(
+                            "SELECT rowid FROM memories WHERE id=?", (mid,)
+                        ).fetchone()
+                        if rowid:
+                            mem_row = self._conn.execute(
+                                "SELECT content FROM memories WHERE id=?", (mid,)
+                            ).fetchone()
+                            self._conn.execute(
+                                "INSERT OR REPLACE INTO memories_fts(rowid, content) VALUES (?, ?)",
+                                (rowid[0], mem_row[0]),
+                            )
+                except Exception:
+                    pass
+        self._enforce_cache_cap()
+        return ids
 
     def update_embedding(self, mem_id: str, embedding: Any) -> bool:
         """Update the embedding vector for an existing memory."""
@@ -449,7 +545,7 @@ class MemoryStore:
             self.journal_append("forget", {"pattern": pattern, "mem_type": mem_type})
         return len(ids)
 
-    def consolidate(self, similarity_threshold: float = 0.75) -> dict[str, int]:
+    def consolidate(self, similarity_threshold: float = CONSOLIDATE_THRESHOLD) -> dict[str, int]:
         """Merge similar memories of the same type into single entries.
 
         Uses character-level Jaccard similarity when numpy is unavailable,
@@ -665,7 +761,33 @@ class MemoryStore:
         )
         self._conn.commit()
 
+    # -- context manager -------------------------------------------------------
+
+    def __enter__(self) -> "MemoryStore":
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        self.close()
+
     # -- internal --------------------------------------------------------------
+
+    @contextmanager
+    def _transaction(self):
+        """Context manager for batch writes — single commit at the end."""
+        try:
+            yield
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
+
+    def _enforce_cache_cap(self) -> None:
+        """Evict oldest embeddings if cache exceeds EMBEDDING_CACHE_MAX."""
+        if len(self._embeddings_cache) > EMBEDDING_CACHE_MAX:
+            excess = len(self._embeddings_cache) - EMBEDDING_CACHE_MAX
+            keys = list(self._embeddings_cache.keys())[:excess]
+            for k in keys:
+                del self._embeddings_cache[k]
 
     def _touch(self, mem_id: str) -> None:
         self._conn.execute(
@@ -697,7 +819,7 @@ class MemoryStore:
 
     # -- memory compression ------------------------------------------------------
 
-    def compress_old_episodes(self, older_than_days: int = 90) -> dict[str, int]:
+    def compress_old_episodes(self, older_than_days: int = COMPRESS_OLDER_THAN_DAYS) -> dict[str, int]:
         """Compress old episode memories into condensed summaries.
 
         Episodes older than `older_than_days` get their content truncated to
@@ -733,7 +855,7 @@ class MemoryStore:
 
         return {"compressed": compressed, "preserved": preserved}
 
-    def merge_redundant_facts(self, similarity_threshold: float = 0.8) -> dict[str, int]:
+    def merge_redundant_facts(self, similarity_threshold: float = FACT_MERGE_THRESHOLD) -> dict[str, int]:
         """Merge redundant facts: identical meaning expressed differently.
 
         Uses the existing consolidate() but only for facts, with a higher threshold.
@@ -783,7 +905,7 @@ class MemoryStore:
 
         return {"merged": merged_count, "kept": kept}
 
-    def archive_stale(self, inactive_days: int = 180, min_access: int = 2) -> dict[str, int]:
+    def archive_stale(self, inactive_days: int = ARCHIVE_INACTIVE_DAYS, min_access: int = ARCHIVE_MIN_ACCESS) -> dict[str, int]:
         """Mark long-inactive low-importance memories as archived.
 
         Archived memories are not deleted but get decay_weight set to 0.1,

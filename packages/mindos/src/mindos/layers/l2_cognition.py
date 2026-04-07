@@ -13,7 +13,15 @@ import time
 from typing import Any, Optional
 
 from mindos.config import ModelRouter
+from mindos.constants import LOCALE, COMMIT_MAX_TOKENS, COMMIT_EXISTING_FACTS_LIMIT
 from mindos.store import Memory, MemoryStore, Triple
+
+_LOCALE_HINTS: dict[str, str] = {
+    "zh": "\n\nIMPORTANT: All output (facts, summaries, triples) MUST be in Chinese (中文).",
+    "en": "",  # English is the default prompt language
+    "ja": "\n\nIMPORTANT: All output (facts, summaries, triples) MUST be in Japanese (日本語).",
+    "ko": "\n\nIMPORTANT: All output (facts, summaries, triples) MUST be in Korean (한국어).",
+}
 
 log = logging.getLogger("mindos.l2")
 
@@ -111,12 +119,15 @@ class Cortex:
 
         context = ""
         if existing_facts:
-            context = "\nExisting facts:\n" + "\n".join(f"- {f}" for f in existing_facts[:30])
+            context = "\nExisting facts:\n" + "\n".join(f"- {f}" for f in existing_facts[:COMMIT_EXISTING_FACTS_LIMIT])
+
+        locale_hint = _LOCALE_HINTS.get(LOCALE, _LOCALE_HINTS.get("en", ""))
+        system = _COMMIT_SYSTEM + locale_hint
 
         user_msg = f"Conversation to analyze:{context}\n\n---\n{conversation}\n---"
         raw = self.router.call_llm(
-            system=_COMMIT_SYSTEM, user=user_msg,
-            task="commit_digest", max_tokens=2048, json_mode=True,
+            system=system, user=user_msg,
+            task="commit_digest", max_tokens=COMMIT_MAX_TOKENS, json_mode=True,
         )
         if raw is None:
             return None

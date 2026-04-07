@@ -22,6 +22,13 @@ if TYPE_CHECKING:
     from mindos.core import Mindos
     from mindos.event_bus import EventBus
 
+from mindos.constants import (
+    SCHEDULER_REFLECT_HOURS, SCHEDULER_COMPRESS_HOURS, SCHEDULER_DIGEST_HOURS,
+    SCHEDULER_INSIGHT_HOURS, SCHEDULER_CLEANUP_HOURS, SCHEDULER_MERGE_HOURS,
+    COMPRESS_OLDER_THAN_DAYS, ARCHIVE_INACTIVE_DAYS, ARCHIVE_MIN_ACCESS,
+    FACT_MERGE_THRESHOLD,
+)
+
 log = logging.getLogger("mindos.scheduler")
 
 
@@ -38,14 +45,13 @@ class JobResult:
 class MindosScheduler:
     """Passive periodic task engine for Mindos maintenance."""
 
-    # Default job definitions: name → (interval_hours, method_name_on_mindos)
     DEFAULT_JOBS = [
-        {"name": "daily_reflect", "interval_hours": 24, "method": "reflect"},
-        {"name": "memory_compress", "interval_hours": 72, "method": "_run_compress"},
-        {"name": "daily_digest", "interval_hours": 24, "method": "_run_daily_digest"},
-        {"name": "weekly_insight", "interval_hours": 168, "method": "_run_weekly_insight"},
-        {"name": "stale_cleanup", "interval_hours": 168, "method": "_run_stale_cleanup"},
-        {"name": "redundant_merge", "interval_hours": 72, "method": "_run_redundant_merge"},
+        {"name": "daily_reflect", "interval_hours": SCHEDULER_REFLECT_HOURS, "method": "reflect"},
+        {"name": "memory_compress", "interval_hours": SCHEDULER_COMPRESS_HOURS, "method": "_run_compress"},
+        {"name": "daily_digest", "interval_hours": SCHEDULER_DIGEST_HOURS, "method": "_run_daily_digest"},
+        {"name": "weekly_insight", "interval_hours": SCHEDULER_INSIGHT_HOURS, "method": "_run_weekly_insight"},
+        {"name": "stale_cleanup", "interval_hours": SCHEDULER_CLEANUP_HOURS, "method": "_run_stale_cleanup"},
+        {"name": "redundant_merge", "interval_hours": SCHEDULER_MERGE_HOURS, "method": "_run_redundant_merge"},
     ]
 
     def __init__(self, mindos: "Mindos", event_bus: Optional["EventBus"] = None) -> None:
@@ -160,7 +166,7 @@ class MindosScheduler:
 
     def _run_compress(self) -> dict[str, Any]:
         """Compress old episodes."""
-        return self.mindos.store.compress_old_episodes(older_than_days=90)
+        return self.mindos.store.compress_old_episodes(older_than_days=COMPRESS_OLDER_THAN_DAYS)
 
     def _run_daily_digest(self) -> dict[str, Any]:
         """Generate daily digest via InsightEngine."""
@@ -184,8 +190,8 @@ class MindosScheduler:
 
     def _run_stale_cleanup(self) -> dict[str, Any]:
         """Archive stale memories."""
-        return self.mindos.store.archive_stale(inactive_days=180, min_access=2)
+        return self.mindos.store.archive_stale(inactive_days=ARCHIVE_INACTIVE_DAYS, min_access=ARCHIVE_MIN_ACCESS)
 
     def _run_redundant_merge(self) -> dict[str, Any]:
         """Merge redundant facts."""
-        return self.mindos.store.merge_redundant_facts(similarity_threshold=0.8)
+        return self.mindos.store.merge_redundant_facts(similarity_threshold=FACT_MERGE_THRESHOLD)

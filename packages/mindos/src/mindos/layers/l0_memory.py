@@ -15,23 +15,14 @@ import math
 import time
 from typing import Any, Optional
 
+from mindos.constants import (
+    HALF_LIFE, HALF_LIFE_DEFAULT,
+    RELEVANCE_W_SEMANTIC, RELEVANCE_W_RECENCY, RELEVANCE_W_IMPORTANCE, RELEVANCE_W_FREQUENCY,
+    RELEVANCE_REDIST_RECENCY, RELEVANCE_REDIST_IMPORTANCE, RELEVANCE_REDIST_FREQUENCY,
+    FREQUENCY_NORM_CEILING, FREQUENCY_BASE_OFFSET,
+    HYDRATE_RECALL_TOP_K,
+)
 from mindos.store import Memory, MemoryStore
-
-# Adaptive half-life by memory type (days)
-_HALF_LIFE: dict[str, float] = {
-    "episode": 14.0,
-    "fact": 90.0,
-    "preference": 60.0,
-    "skill": 180.0,
-    "relation": 120.0,
-}
-_DEFAULT_HALF_LIFE = 30.0
-
-# Scoring weights — sum to 1.0
-W_SEMANTIC = 0.40
-W_RECENCY = 0.25
-W_IMPORTANCE = 0.20
-W_FREQUENCY = 0.15
 
 
 def relevance_score(mem: Memory, now: Optional[float] = None,
@@ -46,28 +37,27 @@ def relevance_score(mem: Memory, now: Optional[float] = None,
     """
     now = now or time.time()
     age_days = max((now - mem.created_at) / 86400, 0.01)
-    half_life = _HALF_LIFE.get(mem.type, _DEFAULT_HALF_LIFE)
+    half_life = HALF_LIFE.get(mem.type, HALF_LIFE_DEFAULT)
     recency = math.exp(-0.693 * age_days / half_life)
 
     importance = mem.confidence
-    frequency = math.log(mem.access_count + 2)  # +2 so brand new memories get > 0
-    # Normalize frequency to ~[0, 1] range (log(2)=0.69 to log(102)=4.62)
-    frequency = min(frequency / 4.62, 1.0)
+    frequency = math.log(mem.access_count + FREQUENCY_BASE_OFFSET)
+    frequency = min(frequency / FREQUENCY_NORM_CEILING, 1.0)
     decay = mem.decay_weight
 
     if vector_score > 0:
         score = (
-            W_SEMANTIC * vector_score +
-            W_RECENCY * recency +
-            W_IMPORTANCE * importance +
-            W_FREQUENCY * frequency
+            RELEVANCE_W_SEMANTIC * vector_score +
+            RELEVANCE_W_RECENCY * recency +
+            RELEVANCE_W_IMPORTANCE * importance +
+            RELEVANCE_W_FREQUENCY * frequency
         )
     else:
         # No vector score available — redistribute weight
         score = (
-            (W_RECENCY + W_SEMANTIC * 0.5) * recency +
-            (W_IMPORTANCE + W_SEMANTIC * 0.3) * importance +
-            (W_FREQUENCY + W_SEMANTIC * 0.2) * frequency
+            (RELEVANCE_W_RECENCY + RELEVANCE_W_SEMANTIC * RELEVANCE_REDIST_RECENCY) * recency +
+            (RELEVANCE_W_IMPORTANCE + RELEVANCE_W_SEMANTIC * RELEVANCE_REDIST_IMPORTANCE) * importance +
+            (RELEVANCE_W_FREQUENCY + RELEVANCE_W_SEMANTIC * RELEVANCE_REDIST_FREQUENCY) * frequency
         )
 
     return score * decay
@@ -79,7 +69,7 @@ class Hippocampus:
     def __init__(self, store: MemoryStore) -> None:
         self.store = store
 
-    def recall(self, query: str, top_k: int = 15,
+    def recall(self, query: str, top_k: int = HYDRATE_RECALL_TOP_K,
                query_vec: Any = None, mem_type: Optional[str] = None) -> list[Memory]:
         """Retrieve memories ranked by relevance.
 

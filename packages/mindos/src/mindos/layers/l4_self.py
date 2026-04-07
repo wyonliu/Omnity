@@ -11,7 +11,19 @@ import time
 from typing import Any, Optional
 
 from mindos.config import ModelRouter
+from mindos.constants import (
+    REFLECTION_MIN_COMMITS, REFLECTION_MAX_COMMITS, REFLECTION_ADAPTIVE_DIVISOR,
+    REFLECTION_EPISODES_LIMIT, REFLECTION_MAX_TRAITS, REFLECTION_MAX_TOKENS,
+    LOCALE,
+)
 from mindos.store import MemoryStore
+
+_REFLECTION_LOCALE_HINTS: dict[str, str] = {
+    "zh": "\n\nIMPORTANT: All output (summary, traits, style, suggestions) MUST be in Chinese (中文).",
+    "en": "",
+    "ja": "\n\nIMPORTANT: All output MUST be in Japanese (日本語).",
+    "ko": "\n\nIMPORTANT: All output MUST be in Korean (한국어).",
+}
 
 
 _REFLECTION_SYSTEM = """You are the self-awareness module of a personal AI identity called Mindos.
@@ -48,9 +60,19 @@ class Self:
         self._on_identity_changed: Optional[Any] = None
 
     def on_commit(self) -> Optional[dict[str, Any]]:
-        """Called after each commit. Triggers reflection when threshold reached."""
+        """Called after each commit. Triggers reflection via adaptive threshold.
+
+        Adaptive: threshold = clamp(total_memories / DIVISOR, MIN, MAX).
+        Early soul (few memories): reflects more often to build personality faster.
+        Mature soul (many memories): reflects less often (personality is stable).
+        """
         self._commit_count_since_reflect += 1
-        if self._commit_count_since_reflect >= 20:
+        total = self.store.count()
+        threshold = max(
+            REFLECTION_MIN_COMMITS,
+            min(total // REFLECTION_ADAPTIVE_DIVISOR, REFLECTION_MAX_COMMITS),
+        )
+        if self._commit_count_since_reflect >= threshold:
             return self.reflect()
         return None
 
@@ -61,7 +83,7 @@ class Self:
         """
         self._commit_count_since_reflect = 0
 
-        episodes = self.store.list_recent(limit=30, mem_type="episode")
+        episodes = self.store.list_recent(limit=REFLECTION_EPISODES_LIMIT, mem_type="episode")
         if not episodes:
             return None
 
@@ -82,9 +104,10 @@ Recent episodes ({len(episodes)} most recent):
 
 Analyze for personality consistency and drift. Suggest trait_updates and style_updates if needed."""
 
+            locale_hint = _REFLECTION_LOCALE_HINTS.get(LOCALE, "")
             raw = self.router.call_llm(
-                system=_REFLECTION_SYSTEM, user=user_msg,
-                task="reflection", max_tokens=1024, json_mode=True,
+                system=_REFLECTION_SYSTEM + locale_hint, user=user_msg,
+                task="reflection", max_tokens=REFLECTION_MAX_TOKENS, json_mode=True,
             )
             if raw is None:
                 result = self._reflect_heuristic(episodes)
@@ -137,8 +160,7 @@ Analyze for personality consistency and drift. Suggest trait_updates and style_u
             current.append(trait)
             changed = True
 
-        # Cap at 15 traits
-        self.identity["traits"] = current[:15]
+        self.identity["traits"] = current[:REFLECTION_MAX_TRAITS]
         return changed
 
     def _apply_style_updates(self, new_style: str) -> bool:
@@ -194,7 +216,7 @@ Analyze for personality consistency and drift. Suggest trait_updates and style_u
             "value_alignment_score": None,  # None = not assessed, not 0.8
             "suggestions": ["Enable an LLM provider for meaningful self-reflection"],
             "method": "heuristic",
-            "top_themes": [w for w, _ in word_counts.most_common(10)],
+            "top_themes": [w for w, _ in word_counts.most_common(REFLECTION_MAX_TRAITS)],
         }
 
     def personality_snapshot(self) -> dict[str, Any]:

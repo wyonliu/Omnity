@@ -14,6 +14,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
 
+from mindos.constants import (
+    TOKEN_EST_CJK, TOKEN_EST_ASCII, ENERGY_DECAY_PER_HOUR,
+    HYDRATE_MAX_TOKENS, HYDRATE_RECALL_TOP_K, HYDRATE_KG_LIMIT,
+)
 from mindos.layers.l0_memory import Hippocampus, relevance_score
 from mindos.store import Memory, MemoryStore
 
@@ -36,8 +40,7 @@ def _estimate_tokens(text: str) -> int:
             cjk_count += 1
         else:
             ascii_count += 1
-    # CJK: ~1.5 tokens/char, ASCII: ~0.25 tokens/char (4 chars ≈ 1 token)
-    return int(cjk_count * 1.5 + ascii_count * 0.25)
+    return int(cjk_count * TOKEN_EST_CJK + ascii_count * TOKEN_EST_ASCII)
 
 
 class Mood(Enum):
@@ -59,7 +62,7 @@ class EmotionState:
         now = time.time()
         if self.last_update > 0:
             elapsed_hours = (now - self.last_update) / 3600
-            self.energy = max(0.1, self.energy - 0.02 * elapsed_hours)
+            self.energy = max(0.1, self.energy - ENERGY_DECAY_PER_HOUR * elapsed_hours)
         self.last_update = now
 
     def boost(self, delta: float = 0.1) -> None:
@@ -105,7 +108,7 @@ class Brainstem:
                 "last_update": self.emotion.last_update,
             }))
 
-    def hydrate(self, context: str = "", max_tokens: int = 2000,
+    def hydrate(self, context: str = "", max_tokens: int = HYDRATE_MAX_TOKENS,
                 query_vec: Any = None) -> str:
         """Assemble a compact identity prompt from stored soul data.
 
@@ -136,7 +139,7 @@ class Brainstem:
 
         # Relevant memories
         memories = self.hippocampus.recall(
-            context, top_k=15, query_vec=query_vec,
+            context, top_k=HYDRATE_RECALL_TOP_K, query_vec=query_vec,
         )
         if memories:
             blocks.append("\n## Relevant memories")
@@ -149,7 +152,7 @@ class Brainstem:
         triples = self.hippocampus.store.triples()
         if triples:
             blocks.append("\n## Knowledge graph")
-            for t in triples[:30]:
+            for t in triples[:HYDRATE_KG_LIMIT]:
                 blocks.append(f"- ({t.subject}) —{t.predicate}→ ({t.object})")
 
         assembled = "\n".join(blocks)
