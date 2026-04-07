@@ -2,7 +2,7 @@
 
 > 跨全生态的个人超级生命体分身操作系统
 > 一次创建，全平台通用，全场景生效
-> 最后更新：2026-03-22（小安 + 可儿 + 多AI评审 + 养成体系补充）
+> 最后更新：2026-04-07（v0.7.0 自进化架构落地 · 小安更新）
 
 ---
 
@@ -537,6 +537,29 @@ class PermissionSandbox:
 1. Ome 接到"帮我规划周末旅行" → 查日历 → 查记忆中的偏好 → 搜索 → 生成方案 → 用户确认
 2. Ome 在钉钉里自动回复非重要消息 → 每日摘要推送给用户
 3. 开发者 `pip install ome-skill-finance` → 用户的 Ome 获得财务分析能力
+
+---
+
+### 版本实现进度（截至 v0.7.0）
+
+| 版本 | Mindos | Ome | 关键交付 |
+|------|--------|-----|---------|
+| **v0.3.0** | FTS5 + 五层脑 + MCP | 策略引擎 + 情感 + 成长弧 + 7技能 + 119测试 | Phase 0 基本完成 |
+| **v0.4.0** | — | 统一版本号 | — |
+| **v0.5.0** | Zero-config `from_env()` + 跨设备sync | 6 new APIs（chat_rich/evolve/smart_extract/life_dashboard/proactive/reflect） | Ome365 养成/记忆页集成 |
+| **v0.6.0** | 锚点保护（anchor protection） + 常量提取 + 性能优化 + i18n locale | 常量提取 + locale 支持 | 架构大重构 |
+| **v0.7.0** | **Constitution Layer**（不可变人格规则）+ **Writeback Damping**（回写阻尼，替代 meta-reflection）+ **Importance-Triggered Reflection**（Stanford Generative Agents 模式） | **Growth Stage Capability Unlocking**（13能力×4阶段门控）+ **Maturity Score**（3维成熟度诊断）+ `life_dashboard()` 增强 | **338 测试**（99 mindos + 239 ome），100% 向后兼容 |
+
+**v0.7 核心落地对照计划：**
+
+| 计划模块 | 对应 v0.7 实现 | 状态 |
+|---------|---------------|------|
+| 模块 1 人格一致性引擎 — 不可动摇锚点 | `Constitution` + `ConstitutionRule`（trait_immutable / range_lock / max_delta / value_required） | ✅ |
+| 模块 1 — 跨平台人格校验 | `WritebackDamper` 阻尼 + 振荡检测，确保 L4 反思不会剧烈改变人格 | ✅ |
+| 五 — Mindos 人格锚点存储 | Constitution 规则持久化，L4 反思前必过 Constitution 校验 | ✅ |
+| 五 — L4 反思增强 | `ImportanceTrigger`（累积重要性阈值）+ 自适应 commit-count 双触发 | ✅ |
+| 八 — 成长弧解锁 | `GrowthGate` + `Capability` enum（13能力 × 4阶段），Phase 1 = 5能力，Soulmate = 全部 | ✅ |
+| 八 — 生命指标面板 | `MaturityScorer` 三维诊断（反思深度 / 记忆复杂度 / 行为一致性），`life_dashboard()` 已集成 | ✅ |
 
 ---
 

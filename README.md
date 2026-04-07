@@ -107,7 +107,7 @@ mindos serve --mcp                   # expose to Claude/Cursor via MCP
 mindos serve                         # HTTP API for any app
 ```
 
-**Ships with:** FTS5 full-text search · content-hash fuzzy dedup · cross-device sync (event-sourced journal + relay hub) · LLM-powered memory extraction (DeepSeek/OpenAI/Anthropic/Ollama) · Ome persona export · emotion state persistence · Bearer token auth · GDPR forget · 22 integration tests.
+**Ships with:** FTS5 full-text search · content-hash fuzzy dedup · cross-device sync (event-sourced journal + relay hub) · LLM-powered memory extraction (DeepSeek/OpenAI/Anthropic/Ollama) · **Constitution Layer** (immutable trait protection) · **Writeback Damping** (oscillation-safe identity evolution) · **Importance-Triggered Reflection** (Stanford Generative Agents pattern) · Ome persona export · emotion state persistence · Bearer token auth · GDPR forget · 100 tests.
 
 ---
 
@@ -133,7 +133,7 @@ ome chat          # talk to it (it remembers everything)
 ome serve --mcp   # connect to Claude/Cursor
 ```
 
-**Ships with:** Conversation strategy engine (zero-cost LLM thinking) · Deep emotion system (LLM-parsed, not keywords) · 4-phase growth arc (newborn → soulmate) · Continuous persona evolution · 7-level bond system · 20 achievements · Daily challenges · Streak rewards · 7 skills with competence tracking · Autonomy engine (4 proactive L0 events) · Native iOS app (SwiftUI, SSE streaming, voice-first) · LLM-generated greetings, prompts, and follow-ups (zero hardcoded content) · OmeTown agent network · 119 tests.
+**Ships with:** Conversation strategy engine (zero-cost LLM thinking) · Deep emotion system (LLM-parsed, not keywords) · 4-phase growth arc (newborn → soulmate) · **Growth Stage Capability Unlocking** (13 capabilities × 4 phases) · **Maturity Score** (3D diagnostic: reflection depth, memory complexity, behavioral consistency) · Continuous persona evolution · 7-level bond system · 20 achievements · Daily challenges · Streak rewards · 7 skills with competence tracking · Autonomy engine (4 proactive L0 events) · Native iOS app (SwiftUI, SSE streaming, voice-first) · LLM-generated greetings, prompts, and follow-ups (zero hardcoded content) · OmeTown agent network · 239 tests.
 
 ---
 
@@ -257,8 +257,8 @@ soul.commit(conversation_text, source="openclaw")
 | Package | PyPI | Version | Status |
 |---------|------|---------|--------|
 | **SOAP** | [`omnity-soap`](https://pypi.org/project/omnity-soap/) | v0.1.0 | Spec + runtime + MCP + visualizer. **Ready to use.** |
-| **Mindos** | [`omnity-mindos`](https://pypi.org/project/omnity-mindos/) | v0.4.1 | Five-layer brain + cross-device sync + MCP + 22 tests. **Ready to use.** |
-| **Ome** | [`omnity-ome`](https://pypi.org/project/omnity-ome/) | v0.3.0 | Strategy engine + persona evolution + life system + LLM-generated content + 119 tests. **Ready to use.** |
+| **Mindos** | [`omnity-mindos`](https://pypi.org/project/omnity-mindos/) | v0.7.0 | Five-layer brain + Constitution + Writeback Damping + Importance-Triggered Reflection + cross-device sync + MCP + 100 tests. **Ready to use.** |
+| **Ome** | [`omnity-ome`](https://pypi.org/project/omnity-ome/) | v0.7.0 | Strategy engine + persona evolution + Growth Stage Capability Unlocking + Maturity Score + life system + LLM-generated content + 239 tests. **Ready to use.** |
 | **Ome Server** | — | v0.5 | FastAPI + SSE streaming + LLM prompts/greeting API + OmeTown agents. **Ready to use.** |
 | **Ome iOS** | — | v0.5 | Native SwiftUI app. Voice-first input, growth system, zero hardcoded content. |
 | **Maxim** | [`omnity-maxim`](https://pypi.org/project/omnity-maxim/) | v0.1.1 | Needs-driven agents + GM arbitration + economy engine + chronicle + **web dashboard**. **First run complete.** |

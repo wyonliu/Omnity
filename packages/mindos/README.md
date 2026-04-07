@@ -80,6 +80,9 @@ curl localhost:3456/api/status
 | **`LayerRouter`** | Dispatches requests to the cheapest brain layer (L0-L4) that can handle them. L0 (memory retrieval) is near-zero cost; L3 (deep reasoning) is on-demand. |
 | **`MemoryStore`** | SQLite-backed storage with FTS5 full-text search, content-hash dedup, forgetting curve, and a sync journal for cross-device replication. |
 | **`ModelRouter`** | Selects the best available LLM provider (DeepSeek, OpenAI, Anthropic, Ollama) per task. **Automatic fallback chain**: if provider A fails (timeout/error), tries provider B, then C. Falls back to rule-based extraction when no LLM is configured. |
+| **`Constitution`** | *(v0.7)* Immutable constraints on identity evolution. Rules: `trait_immutable`, `range_lock`, `max_delta`, `value_required`. L4 reflection proposes changes; Constitution validates and clamps before writeback. Deterministic, no LLM calls. |
+| **`WritebackDamper`** | *(v0.7)* Max-delta clamping + oscillation detection. Prevents identity whiplash from consecutive reflections. Replaces the old meta-reflection approach. |
+| **`ImportanceTrigger`** | *(v0.7)* Stanford Generative Agents-inspired importance accumulator. Dual triggers: cumulative importance threshold + adaptive commit-count (first to fire wins). |
 
 ### Zero-Config Setup (v0.5.0+)
 
@@ -113,6 +116,46 @@ cfg = MindosConfig.from_dict({
 | **L2** | Cortex | Understanding -- LLM commit digestion, fact extraction | Low |
 | **L3** | Prefrontal | Decision -- deep reasoning, planning, conflict resolution | On demand |
 | **L4** | Self (DMN) | Identity -- reflection loop, drift detection, value alignment | Async |
+
+## Self-Evolution Architecture (v0.7)
+
+v0.7 introduces three modules that make identity evolution **safe and principled**:
+
+### Constitution — Immutable Identity Rules
+
+```python
+from mindos import Constitution, ConstitutionRule
+
+rules = [
+    ConstitutionRule(id="core-style", type="trait_immutable", trait="communication_style"),
+    ConstitutionRule(id="openness-range", type="range_lock", trait="openness", min=0.6, max=1.0),
+    ConstitutionRule(id="slow-change", type="max_delta", trait="extraversion", delta=0.05),
+    ConstitutionRule(id="must-value", type="value_required", value="honesty"),
+]
+constitution = Constitution(rules)
+
+# L4 reflection proposes changes → Constitution validates & clamps
+proposed = {"openness": 0.3}  # violates range_lock
+result = constitution.apply(proposed)  # clamped to 0.6
+```
+
+### Writeback Damping — Oscillation Protection
+
+Prevents identity whiplash when consecutive reflections pull traits in opposite directions. Max-delta clamping per cycle + oscillation detection (3+ direction reversals → freeze trait for cooldown).
+
+### Importance-Triggered Reflection
+
+Inspired by Stanford Generative Agents: each memory commit is scored for importance (0–10). When the cumulative score crosses a threshold, reflection fires. Dual triggers — importance accumulator + adaptive commit-count — first to fire wins.
+
+```python
+from mindos import ImportanceTrigger, estimate_importance
+
+trigger = ImportanceTrigger(threshold=50.0)
+score = estimate_importance("Got promoted to CTO today")  # ~8.5
+trigger.accumulate(score)
+if trigger.should_reflect():
+    soul.reflect()
+```
 
 ## Cross-Device Sync
 

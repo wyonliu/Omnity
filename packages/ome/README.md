@@ -81,6 +81,35 @@ print(data["contacts"])                   # [{"name": "张三", "info": "1380013
 print(data["tasks"])                      # [{"title": "开会", "due": "明天下午"}]
 ```
 
+### Growth Stage & Maturity (v0.7)
+
+```python
+from ome import Ome, GrowthGate, Capability, MaturityScorer
+
+twin = Ome.load("~/.ome")
+
+# Check what capabilities are unlocked at current growth phase
+gate = GrowthGate()
+unlocked = gate.unlocked_capabilities(twin.growth_phase)  # e.g. phase="forming"
+# [CHAT, RECALL, REMEMBER, WRITE, RESEARCH, PROACTIVE_GREET, FOLLOW_UPS]
+
+can_evolve = gate.is_unlocked(Capability.EVOLVE, twin.growth_phase)  # False until "distinct"
+
+# Maturity diagnostic (read-only, never gates features)
+scorer = MaturityScorer()
+snapshot = scorer.score(twin)
+print(snapshot.score)                   # 0.42
+print(snapshot.reflection_depth)        # 0.55
+print(snapshot.memory_complexity)       # 0.38
+print(snapshot.behavioral_consistency)  # 0.33
+print(snapshot.label)                   # "developing"
+
+# life_dashboard() now includes capabilities + maturity
+dashboard = twin.life_dashboard()
+print(dashboard["capabilities"])        # list of unlocked capability names
+print(dashboard["maturity"])            # MaturitySnapshot dict
+```
+
 ### MCP (Claude Desktop / Cursor)
 
 ```json
@@ -114,6 +143,8 @@ ome forget "sensitive_topic"                # GDPR hard delete
 │ Ome — Your AI Twin                       │
 │   chat() / chat_rich() / evolve()       │
 │   bond / emotion / achievements / skills │
+│   GrowthGate (13 capabilities × 4 phases)│
+│   MaturityScorer (3D diagnostic)         │
 ├─────────────────────────────────────────┤
 │ Mindos — 5-Layer Cognitive Brain        │
 │   L0 Memory    (recall + semantic rank) │
@@ -121,6 +152,9 @@ ome forget "sensitive_topic"                # GDPR hard delete
 │   L2 Cognition (fact extraction)        │
 │   L3 Decision  (deep reasoning)         │
 │   L4 Self      (reflection + drift)     │
+│   Constitution (immutable trait rules)   │
+│   Damping (oscillation-safe writeback)   │
+│   ImportanceTrigger (reflection timing)  │
 ├─────────────────────────────────────────┤
 │ ModelRouter — LLM Failover Chain        │
 │   Provider A → B → C (30s timeout each) │
@@ -148,10 +182,13 @@ Your Ome grows through real interaction:
 
 - **Bond levels**: 7 stages from Stranger to Soulmate -- dual-threshold, no grinding
 - **Growth arc**: 4 phases (newborn, forming, distinct, soulmate) that change how it talks
+- **Growth Stage Capability Unlocking** *(v0.7)*: 13 capabilities gated by growth phase — newborns get basic chat + recall, soulmates unlock everything including spatial AI and self-evolution
+- **Maturity Score** *(v0.7)*: 3D diagnostic (reflection depth × memory complexity × behavioral consistency) — a read-only health check, never gates features
 - **20 achievements** across 3 tiers (basic / deep / hidden)
 - **Daily challenges** + streak tracking with milestone rewards
 - **Deep emotion**: LLM-parsed nuance, not keyword matching
 - **Persona evolution**: learns your personality markers every conversation
+- **Constitution-protected identity** *(v0.7)*: core traits are locked by Mindos Constitution — reflection can evolve personality but never violate anchors
 
 ## Server Integration (FastAPI / Flask)
 
