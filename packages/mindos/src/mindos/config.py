@@ -122,6 +122,87 @@ class MindosConfig:
         return cls(merged)
 
     @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "MindosConfig":
+        """Create config programmatically from a dict — no file needed.
+
+        Example:
+            cfg = MindosConfig.from_dict({
+                "models": [{"name": "ds", "type": "openai_compatible",
+                            "base_url": "https://api.deepseek.com",
+                            "api_key_env": "DEEPSEEK_API_KEY",
+                            "model": "deepseek-chat"}],
+            })
+        """
+        merged = {**_DEFAULT_CONFIG, **data}
+        return cls(merged)
+
+    @classmethod
+    def from_env(cls) -> "MindosConfig":
+        """Auto-detect available LLM providers from environment variables.
+
+        Checks: OPENROUTER_API_KEY, DEEPSEEK_API_KEY, OPENAI_API_KEY,
+                ANTHROPIC_API_KEY, and Ollama at localhost:11434.
+        Returns a config with all detected providers, prioritized by quality.
+        """
+        models: list[dict[str, Any]] = []
+        priority = 1
+
+        if os.environ.get("OPENROUTER_API_KEY"):
+            models.append({
+                "name": "openrouter", "type": "openai_compatible",
+                "base_url": "https://openrouter.ai/api/v1",
+                "api_key_env": "OPENROUTER_API_KEY",
+                "model": "deepseek/deepseek-chat",
+                "priority": priority,
+                "for": ["chat", "commit_digest", "reflection", "reasoning"],
+            })
+            priority += 1
+
+        if os.environ.get("DEEPSEEK_API_KEY"):
+            models.append({
+                "name": "deepseek", "type": "openai_compatible",
+                "base_url": "https://api.deepseek.com",
+                "api_key_env": "DEEPSEEK_API_KEY",
+                "model": "deepseek-chat",
+                "priority": priority,
+                "for": ["chat", "commit_digest", "reflection", "reasoning"],
+            })
+            priority += 1
+
+        if os.environ.get("OPENAI_API_KEY"):
+            models.append({
+                "name": "openai", "type": "openai_compatible",
+                "base_url": "https://api.openai.com/v1",
+                "api_key_env": "OPENAI_API_KEY",
+                "model": "gpt-4o-mini",
+                "priority": priority,
+                "for": ["chat", "commit_digest", "reflection", "reasoning"],
+            })
+            priority += 1
+
+        if os.environ.get("ANTHROPIC_API_KEY"):
+            models.append({
+                "name": "anthropic", "type": "anthropic",
+                "api_key_env": "ANTHROPIC_API_KEY",
+                "model": "claude-sonnet-4-20250514",
+                "priority": priority,
+                "for": ["deep_reasoning", "complex_creation"],
+            })
+            priority += 1
+
+        # Ollama as lowest-priority fallback (always available if running)
+        models.append({
+            "name": "ollama", "type": "ollama",
+            "model": "qwen3.5:14b",
+            "priority": priority,
+            "for": [],  # catch-all fallback
+        })
+
+        fallback = models[0]["name"] if models else "ollama"
+        data = {**_DEFAULT_CONFIG, "models": models, "fallback": fallback}
+        return cls(data)
+
+    @classmethod
     def _write_default(cls, path: Path) -> None:
         if yaml:
             path.write_text(
@@ -186,55 +267,93 @@ class ModelRouter:
                     return p
         return None
 
+    def _select_candidates(self, task: str) -> list[ModelProvider]:
+        """Return all available providers for a task, in priority order."""
+        candidates = []
+        for p in self.config.providers:
+            if not p.available:
+                continue
+            if task in p.for_tasks or not p.for_tasks:
+                candidates.append(p)
+        # Add fallback if not already included
+        fb_name = self.config.get("fallback")
+        if fb_name:
+            fb_names = {c.name for c in candidates}
+            if fb_name not in fb_names:
+                for p in self.config.providers:
+                    if p.name == fb_name and p.available:
+                        candidates.append(p)
+                        break
+        return candidates
+
     def call_llm(self, system: str, user: str, task: str = "reasoning",
                  max_tokens: int = 1024, json_mode: bool = False,
-                 use_cache: bool = False) -> Optional[str]:
-        """Call the best available LLM. Returns response text or None."""
-        provider = self.select(task)
-        if provider is None:
-            log.debug("No available provider for task=%s", task)
+                 use_cache: bool = False, timeout: float = 30.0) -> Optional[str]:
+        """Call the best available LLM with automatic fallback.
+
+        Tries providers in priority order. If one fails (timeout, error),
+        automatically falls through to the next available provider.
+
+        Args:
+            timeout: Per-provider timeout in seconds (default 30s).
+        """
+        candidates = self._select_candidates(task)
+        if not candidates:
+            log.warning("No available provider for task=%s", task)
             return None
 
-        # Check cache
+        # Check cache (keyed on first candidate)
         if use_cache:
             cache_key = hashlib.md5(
-                f"{provider.name}:{system}:{user}:{max_tokens}:{json_mode}".encode()
+                f"{candidates[0].name}:{system}:{user}:{max_tokens}:{json_mode}".encode()
             ).hexdigest()
             cached = self._cache.get(cache_key)
             if cached and (time.time() - cached[0]) < self._cache_ttl:
-                log.debug("Cache hit for task=%s provider=%s", task, provider.name)
+                log.debug("Cache hit for task=%s provider=%s", task, candidates[0].name)
                 return cached[1]
         else:
             cache_key = ""
 
-        log.debug("Calling LLM: provider=%s model=%s task=%s", provider.name, provider.model, task)
+        # Try each provider in order; fall through on failure
+        last_error: Optional[Exception] = None
+        for provider in candidates:
+            log.debug("Trying LLM: provider=%s model=%s task=%s", provider.name, provider.model, task)
+            try:
+                result: Optional[str] = None
+                if provider.type == "anthropic":
+                    result = self._call_anthropic(provider, system, user, max_tokens, json_mode, timeout)
+                elif provider.type == "ollama":
+                    result = self._call_ollama(provider, system, user, max_tokens, json_mode, timeout)
+                elif provider.type == "openai_compatible":
+                    result = self._call_openai_compat(provider, system, user, max_tokens, json_mode, timeout)
 
-        result: Optional[str] = None
-        if provider.type == "anthropic":
-            result = self._call_anthropic(provider, system, user, max_tokens, json_mode)
-        elif provider.type == "ollama":
-            result = self._call_ollama(provider, system, user, max_tokens, json_mode)
-        elif provider.type == "openai_compatible":
-            result = self._call_openai_compat(provider, system, user, max_tokens, json_mode)
+                if result is not None:
+                    if use_cache and cache_key:
+                        self._cache[cache_key] = (time.time(), result)
+                        if len(self._cache) > 100:
+                            cutoff = time.time() - self._cache_ttl
+                            self._cache = {k: v for k, v in self._cache.items() if v[0] > cutoff}
+                    return result
+                # result is None but no exception — provider returned empty
+                log.warning("Provider %s returned empty result for task=%s, trying next", provider.name, task)
+            except Exception as e:
+                last_error = e
+                log.warning("Provider %s failed for task=%s: %s — trying next", provider.name, task, e)
+                continue
 
-        if result is not None and use_cache and cache_key:
-            self._cache[cache_key] = (time.time(), result)
-            # Evict old entries
-            if len(self._cache) > 100:
-                cutoff = time.time() - self._cache_ttl
-                self._cache = {k: v for k, v in self._cache.items() if v[0] > cutoff}
-
-        return result
+        log.error("All %d providers failed for task=%s. Last error: %s", len(candidates), task, last_error)
+        return None
 
     def _call_openai_compat(self, provider: ModelProvider, system: str, user: str,
-                            max_tokens: int, json_mode: bool) -> Optional[str]:
+                            max_tokens: int, json_mode: bool,
+                            timeout: float = 30.0) -> Optional[str]:
         try:
             import openai
         except ImportError:
             log.warning("openai package not installed, cannot use provider %s", provider.name)
             return None
 
-        kwargs: dict[str, Any] = {}
+        kwargs: dict[str, Any] = {"timeout": timeout}
         if provider.base_url:
             kwargs["base_url"] = provider.base_url
 
@@ -250,15 +369,13 @@ class ModelRouter:
         if json_mode:
             req["response_format"] = {"type": "json_object"}
 
-        try:
-            resp = client.chat.completions.create(**req)
-            return resp.choices[0].message.content.strip()
-        except Exception as e:
-            log.error("OpenAI-compatible call failed (%s): %s", provider.name, e)
-            return None
+        resp = client.chat.completions.create(**req)
+        text = resp.choices[0].message.content
+        return text.strip() if text else None
 
     def _call_anthropic(self, provider: ModelProvider, system: str, user: str,
-                        max_tokens: int, json_mode: bool) -> Optional[str]:
+                        max_tokens: int, json_mode: bool,
+                        timeout: float = 30.0) -> Optional[str]:
         """Native Anthropic Messages API call."""
         try:
             import anthropic
@@ -266,22 +383,19 @@ class ModelRouter:
             log.warning("anthropic package not installed, cannot use provider %s", provider.name)
             return None
 
-        client = anthropic.Anthropic(api_key=provider.api_key)
-        try:
-            resp = client.messages.create(
-                model=provider.model,
-                max_tokens=max_tokens,
-                system=system,
-                messages=[{"role": "user", "content": user}],
-            )
-            text = resp.content[0].text.strip()
-            return text
-        except Exception as e:
-            log.error("Anthropic call failed (%s): %s", provider.name, e)
-            return None
+        client = anthropic.Anthropic(api_key=provider.api_key, timeout=timeout)
+        resp = client.messages.create(
+            model=provider.model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+        text = resp.content[0].text
+        return text.strip() if text else None
 
     def _call_ollama(self, provider: ModelProvider, system: str, user: str,
-                     max_tokens: int, json_mode: bool) -> Optional[str]:
+                     max_tokens: int, json_mode: bool,
+                     timeout: float = 30.0) -> Optional[str]:
         """Call local Ollama via its OpenAI-compatible endpoint."""
         try:
             import openai
@@ -290,7 +404,7 @@ class ModelRouter:
             return None
 
         base_url = provider.base_url or "http://localhost:11434/v1"
-        client = openai.OpenAI(api_key="ollama", base_url=base_url)
+        client = openai.OpenAI(api_key="ollama", base_url=base_url, timeout=timeout)
         req: dict[str, Any] = {
             "model": provider.model,
             "messages": [
@@ -303,9 +417,6 @@ class ModelRouter:
         if json_mode:
             req["response_format"] = {"type": "json_object"}
 
-        try:
-            resp = client.chat.completions.create(**req)
-            return resp.choices[0].message.content.strip()
-        except Exception as e:
-            log.error("Ollama call failed (%s): %s", provider.name, e)
-            return None
+        resp = client.chat.completions.create(**req)
+        text = resp.choices[0].message.content
+        return text.strip() if text else None

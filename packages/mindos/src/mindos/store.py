@@ -324,8 +324,15 @@ class MemoryStore:
         ).fetchall()
         return [self._row_to_memory(r) for r in rows]
 
-    def search_vector(self, query_vec: Any, top_k: int = 10) -> list[Memory]:
-        """Cosine-similarity vector search against cached embeddings."""
+    def search_vector(self, query_vec: Any, top_k: int = 10,
+                       return_scores: bool = False) -> list[Any]:
+        """Cosine-similarity vector search against cached embeddings.
+
+        Args:
+            return_scores: If True, returns list of (Memory, float) tuples
+                           where float is the cosine similarity [0, 1].
+                           If False (default), returns list of Memory for backward compat.
+        """
         if np is None or not self._embeddings_cache:
             return []
         ids = list(self._embeddings_cache.keys())
@@ -339,7 +346,10 @@ class MemoryStore:
             mid = ids[idx]
             mem = self.get(mid)
             if mem:
-                result.append(mem)
+                if return_scores:
+                    result.append((mem, float(scores[idx])))
+                else:
+                    result.append(mem)
         return result
 
     def list_recent(self, limit: int = 50, mem_type: Optional[str] = None) -> list[Memory]:

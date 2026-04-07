@@ -174,20 +174,25 @@ Analyze for personality consistency and drift. Suggest trait_updates and style_u
         return False
 
     def _reflect_heuristic(self, episodes: list[Any]) -> dict[str, Any]:
-        """Heuristic reflection when no LLM is available."""
+        """Heuristic reflection when no LLM is available.
+
+        Honest about its limitations: cannot detect drift or assess alignment
+        without an LLM. Returns topic extraction only.
+        """
         from collections import Counter
         word_counts: Counter[str] = Counter()
         for ep in episodes:
             for word in ep.content.split():
-                word_counts[word.lower()] += 1
+                if len(word) > 2:  # skip noise
+                    word_counts[word.lower()] += 1
 
         return {
-            "summary": f"Reviewed {len(episodes)} recent episodes",
-            "drift_detected": False,
-            "drift_details": "",
+            "summary": f"Scanned {len(episodes)} recent episodes (heuristic only — no LLM available for deep analysis)",
+            "drift_detected": None,  # None = unknown, not False
+            "drift_details": "Drift detection requires LLM — skipped",
             "new_traits_observed": [],
-            "value_alignment_score": 0.8,
-            "suggestions": [],
+            "value_alignment_score": None,  # None = not assessed, not 0.8
+            "suggestions": ["Enable an LLM provider for meaningful self-reflection"],
             "method": "heuristic",
             "top_themes": [w for w, _ in word_counts.most_common(10)],
         }

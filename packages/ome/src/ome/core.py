@@ -983,23 +983,33 @@ class Ome:
         return "\n".join(parts)
 
     def _generate(self, system: str, user_message: str, provider: str = "") -> str:
-        """Generate a response using the configured LLM."""
-        router = getattr(self.soul.layers.l2, "router", None)
-        if router:
-            try:
-                result = router.call_llm(
-                    task="chat",
-                    system=system,
-                    user=user_message,
-                    max_tokens=1024,
-                )
-                if result:
-                    return result
-            except Exception as e:
-                log.warning("LLM generation failed: %s", e)
+        """Generate a response using the configured LLM.
 
-        # Fallback: user-friendly message without exposing internals
+        The ModelRouter handles retry-with-fallback across all configured providers.
+        This method only needs to call once — the router tries every provider in
+        priority order before giving up.
+        """
+        router = getattr(self.soul.layers.l2, "router", None)
+        if router is None:
+            log.error("No ModelRouter configured — cannot generate. "
+                      "Set up ~/.mindos/config.yaml or call MindosConfig.from_env().")
+            return (
+                "我还没有配置好大脑，需要先设置 LLM 才能聊天。"
+                "不过我已经记住你说的话了！"
+            )
+
+        result = router.call_llm(
+            task="chat",
+            system=system,
+            user=user_message,
+            max_tokens=1024,
+        )
+        if result:
+            return result
+
+        log.error("All LLM providers failed or returned empty. "
+                  "Check config.yaml and API keys.")
         return (
-            "抱歉，我现在没法回复你——需要先配置好我的大脑才能聊天。"
-            "不过我已经记住你说的话了，等我准备好就来找你！"
+            "抱歉，我的大脑暂时连不上了（所有 LLM 都没响应）。"
+            "不过我已经记住你说的话了，等恢复后就来找你！"
         )

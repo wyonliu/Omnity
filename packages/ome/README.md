@@ -86,6 +86,24 @@ ome forget "sensitive_topic"                # GDPR hard delete
 | **`AutonomyEngine`** | Proactive event system: morning greetings, streak reminders, idle check-ins, milestone celebrations. Your Ome reaches out to you, not just responds. |
 | **`SkillRegistry`** | 7 skills with competence tracking, unlocked by bond level. Skills represent what your Ome can do for you. |
 
+## Robust LLM Pipeline (v0.3.1+)
+
+Ome's brain (`_generate()`) uses Mindos's ModelRouter with automatic failover:
+- **Timeout**: Every LLM call has a 30s timeout (no more hung requests)
+- **Fallback chain**: If provider A fails, automatically tries B, then C
+- **Zero-config**: `MindosConfig.from_env()` auto-detects API keys from environment
+- **Clear errors**: When all providers fail, you get an honest message — not silent degradation
+
+```python
+# Minimal setup — just set your API key as an env var
+import os
+os.environ["DEEPSEEK_API_KEY"] = "sk-..."
+
+from ome import Ome
+twin = Ome.create("~/.ome", name="Alice", traits=["curious"])
+reply = twin.chat("Hello!")  # Uses DeepSeek, falls back to Ollama if down
+```
+
 ## Life System
 
 Your Ome grows through real interaction:

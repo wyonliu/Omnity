@@ -79,7 +79,30 @@ curl localhost:3456/api/status
 | **`Mindos`** | The main facade. Provides `hydrate()`, `commit()`, `recall()`, `forget()`, `reflect()`, `export_ome()`, and `sync()`. Load it once with `Mindos.load()` and use it from any code. |
 | **`LayerRouter`** | Dispatches requests to the cheapest brain layer (L0-L4) that can handle them. L0 (memory retrieval) is near-zero cost; L3 (deep reasoning) is on-demand. |
 | **`MemoryStore`** | SQLite-backed storage with FTS5 full-text search, content-hash dedup, forgetting curve, and a sync journal for cross-device replication. |
-| **`ModelRouter`** | Selects the best available LLM provider (DeepSeek, OpenAI, Anthropic, Ollama) per task. Falls back to rule-based extraction when no LLM is configured. |
+| **`ModelRouter`** | Selects the best available LLM provider (DeepSeek, OpenAI, Anthropic, Ollama) per task. **Automatic fallback chain**: if provider A fails (timeout/error), tries provider B, then C. Falls back to rule-based extraction when no LLM is configured. |
+
+### Zero-Config Setup (v0.5.0+)
+
+```python
+from mindos.config import MindosConfig
+
+# Auto-detect from environment variables (DEEPSEEK_API_KEY, OPENAI_API_KEY, etc.)
+cfg = MindosConfig.from_env()
+
+# Or configure programmatically — no YAML file needed
+cfg = MindosConfig.from_dict({
+    "models": [
+        {"name": "deepseek", "type": "openai_compatible",
+         "base_url": "https://api.deepseek.com",
+         "api_key_env": "DEEPSEEK_API_KEY",
+         "model": "deepseek-chat", "priority": 1, "for": ["chat", "reasoning"]},
+        {"name": "ollama", "type": "ollama",
+         "model": "qwen3.5:14b", "priority": 2, "for": []},  # catch-all fallback
+    ],
+})
+```
+
+**Robustness**: All LLM calls have a 30s timeout (configurable) and automatic provider failover. If DeepSeek is down, your app keeps working via the next provider in the chain.
 
 ### Five-Layer Brain
 
