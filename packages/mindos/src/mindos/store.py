@@ -387,6 +387,33 @@ class MemoryStore:
         kg_count = self._conn.execute("SELECT COUNT(*) FROM knowledge_graph").fetchone()[0]
         return {"total_memories": total, "by_type": by_type, "knowledge_graph_triples": kg_count}
 
+    def decay_status(self) -> dict[str, int]:
+        """Count memories by decay status: active (>0.6), fading (0.2-0.6), forgotten (<=0.2)."""
+        rows = self._conn.execute(
+            "SELECT "
+            "  SUM(CASE WHEN decay_weight > 0.6 THEN 1 ELSE 0 END) as active, "
+            "  SUM(CASE WHEN decay_weight > 0.2 AND decay_weight <= 0.6 THEN 1 ELSE 0 END) as fading, "
+            "  SUM(CASE WHEN decay_weight <= 0.2 THEN 1 ELSE 0 END) as forgotten "
+            "FROM memories"
+        ).fetchone()
+        return {
+            "active": rows[0] or 0,
+            "fading": rows[1] or 0,
+            "forgotten": rows[2] or 0,
+        }
+
+    def count_recent(self, days: int = 7) -> dict[str, int]:
+        """Count memories added and recalled (accessed) in the last N days."""
+        cutoff = time.time() - days * 86400
+        added = self._conn.execute(
+            "SELECT COUNT(*) FROM memories WHERE created_at > ?", (cutoff,)
+        ).fetchone()[0]
+        recalled = self._conn.execute(
+            "SELECT COUNT(*) FROM memories WHERE accessed_at > ? AND access_count > 0",
+            (cutoff,),
+        ).fetchone()[0]
+        return {"added": added, "recalled": recalled}
+
     def personality_timeline(self) -> list[dict]:
         rows = self._conn.execute(
             "SELECT * FROM personality_history ORDER BY created_at ASC"

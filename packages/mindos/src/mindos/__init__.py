@@ -3,7 +3,7 @@
 A portable, persistent digital soul protocol.
 """
 
-__version__ = "0.5.1"
+__version__ = "0.5.2"
 
 from mindos.core import Mindos
 from mindos.config import MindosConfig, ModelRouter, ModelProvider

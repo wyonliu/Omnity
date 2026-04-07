@@ -255,6 +255,17 @@ class Ome:
 
         # Track daily stats for challenges
         self._record_daily_stat(message)
+        self._save_emotion_snapshot()
+
+        # Record growth events
+        if self.bond.total_interactions == 1:
+            self._record_growth_event("first_chat", "破冰 🌱", "我们的故事开始了")
+        if level_result.get("level_changed"):
+            lvl = level_result["new_level"]
+            lvl_name = level_result["level_name"]
+            self._record_growth_event(
+                f"bond_up_{lvl}", f"羁绊升级 ✨", f"升级到「{lvl_name}」"
+            )
 
         # Suppress gamification noise during emotional/crisis/low-engagement moments
         suppress_gamification = is_crisis or (
@@ -396,14 +407,33 @@ class Ome:
         self._chat_history.append({"role": "user", "content": message})
         self._chat_history.append({"role": "assistant", "content": reply})
 
+        # Commit to memory and capture memory_impact
+        memory_impact: dict[str, Any] = {"facts_added": 0, "facts": []}
         try:
-            self.soul.commit(conversation, source="ome-chat")
+            commit_result = self.soul.commit(conversation, source="ome-chat")
+            if isinstance(commit_result, dict):
+                added = commit_result.get("facts_added", 0)
+                if added:
+                    memory_impact["facts_added"] = added
+                    # Retrieve recently added facts for display
+                    recent = self.soul.store.list_recent(limit=added, mem_type="fact")
+                    memory_impact["facts"] = [m.content for m in recent]
         except Exception as e:
             log.warning("Failed to commit chat: %s", e)
 
         today = datetime.now().strftime("%Y-%m-%d")
         level_result = self.bond.record_interaction(today)
         self.growth.record_action("chat", success=True, quality=0.5)
+
+        # Record growth events
+        if self.bond.total_interactions == 1:
+            self._record_growth_event("first_chat", "破冰 🌱", "我们的故事开始了")
+        if level_result.get("level_changed"):
+            lvl = level_result["new_level"]
+            lvl_name = level_result["level_name"]
+            self._record_growth_event(
+                f"bond_up_{lvl}", f"羁绊升级 ✨", f"升级到「{lvl_name}」"
+            )
 
         # Update emotion from interaction patterns
         idle_days = 0
@@ -422,11 +452,30 @@ class Ome:
         )
 
         self._record_daily_stat(message)
+        self._save_emotion_snapshot()
 
         suppress_gamification = is_crisis or (
             self.emotion.mood in ("sad", "stressed") and is_low_engagement
         )
         self._check_achievements(message=message)
+
+        # Record achievement events
+        newly_unlocked = self.achievements.unlocked_list()
+        if newly_unlocked:
+            last = newly_unlocked[-1]
+            self._record_growth_event(
+                f"achievement_{last['id']}", f"{last['icon']} {last['name']}",
+                last.get("description", ""),
+            )
+
+        # Record streak milestones
+        streak = self.bond.streak_days
+        for threshold in [7, 14, 30, 90, 365]:
+            if streak == threshold:
+                self._record_growth_event(
+                    f"streak_{threshold}", f"{threshold}日连续 🔥", ""
+                )
+
         streak_rewards = self._check_streak_rewards() if not suppress_gamification else []
         self._save_life_state()
 
@@ -443,6 +492,13 @@ class Ome:
             if new_level >= 5:
                 self.permissions.raise_trust(TrustLevel.DEPUTY)
 
+        # Generate follow-up suggestions (async-friendly, non-blocking)
+        follow_ups: list[str] = []
+        try:
+            follow_ups = self.suggest_follow_ups(message, reply, count=3)
+        except Exception:
+            pass
+
         return {
             "reply": reply,
             "memories_recalled": memories_recalled,
@@ -451,6 +507,9 @@ class Ome:
             "evolution_pending": self.evolution_pending,
             "phase": phase,
             "thinking": thinking_dict,
+            # --- New fields ---
+            "follow_ups": follow_ups,
+            "memory_impact": memory_impact,
         }
 
     # -- Evolution (L4 self-reflection on demand) ------------------------------
@@ -745,8 +804,16 @@ class Ome:
         return self.soul.commit(f"user: {text}", source=source)
 
     @_synchronized
-    def recall(self, query: str, top_k: int = 10) -> list[dict[str, Any]]:
-        """Ask your Ome what it remembers about a topic."""
+    def recall(self, query: str, top_k: int = 10,
+              type_filter: Optional[list[str]] = None) -> list[dict[str, Any]]:
+        """Ask your Ome what it remembers about a topic.
+
+        Args:
+            query: Search query (empty string returns recent memories).
+            top_k: Max results to return.
+            type_filter: Optional list of memory types to include
+                         (e.g. ["fact", "preference"]). None = all types.
+        """
         self.growth.record_action("recall", success=True, quality=0.5)
         # Track for daily challenge
         today = datetime.now().strftime("%Y-%m-%d")
@@ -758,7 +825,147 @@ class Ome:
             self.soul.store.set_state(key, json.dumps(daily))
         except Exception:
             pass
-        return self.soul.recall(query, top_k=top_k)
+
+        results = self.soul.recall(query, top_k=top_k * 3 if type_filter else top_k)
+
+        if type_filter:
+            results = [m for m in results if m.get("type") in type_filter][:top_k]
+
+        return results
+
+    # -- Memory Stats ----------------------------------------------------------
+
+    def memory_stats(self) -> dict[str, Any]:
+        """Memory health dashboard — total, by_type, decay status, recent activity, health score.
+
+        Returns:
+            {
+                "total": int,
+                "by_type": {"fact": N, "episode": N, ...},
+                "decay_status": {"active": N, "fading": N, "forgotten": N},
+                "recent_7d": {"added": N, "recalled": N},
+                "health": float  # 0-1 composite score
+            }
+        """
+        store = self.soul.store
+        basic = store.stats()
+        total = basic["total_memories"]
+        by_type = basic["by_type"]
+        decay = store.decay_status()
+        recent = store.count_recent(7)
+
+        # Health score: active_ratio * 0.6 + recall_frequency * 0.4
+        active_ratio = decay["active"] / max(total, 1)
+        recall_freq = min(recent["recalled"] / max(total, 1) * 5, 1.0)  # normalize
+        health = round(active_ratio * 0.6 + recall_freq * 0.4, 2)
+
+        return {
+            "total": total,
+            "by_type": by_type,
+            "decay_status": decay,
+            "recent_7d": recent,
+            "health": health,
+        }
+
+    # -- Emotion History -------------------------------------------------------
+
+    def emotion_history(self, days: int = 30) -> list[dict[str, Any]]:
+        """Emotion trace over the last N days.
+
+        Returns list of daily snapshots (newest first):
+            [{"date": "2026-04-07", "valence": 0.3, "arousal": 0.5,
+              "mood": "curious", "energy": 0.7}, ...]
+        """
+        result = []
+        raw = self.soul.store.get_state("ome.emotion_history")
+        history: dict[str, dict] = json.loads(raw) if raw else {}
+
+        # Include today's live state
+        today = datetime.now().strftime("%Y-%m-%d")
+        history[today] = {
+            "valence": round(self.emotion.valence, 3),
+            "arousal": round(self.emotion.arousal, 3),
+            "mood": self.emotion.mood,
+            "energy": round(self.emotion.energy, 2),
+        }
+
+        # Sort by date descending, limit to N days
+        sorted_dates = sorted(history.keys(), reverse=True)[:days]
+        for d in sorted_dates:
+            entry = history[d]
+            entry["date"] = d
+            result.append(entry)
+
+        return result
+
+    # -- Growth Timeline -------------------------------------------------------
+
+    def growth_timeline(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Growth milestone event log — the soul of the nurture page.
+
+        Returns list of events (newest first):
+            [{"date": "2026-04-07 17:34", "event": "first_chat",
+              "label": "破冰 🌱", "detail": "我们的故事开始了"}, ...]
+        """
+        raw = self.soul.store.get_state("ome.growth_timeline")
+        events: list[dict] = json.loads(raw) if raw else []
+        # Return newest first, limited
+        return list(reversed(events[-limit:]))
+
+    def _record_growth_event(self, event: str, label: str, detail: str = ""):
+        """Append a growth event to the timeline."""
+        raw = self.soul.store.get_state("ome.growth_timeline")
+        events: list[dict] = json.loads(raw) if raw else []
+
+        # Deduplicate by event type (some events only happen once)
+        _UNIQUE_EVENTS = {"first_chat", "bond_up_1", "bond_up_2", "bond_up_3",
+                          "bond_up_4", "bond_up_5", "bond_up_6"}
+        if event in _UNIQUE_EVENTS:
+            existing = {e["event"] for e in events}
+            if event in existing:
+                return
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        events.append({
+            "date": now,
+            "event": event,
+            "label": label,
+            "detail": detail,
+        })
+
+        # Keep last 200 events max
+        if len(events) > 200:
+            events = events[-200:]
+
+        self.soul.store.set_state("ome.growth_timeline", json.dumps(events, ensure_ascii=False))
+
+    # -- External Stats Injection ----------------------------------------------
+
+    def report_external_stats(self, stats: dict[str, Any]) -> dict[str, str]:
+        """Inject vault / external metrics for achievement & growth calculations.
+
+        Args:
+            stats: Dict with keys like notes_count, tasks_done, tasks_total,
+                   contacts_count, plan_pct, active_days, etc.
+
+        Call this before life_dashboard() to keep Ome aware of external data.
+        """
+        self.soul.store.set_state("ome.external_stats", json.dumps(stats))
+
+        # Check external-data-driven achievements
+        notes = stats.get("notes_count", 0)
+        tasks_done = stats.get("tasks_done", 0)
+        contacts = stats.get("contacts_count", 0)
+
+        if notes >= 10:
+            self.achievements.check_and_unlock("ten_facts")
+        if tasks_done >= 50:
+            self.achievements.check_and_unlock("fifty_chats")  # repurpose as "50 tasks"
+        if contacts >= 5:
+            self.achievements.check_and_unlock("social_first")
+
+        self._save_life_state()
+        return {"status": "ok"}
 
     def forget(self, pattern: str) -> dict[str, Any]:
         """Make your Ome forget something. Permanent."""
@@ -993,7 +1200,7 @@ class Ome:
     def status(self) -> dict[str, Any]:
         """What does your Ome know?"""
         s = self.soul.status()
-        s["ome_version"] = "0.4.1"
+        s["ome_version"] = "0.5.0"
         s["life"] = self.life_dashboard()
         return s
 
@@ -1009,9 +1216,19 @@ class Ome:
     # -- Life System ---------------------------------------------------------
 
     def life_dashboard(self) -> dict[str, Any]:
-        """Full life dashboard data for the Ome App."""
+        """Full life dashboard data for the Ome App.
+
+        Enhanced with: daily_challenge, memory_stats, enriched phase,
+        next_milestone — everything the nurture page needs in one call.
+        """
+        phase = get_growth_phase(self.bond.total_interactions)
+        bond_info = self.bond.current_level_info()
+
+        # Build next_milestone from bond + streak + achievements
+        next_milestone = self._compute_next_milestone(bond_info)
+
         return {
-            "bond": self.bond.current_level_info(),
+            "bond": bond_info,
             "achievements": {
                 "unlocked": self.achievements.unlocked_list(),
                 "locked": self.achievements.locked_visible(),
@@ -1033,6 +1250,67 @@ class Ome:
                 "active_goals": len(self.autonomy.active_goals()),
             },
             "highlights": self._weekly_highlights(),
+            # --- New fields for Ome365 v0.6 ---
+            "daily_challenge": self.get_daily_challenge(),
+            "memory_stats": self.memory_stats(),
+            "phase": {
+                "phase_id": phase.get("phase_id", 0),
+                "name": phase.get("name", ""),
+                "persona": phase.get("persona", ""),
+                "strategy_hint": phase.get("strategy_hint", ""),
+            },
+            "next_milestone": next_milestone,
+        }
+
+    def _compute_next_milestone(self, bond_info: dict) -> dict[str, Any]:
+        """Compute the nearest next milestone for the dashboard."""
+        milestones = []
+
+        # Bond level up
+        interactions_needed = bond_info.get("interactions_needed", 0)
+        next_level_name = bond_info.get("next_level", "")
+        if next_level_name and interactions_needed > 0:
+            total_for_next = interactions_needed + self.bond.total_interactions
+            pct = int(self.bond.total_interactions / max(total_for_next, 1) * 100)
+            milestones.append({
+                "type": "bond_up",
+                "label": f"升级到「{next_level_name}」",
+                "progress_pct": min(pct, 99),
+                "remaining": f"还需 {interactions_needed} 次互动",
+            })
+
+        # Streak milestones
+        streak = self.bond.streak_days
+        _STREAK_TARGETS = [3, 7, 14, 30, 90, 365]
+        for target in _STREAK_TARGETS:
+            if streak < target:
+                pct = int(streak / target * 100)
+                milestones.append({
+                    "type": "streak",
+                    "label": f"连续互动 {target} 天",
+                    "progress_pct": min(pct, 99),
+                    "remaining": f"还需 {target - streak} 天",
+                })
+                break
+
+        # Next locked achievement
+        locked = self.achievements.locked_visible()
+        if locked:
+            milestones.append({
+                "type": "achievement",
+                "label": f"解锁「{locked[0]['name']}」",
+                "progress_pct": 0,
+                "remaining": locked[0].get("hint", "继续努力"),
+            })
+
+        # Return the closest one (bond_up is highest priority)
+        if milestones:
+            return milestones[0]
+        return {
+            "type": "none",
+            "label": "所有里程碑已达成！",
+            "progress_pct": 100,
+            "remaining": "",
         }
 
     def _weekly_highlights(self) -> list[str]:
@@ -1244,6 +1522,30 @@ class Ome:
             self.soul.store.set_state(today_key, json.dumps(daily))
         except Exception:
             pass
+
+    def _save_emotion_snapshot(self):
+        """Persist today's emotion as a daily snapshot for emotion_history()."""
+        try:
+            today = datetime.now().strftime("%Y-%m-%d")
+            raw = self.soul.store.get_state("ome.emotion_history")
+            history: dict[str, dict] = json.loads(raw) if raw else {}
+
+            history[today] = {
+                "valence": round(self.emotion.valence, 3),
+                "arousal": round(self.emotion.arousal, 3),
+                "mood": self.emotion.mood,
+                "energy": round(self.emotion.energy, 2),
+            }
+
+            # Keep last 365 days max
+            if len(history) > 365:
+                sorted_keys = sorted(history.keys())
+                for k in sorted_keys[:-365]:
+                    del history[k]
+
+            self.soul.store.set_state("ome.emotion_history", json.dumps(history))
+        except Exception as e:
+            log.debug("Could not save emotion snapshot: %s", e)
 
     def _load_life_state(self):
         """Load life system state from Mindos soul_state."""

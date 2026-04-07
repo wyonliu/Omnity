@@ -1,6 +1,6 @@
 """Ome — Your AI twin that remembers everything and works for you 24/7."""
 
-__version__ = "0.4.1"
+__version__ = "0.5.0"
 
 from ome.core import Ome
 from ome.life.persona import PersonaDefinition, BigFive, BUILTIN_PERSONAS
