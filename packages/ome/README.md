@@ -128,6 +128,20 @@ ome forget "sensitive_topic"                # GDPR hard delete
 └─────────────────────────────────────────┘
 ```
 
+## Skills (7 built-in, competence tracking)
+
+| Skill | What it does | Bond required |
+|-------|-------------|---------------|
+| **chat** | Conversational AI + auto memory | 0 (Stranger) |
+| **recall** | Cross-platform semantic memory search | 0 |
+| **write** | Draft emails, articles, code in your voice | 0 |
+| **research** | Search memories, synthesize, store findings | 0 |
+| **schedule** | Add, list, remind, remove calendar tasks | 2 (Companion) |
+| **social** | Multi-agent interaction (via Maxim) | 4 (Confidant) |
+| **spatial** | 3D awareness & navigation (via SOAP) | 4 (Confidant) |
+
+Each skill has a **competence score** (0.0–1.0) that grows with use. Higher bond unlocks more powerful skills.
+
 ## Life System
 
 Your Ome grows through real interaction:

@@ -1267,8 +1267,9 @@ class Ome:
             log.error("No ModelRouter configured — cannot generate. "
                       "Set up ~/.mindos/config.yaml or call MindosConfig.from_env().")
             return (
+                "I haven't been configured with an LLM yet — set one up so I can chat! "
                 "我还没有配置好大脑，需要先设置 LLM 才能聊天。"
-                "不过我已经记住你说的话了！"
+                "But I've remembered what you said! 不过我已经记住你说的话了！"
             )
 
         result = router.call_llm(
