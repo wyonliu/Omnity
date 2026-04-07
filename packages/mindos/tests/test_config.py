@@ -226,11 +226,27 @@ class TestRouterFallback:
 # ── Config file load ────────────────────────────────────────────────
 
 class TestConfigLoad:
-    def test_load_creates_default(self):
+    def test_load_creates_from_env(self):
+        """Issue #1: load() should use from_env() when no config.yaml exists."""
         with tempfile.TemporaryDirectory() as tmp:
-            cfg = MindosConfig.load(Path(tmp))
-            assert (Path(tmp) / "config.yaml").exists()
-            assert len(cfg.providers) > 0
+            with patch.dict(os.environ, {"OPENROUTER_API_KEY": "sk-or-test"}, clear=False):
+                cfg = MindosConfig.load(Path(tmp))
+                assert (Path(tmp) / "config.yaml").exists()
+                names = [p.name for p in cfg.providers]
+                assert "openrouter" in names  # from_env detected it
+
+    def test_load_creates_default_no_keys(self):
+        """When no API keys are set, load() still creates config with ollama fallback."""
+        with tempfile.TemporaryDirectory() as tmp:
+            # Clear all API keys
+            env_overrides = {k: "" for k in [
+                "OPENROUTER_API_KEY", "DEEPSEEK_API_KEY",
+                "OPENAI_API_KEY", "ANTHROPIC_API_KEY"
+            ]}
+            with patch.dict(os.environ, env_overrides, clear=False):
+                cfg = MindosConfig.load(Path(tmp))
+                assert (Path(tmp) / "config.yaml").exists()
+                assert len(cfg.providers) > 0
 
     def test_load_reads_existing(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -242,3 +258,26 @@ class TestConfigLoad:
             cfg = MindosConfig.load(Path(tmp))
             names = [p.name for p in cfg.providers]
             assert "custom" in names
+
+
+class TestWarningOncePerTask:
+    """Issue #2: 'No available provider' warning should only fire once per task."""
+
+    def test_warning_fires_once(self):
+        import logging
+        cfg = MindosConfig.from_dict({
+            "models": [{"name": "x", "type": "openai_compatible",
+                         "model": "x", "priority": 1,
+                         "for": ["chat"], "api_key_env": "NONEXISTENT_XYZ"}],
+        })
+        router = ModelRouter(cfg)
+        with patch.object(ModelProvider, 'available',
+                          new_callable=lambda: property(lambda self: False)):
+            with patch("mindos.config.log") as mock_log:
+                router.call_llm(system="s", user="u", task="commit_digest")
+                router.call_llm(system="s", user="u", task="commit_digest")
+                router.call_llm(system="s", user="u", task="commit_digest")
+                # Should only warn once for the same task
+                warn_calls = [c for c in mock_log.warning.call_args_list
+                              if "commit_digest" in str(c)]
+                assert len(warn_calls) == 1

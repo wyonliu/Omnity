@@ -115,11 +115,13 @@ class MindosConfig:
             else:
                 import json
                 data = json.loads(text)
+            merged = {**_DEFAULT_CONFIG, **data}
+            return cls(merged)
         else:
-            data = dict(_DEFAULT_CONFIG)
-            cls._write_default(cfg_path)
-        merged = {**_DEFAULT_CONFIG, **data}
-        return cls(merged)
+            # No config.yaml — auto-detect from environment variables
+            instance = cls.from_env()
+            cls._write_config(cfg_path, instance._data)
+            return instance
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "MindosConfig":
@@ -203,15 +205,16 @@ class MindosConfig:
         return cls(data)
 
     @classmethod
-    def _write_default(cls, path: Path) -> None:
+    def _write_config(cls, path: Path, data: dict[str, Any]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
         if yaml:
             path.write_text(
-                yaml.dump(_DEFAULT_CONFIG, allow_unicode=True, sort_keys=False, default_flow_style=False),
+                yaml.dump(data, allow_unicode=True, sort_keys=False, default_flow_style=False),
                 encoding="utf-8",
             )
         else:
             import json
-            path.write_text(json.dumps(_DEFAULT_CONFIG, ensure_ascii=False, indent=2), encoding="utf-8")
+            path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def _parse_models(self) -> None:
         for m in self._data.get("models", []):
@@ -299,7 +302,11 @@ class ModelRouter:
         """
         candidates = self._select_candidates(task)
         if not candidates:
-            log.warning("No available provider for task=%s", task)
+            if not getattr(self, "_warned_tasks", None):
+                self._warned_tasks = set()
+            if task not in self._warned_tasks:
+                log.warning("No available provider for task=%s (this warning shown once per task)", task)
+                self._warned_tasks.add(task)
             return None
 
         # Check cache (keyed on first candidate)

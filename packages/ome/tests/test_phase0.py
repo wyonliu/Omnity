@@ -559,7 +559,7 @@ class TestDashboard:
 
     def test_version_bump(self, ome):
         s = ome.status()
-        assert s["ome_version"] == "0.4.0"
+        assert s["ome_version"] == "0.4.1"
 
 
 # =============================================================================

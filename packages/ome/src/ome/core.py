@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -43,6 +45,17 @@ from ome.skills.builtins import register_builtins
 log = logging.getLogger("ome")
 
 
+def _synchronized(method):
+    """Decorator: acquires self._lock (RLock) before calling the method."""
+    from functools import wraps
+
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+    return wrapper
+
+
 class Ome:
     """Your AI twin — remembers everything, speaks like you, works for you.
 
@@ -66,6 +79,7 @@ class Ome:
     def __init__(self, soul: Mindos, root: Path) -> None:
         self.soul = soul
         self.root = root
+        self._lock = threading.RLock()
         self._chat_history: list[dict[str, str]] = []
         self.bond = BondState()
         self.achievements = AchievementTracker()
@@ -105,8 +119,21 @@ class Ome:
         soul = Mindos.load(root)
         return cls(soul, root)
 
+    @contextmanager
+    def locked(self):
+        """Context manager for thread-safe access in multi-worker setups.
+
+        Usage:
+            with ome.locked():
+                result = ome.chat_rich(msg)
+                # ... other operations that must be atomic
+        """
+        with self._lock:
+            yield self
+
     # -- Chat (the main interface) -------------------------------------------
 
+    @_synchronized
     def chat(self, message: str, provider: str = "") -> str:
         """Talk to your Ome. It remembers everything you've ever said.
 
@@ -255,6 +282,7 @@ class Ome:
 
         return reply
 
+    @_synchronized
     def chat_rich(self, message: str, provider: str = "") -> dict[str, Any]:
         """Like chat(), but returns a rich dict with memories recalled, thinking, etc.
 
@@ -442,6 +470,7 @@ class Ome:
         """Number of commits since last L4 reflection."""
         return self.soul.layers.l4._commit_count_since_reflect
 
+    @_synchronized
     def evolve(self) -> dict[str, Any]:
         """Trigger L4 self-reflection on demand.
 
@@ -465,6 +494,7 @@ class Ome:
 
     # -- Smart extraction (structured data from text) --------------------------
 
+    @_synchronized
     def smart_extract(self, text: str) -> dict[str, Any]:
         """Extract structured data (contacts, tasks, notes) from natural language.
 
@@ -480,12 +510,15 @@ class Ome:
         """
         router = getattr(self.soul.layers.l2, "router", None)
         if router is None:
-            # No LLM — do basic extraction via Mindos commit
+            # No LLM — use regex-based extraction
+            contacts, tasks, notes = self._regex_extract(text)
             result = self.soul.commit(f"user: {text}", source="smart-input")
+            if not notes and not contacts and not tasks:
+                notes = [{"content": text}]
             return {
-                "contacts": [],
-                "tasks": [],
-                "notes": [{"content": text}],
+                "contacts": contacts,
+                "tasks": tasks,
+                "notes": notes,
                 "raw_facts": result.get("facts", []),
             }
 
@@ -519,14 +552,59 @@ class Ome:
         except (json.JSONDecodeError, Exception) as e:
             log.warning("smart_extract LLM parse failed: %s", e)
 
-        # Fallback: commit to memory, return as note
+        # Fallback: regex extraction + commit to memory
+        contacts, tasks, notes = self._regex_extract(text)
         result = self.soul.commit(f"user: {text}", source="smart-input")
+        if not notes and not contacts and not tasks:
+            notes = [{"content": text}]
         return {
-            "contacts": [],
-            "tasks": [],
-            "notes": [{"content": text}],
+            "contacts": contacts,
+            "tasks": tasks,
+            "notes": notes,
             "raw_facts": result.get("facts", []),
         }
+
+    @staticmethod
+    def _regex_extract(text: str) -> tuple[list, list, list]:
+        """Basic regex extraction for contacts, tasks, notes without LLM."""
+        import re
+        contacts = []
+        tasks = []
+        notes = []
+
+        # Phone numbers (CN mobile: 1xx-xxxx-xxxx)
+        phones = re.findall(r'(1[3-9]\d{9})', text)
+        # Email
+        emails = re.findall(r'([\w.+-]+@[\w-]+\.[\w.-]+)', text)
+        # Chinese names near phone/email (2-4 chars before a phone/contact keyword)
+        name_patterns = re.findall(r'([\u4e00-\u9fff]{2,4})(?:的?(?:电话|手机|号码|邮箱|微信|联系))', text)
+
+        if phones or emails:
+            info_parts = phones + emails
+            name = name_patterns[0] if name_patterns else ""
+            contacts.append({"name": name, "info": ", ".join(info_parts)})
+
+        # Time-related tasks (明天/后天/下午/X点/X号/周X)
+        time_keywords = re.findall(
+            r'((?:明天|后天|今天|下周|周[一二三四五六日]|'
+            r'\d{1,2}[.:：]\d{2}|\d{1,2}[点时](?:半)?|'
+            r'\d{1,2}月\d{1,2}[日号]|[上下]午)'
+            r'[^，。；\n]{0,30})',
+            text,
+        )
+        # Task action keywords
+        task_actions = re.findall(
+            r'(?:提醒我?|记得|别忘了?|要|需要|去)([\u4e00-\u9fff\w\s]{2,20})',
+            text,
+        )
+        if time_keywords:
+            for tk in time_keywords:
+                tasks.append({"title": tk.strip(), "due": "", "priority": "medium"})
+        elif task_actions:
+            for ta in task_actions:
+                tasks.append({"title": ta.strip(), "due": "", "priority": "medium"})
+
+        return contacts, tasks, notes
 
     def suggest_follow_ups(self, user_msg: str, ome_reply: str, count: int = 3) -> list[str]:
         """Generate contextual follow-up suggestions using LLM.
@@ -644,6 +722,7 @@ class Ome:
             log.warning("Failed to generate greeting: %s", e)
             return ""
 
+    @_synchronized
     def remember(self, text: str, source: str = "manual") -> dict[str, Any]:
         """Teach your Ome something directly."""
         self.growth.record_action("recall", success=True, quality=0.6)
@@ -657,8 +736,15 @@ class Ome:
             self.soul.store.set_state(key, json.dumps(daily))
         except Exception:
             pass
+        # Manual/profile input is a fact, not conversation — store directly
+        if source in ("manual", "profile", "api"):
+            from mindos.store import Memory
+            mem = Memory(id="", type="fact", content=text, source=source, confidence=0.9)
+            self.soul.store.add(mem)
+            return {"facts_added": 1, "method": "direct", "episode": ""}
         return self.soul.commit(f"user: {text}", source=source)
 
+    @_synchronized
     def recall(self, query: str, top_k: int = 10) -> list[dict[str, Any]]:
         """Ask your Ome what it remembers about a topic."""
         self.growth.record_action("recall", success=True, quality=0.5)
@@ -907,7 +993,7 @@ class Ome:
     def status(self) -> dict[str, Any]:
         """What does your Ome know?"""
         s = self.soul.status()
-        s["ome_version"] = "0.4.0"
+        s["ome_version"] = "0.4.1"
         s["life"] = self.life_dashboard()
         return s
 
