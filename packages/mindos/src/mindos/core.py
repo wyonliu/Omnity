@@ -83,7 +83,15 @@ class Mindos:
         self._setup_writeback()
 
     @classmethod
-    def load(cls, path: str | Path = "~/.mindos") -> "Mindos":
+    def load(cls, path: str | Path = "~/.mindos",
+             store: Optional["MemoryStore"] = None) -> "Mindos":
+        """Load an existing Mindos from disk.
+
+        Args:
+            path: Root directory for identity/config files.
+            store: Optional external store (e.g. PgMemoryStore for multi-tenant).
+                   If None, uses the default SQLite store at path/memory.db.
+        """
         root = Path(path).expanduser()
         root.mkdir(parents=True, exist_ok=True)
 
@@ -95,14 +103,22 @@ class Mindos:
             _dump_identity(identity, id_path)
 
         config = MindosConfig.load(root)
-        store = MemoryStore(root / "memory.db")
+        if store is None:
+            store = MemoryStore(root / "memory.db")
         return cls(root, store, identity, config)
 
     @classmethod
     def init(cls, path: str | Path = "~/.mindos", name: str = "User",
              traits: Optional[list[str]] = None, style: str = "",
              values: Optional[list[str]] = None,
-             capabilities: Optional[list[dict]] = None) -> "Mindos":
+             capabilities: Optional[list[dict]] = None,
+             store: Optional["MemoryStore"] = None) -> "Mindos":
+        """Initialize a new Mindos soul.
+
+        Args:
+            store: Optional external store (e.g. PgMemoryStore for multi-tenant).
+                   If None, uses the default SQLite store at path/memory.db.
+        """
         root = Path(path).expanduser()
         root.mkdir(parents=True, exist_ok=True)
         (root / "journal").mkdir(exist_ok=True)
@@ -124,7 +140,8 @@ class Mindos:
         _dump_identity(identity, id_path)
 
         config = MindosConfig.load(root)
-        store = MemoryStore(root / "memory.db")
+        if store is None:
+            store = MemoryStore(root / "memory.db")
         inst = cls(root, store, identity, config)
         store.record_personality(identity.get("personality", {}), trigger="init")
         return inst

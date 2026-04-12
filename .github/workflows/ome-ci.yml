@@ -1,0 +1,75 @@
+name: Ome CI
+
+on:
+  push:
+    paths:
+      - "packages/ome/**"
+      - "packages/mindos/**"  # Ome depends on Mindos
+      - ".github/workflows/ome-ci.yml"
+  pull_request:
+    paths:
+      - "packages/ome/**"
+      - "packages/mindos/**"
+      - ".github/workflows/ome-ci.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.11", "3.12"]
+    defaults:
+      run:
+        working-directory: packages/ome
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Mindos (dependency)
+        run: pip install -e ../mindos
+
+      - name: Install Ome (dev)
+        run: pip install -e ".[dev]"
+
+      - name: Pytest
+        run: pytest -q --tb=short
+
+      - name: Build wheel
+        if: matrix.python-version == '3.12'
+        run: |
+          pip install build
+          python -m build
+
+  publish:
+    needs: test
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/ome-v')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # PyPI trusted publishing
+    defaults:
+      run:
+        working-directory: packages/ome
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Mindos
+        run: pip install -e ../mindos
+
+      - name: Build
+        run: |
+          pip install build
+          python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/ome/dist/

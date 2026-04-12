@@ -178,20 +178,32 @@ class Ome:
         style: str = "",
         values: Optional[list[str]] = None,
         capabilities: Optional[list[dict]] = None,
+        store: Optional[Any] = None,
     ) -> "Ome":
-        """Create a new Ome (your digital twin)."""
+        """Create a new Ome (your digital twin).
+
+        Args:
+            store: Optional external memory store (e.g. PgMemoryStore).
+                   If None, uses the default SQLite store.
+        """
         root = Path(path).expanduser()
         soul = Mindos.init(
             root, name=name, traits=traits, style=style,
-            values=values, capabilities=capabilities,
+            values=values, capabilities=capabilities, store=store,
         )
         return cls(soul, root)
 
     @classmethod
-    def load(cls, path: str | Path = "~/.ome") -> "Ome":
-        """Load an existing Ome."""
+    def load(cls, path: str | Path = "~/.ome",
+             store: Optional[Any] = None) -> "Ome":
+        """Load an existing Ome.
+
+        Args:
+            store: Optional external memory store (e.g. PgMemoryStore).
+                   If None, uses the default SQLite store.
+        """
         root = Path(path).expanduser()
-        soul = Mindos.load(root)
+        soul = Mindos.load(root, store=store)
         return cls(soul, root)
 
     @contextmanager
@@ -587,6 +599,271 @@ class Ome:
             # --- New fields ---
             "follow_ups": follow_ups,
             "memory_impact": memory_impact,
+        }
+
+    # -- Streaming (TRUE token-by-token + background commit) ------------------
+    #
+    # These methods split `chat()` into three stages so an HTTP server can
+    # stream LLM tokens to the client and commit/update life state in a
+    # background task:
+    #
+    #   prepare (sync, fast)  ──► stream tokens (sync generator)  ──► finalize (sync, heavy)
+    #         ↑                        ↑                                  ↑
+    #    build prompt           yields raw text                   parse, commit, life state
+    #
+    # The server drives the stream loop and launches finalize in a background
+    # thread so the critical path ends as soon as the LLM finishes speaking.
+
+    @_synchronized
+    def chat_stream_prepare(self, message: str) -> dict[str, Any]:
+        """Stage 1 of 3: build the system prompt and emit a meta snapshot.
+
+        This is called BEFORE the LLM stream begins so the UI can render
+        an immediate "first-token placeholder" (mood, bond level, phase)
+        without waiting for any LLM output.
+
+        Returns:
+            dict with:
+              - system_prompt: str — ready to feed the router
+              - user_message:  str — what to send as "user"
+              - meta: dict — {mood, mood_emoji, bond_level, phase_name,
+                              memories_recalled_count}
+        """
+        # L0 keyword emotion (fast fallback, always runs)
+        self.emotion.update_from_message(message)
+
+        # Crisis detection
+        is_crisis = detect_crisis(message)
+
+        # Low-engagement detection
+        stripped = message.strip()
+        is_low_engagement = len(stripped) <= CHAT_LOW_ENGAGEMENT_CHARS and not any(
+            c in stripped for c in "？?！!…"
+        )
+
+        # Recall and classify memories
+        memories = self.soul.recall(message, top_k=CHAT_RECALL_TOP_K)
+        classified = classify_memories(memories) if memories else []
+        memory_context = "\n".join(
+            f"- [{m.get('type', '?')}] {m.get('content', '')}"
+            for m in memories
+        ) if memories else "(no relevant memories yet)"
+
+        phase = get_growth_phase(self.bond.total_interactions)
+
+        identity = self.soul.hydrate(context=message, max_tokens=1500)
+        personality = self.soul.identity.get("personality", {})
+        catchphrases = personality.get("catchphrases", [])
+        anchor_text = self.personality.system_prompt_injection()
+
+        persona_section = build_persona_emotion_prompt(
+            persona=self._persona_definition,
+            emotion_state=self.emotion,
+        )
+
+        system_prompt = build_strategy_prompt(
+            name=self.name,
+            identity=identity,
+            memory_context=memory_context,
+            classified_memories=classified,
+            emotion_state=self.emotion.to_dict(),
+            phase=phase,
+            personality_injection=anchor_text,
+            catchphrases=catchphrases,
+            conversation_count=self.bond.total_interactions,
+            is_crisis=is_crisis,
+            is_low_engagement=is_low_engagement,
+            persona_prompt_section=persona_section,
+        )
+
+        # Cache the context the finalize step will need so we don't recompute
+        # any of the above. Keyed on id(message) to allow concurrent streams.
+        self._stream_contexts = getattr(self, "_stream_contexts", {})
+        self._stream_contexts[id(message)] = {
+            "is_crisis": is_crisis,
+            "is_low_engagement": is_low_engagement,
+            "phase": phase,
+            "memories_recalled": [
+                {
+                    "type": m.get("type", "unknown"),
+                    "content": m.get("content", ""),
+                    "created_at": m.get("created_at", ""),
+                    "source": m.get("source", ""),
+                }
+                for m in (memories or [])
+            ],
+        }
+
+        return {
+            "system_prompt": system_prompt,
+            "user_message": message,
+            "meta": {
+                "mood": self.emotion.mood,
+                "mood_emoji": self.emotion.mood_emoji(),
+                "bond_level": self.bond.level,
+                "streak_days": self.bond.streak_days,
+                "phase_id": phase.get("phase_id", 0),
+                "phase_name": phase.get("name", ""),
+                "memories_recalled_count": len(memories or []),
+                "is_crisis": is_crisis,
+            },
+        }
+
+    def stream_tokens(self, system_prompt: str, user_message: str):
+        """Stage 2 of 3: yield raw LLM text chunks as they arrive.
+
+        This is a thin passthrough to the configured ModelRouter's streaming
+        API. On total failure it yields nothing — the server should notice
+        an empty result and fall back to a static error message.
+        """
+        router = getattr(self.soul.layers.l2, "router", None)
+        if router is None or not hasattr(router, "stream_llm"):
+            return
+        yield from router.stream_llm(
+            system=system_prompt,
+            user=user_message,
+            task="chat",
+            max_tokens=LLM_GENERATION_MAX_TOKENS,
+        )
+
+    @_synchronized
+    def chat_stream_finalize(self, message: str, raw_reply: str) -> dict[str, Any]:
+        """Stage 3 of 3: parse thinking, validate, commit, update life state.
+
+        This is the "heavy" post-processing that the server should run in a
+        background thread AFTER the stream has ended, so it doesn't block the
+        HTTP response. Safe to call from any thread (synchronized).
+
+        Returns a dict with the final reply (possibly decorated with streak
+        rewards / level-up banners) plus gamification events. If `raw_reply`
+        is empty (LLM totally failed) a graceful fallback reply is produced.
+        """
+        ctx = getattr(self, "_stream_contexts", {}).pop(id(message), None)
+        if ctx is None:
+            # Caller never prepared — recompute what we need (degraded path)
+            ctx = {
+                "is_crisis": detect_crisis(message),
+                "is_low_engagement": False,
+                "phase": get_growth_phase(self.bond.total_interactions),
+                "memories_recalled": [],
+            }
+
+        is_crisis = ctx["is_crisis"]
+        is_low_engagement = ctx["is_low_engagement"]
+        phase = ctx["phase"]
+        memories_recalled = ctx["memories_recalled"]
+
+        if not raw_reply:
+            raw_reply = (
+                "抱歉，我的大脑暂时连不上了（所有 LLM 都没响应）。"
+                "不过我已经记住你说的话了，等恢复后就来找你！"
+            )
+
+        # Parse thinking block
+        reply, thinking = parse_response(raw_reply)
+
+        # L1 deep emotion update from LLM's assessment
+        if thinking:
+            self.emotion.update_from_llm_thinking(
+                emotion=thinking.emotion,
+                nuance=thinking.emotion_nuance,
+            )
+            if thinking.persona_markers and self._persona_profile:
+                self._persona_profile = PersonaEngine.evolve_from_markers(
+                    self._persona_profile,
+                    thinking.persona_markers,
+                )
+            elif thinking.persona_markers and not self._persona_profile:
+                from ome.life.persona import PersonaProfile as PP
+                self._persona_profile = PP(raw_traits=thinking.persona_markers[:5])
+
+        ok, reply = self.personality.validate(reply, context=message)
+
+        conversation = f"user: {message}\nassistant: {reply}"
+        self._chat_history.append({"role": "user", "content": message})
+        self._chat_history.append({"role": "assistant", "content": reply})
+
+        try:
+            self.soul.commit(conversation, source="ome-chat")
+        except Exception as e:
+            log.warning("Failed to commit chat: %s", e)
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        level_result = self.bond.record_interaction(today)
+        self.growth.record_action("chat", success=True, quality=CHAT_DEFAULT_QUALITY)
+
+        idle_days = 0
+        if self.bond.last_interaction_date:
+            try:
+                last_dt = datetime.strptime(self.bond.last_interaction_date, "%Y-%m-%d")
+                idle_days = max(0, (datetime.now() - last_dt).days - 1)
+            except (ValueError, TypeError):
+                pass
+        self.emotion.update_from_interaction(
+            streak_days=self.bond.streak_days,
+            bond_level=self.bond.level,
+            idle_days=idle_days,
+            actions_today=self.autonomy.actions_today,
+            action_budget=self.autonomy.daily_action_budget,
+        )
+
+        self._record_daily_stat(message)
+        self._save_emotion_snapshot()
+
+        if self.bond.total_interactions == 1:
+            self._record_growth_event("first_chat", "破冰 🌱", "我们的故事开始了")
+        if level_result.get("level_changed"):
+            lvl = level_result["new_level"]
+            lvl_name = level_result["level_name"]
+            self._record_growth_event(
+                f"bond_up_{lvl}", "羁绊升级 ✨", f"升级到「{lvl_name}」"
+            )
+
+        suppress_gamification = is_crisis or (
+            self.emotion.mood in ("sad", "stressed") and is_low_engagement
+        )
+        old_unlocked = set(self.achievements.unlocked.keys())
+        self._check_achievements(message=message)
+        new_achs = set(self.achievements.unlocked.keys()) - old_unlocked
+        achievements_unlocked = [
+            a for a in self.achievements.unlocked_list() if a["id"] in new_achs
+        ]
+
+        streak_rewards = self._check_streak_rewards() if not suppress_gamification else []
+        self._save_life_state()
+
+        if not suppress_gamification:
+            for reward in streak_rewards:
+                reply += f"\n\n🎁 {reward['name']}：{reward['description']}"
+
+        level_up = None
+        if level_result.get("level_changed") and not suppress_gamification:
+            lvl_name = level_result["level_name"]
+            new_level = level_result["new_level"]
+            reply += f"\n\n✨ 我们的关系升级了：{lvl_name}！"
+            if new_level >= BOND_TRUST_ASSISTANT_LEVEL:
+                self.permissions.raise_trust(TrustLevel.ASSISTANT)
+            if new_level >= BOND_TRUST_DEPUTY_LEVEL:
+                self.permissions.raise_trust(TrustLevel.DEPUTY)
+            from ome.life.bond import BOND_LEVELS
+            level_up = {
+                "level": new_level,
+                "name": BOND_LEVELS[new_level]["name"],
+                "unlocks": BOND_LEVELS[new_level]["unlocks"],
+            }
+
+        self._cap_chat_history()
+        return {
+            "reply": reply,
+            "mood": self.emotion.mood,
+            "mood_emoji": self.emotion.mood_emoji(),
+            "bond_level": self.bond.level,
+            "streak_days": self.bond.streak_days,
+            "phase": phase,
+            "memories_recalled": memories_recalled,
+            "level_up": level_up,
+            "achievements": achievements_unlocked or None,
+            "daily_challenge": self.get_daily_challenge(),
         }
 
     # -- Evolution (L4 self-reflection on demand) ------------------------------

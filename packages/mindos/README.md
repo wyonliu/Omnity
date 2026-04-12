@@ -170,12 +170,52 @@ mindos sync
 
 Every mutation is recorded in a local journal. The Hub relays events between devices but never stores your data.
 
+## Benchmark Results (LoCoMo)
+
+Tested on the [LoCoMo](https://github.com/snap-research/locomo) long-conversation memory QA benchmark (conv-26: 419 messages, 199 questions across 4 categories):
+
+| Question Type | Correct | Total | Accuracy |
+|---------------|---------|-------|----------|
+| Temporal | 35 | 37 | **94.6%** |
+| Single-hop | 52 | 70 | **74.3%** |
+| Multi-hop | 28 | 45 | **62.2%** |
+| Open-domain | 12 | 47 | 25.5% |
+| **Overall** | **127** | **199** | **63.8%** |
+
+From 22% → 64% via two key innovations:
+1. **Raw verbatim ingest** — store each message with session date, preserving every named entity
+2. **LLM query expansion** — generate 6-10 topic keywords per question before FTS5 search
+
+See `memorybench/scripts/run_mindos_raw.py` for the evaluation driver.
+
+## Enterprise: PostgreSQL + RLS (v0.7.1+)
+
+For multi-tenant deployments, Mindos supports an external store backend via dependency injection:
+
+```python
+from mindos import Mindos
+
+# Default: SQLite (zero config)
+soul = Mindos.load()
+
+# Enterprise: inject a PostgreSQL store (e.g. PgMemoryStore from ome-server)
+soul = Mindos.load("~/.mindos", store=my_pg_store)
+soul = Mindos.init("~/.mindos", name="User", store=my_pg_store)
+```
+
+The `store=` parameter accepts any object implementing the `MemoryStore` interface. The `ome-server` package provides `PgMemoryStore` with:
+- **Row-Level Security** — zero-trust tenant isolation at the database level
+- **pgvector HNSW** — production-scale vector search (replaces in-process numpy)
+- **tsvector + pg_trgm** — full-text + trigram search (replaces FTS5)
+- **Zero-copy tenant migration** — anonymous → registered user is a metadata update
+
 ## Privacy
 
-- All data lives locally in `~/.mindos/` (SQLite)
+- All data lives locally in `~/.mindos/` (SQLite) by default
 - No cloud, no accounts, no telemetry
 - `mindos forget "pattern"` does GDPR hard delete
 - Optional Bearer token auth via `MINDOS_AUTH_TOKEN`
+- Enterprise PG mode: data in your own PostgreSQL, RLS enforces isolation
 
 ## Part of Omnity
 

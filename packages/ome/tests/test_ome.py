@@ -122,3 +122,98 @@ def test_chat_commits_to_memory(ome_dir):
     results = ome.recall("Rust")
     contents = " ".join(r.get("content", "") for r in results)
     assert "Rust" in contents
+
+
+# ── Streaming API (Ome v0.8) ───────────────────────────────────────
+
+def test_chat_stream_prepare_returns_prompt_and_meta(ome_dir):
+    """chat_stream_prepare builds a system prompt and a meta snapshot."""
+    from ome.core import Ome
+
+    ome = Ome.create(ome_dir, name="Ivy", traits=["warm"])
+    prep = ome.chat_stream_prepare("hello there")
+
+    assert isinstance(prep["system_prompt"], str)
+    assert len(prep["system_prompt"]) > 100  # should contain real prompt content
+    assert "Ivy" in prep["system_prompt"]
+    assert prep["user_message"] == "hello there"
+
+    meta = prep["meta"]
+    assert "mood" in meta
+    assert "mood_emoji" in meta
+    assert "bond_level" in meta
+    assert "streak_days" in meta
+    assert "phase_id" in meta
+    assert "phase_name" in meta
+    assert meta["memories_recalled_count"] == 0  # fresh Ome
+    assert meta["is_crisis"] is False
+
+
+def test_chat_stream_prepare_caches_context_for_finalize(ome_dir):
+    """Prepare stashes context that finalize will consume (keyed on id(message))."""
+    from ome.core import Ome
+
+    ome = Ome.create(ome_dir, name="Jack")
+    msg = "tell me about distributed systems"
+    ome.chat_stream_prepare(msg)
+    assert hasattr(ome, "_stream_contexts")
+    assert id(msg) in ome._stream_contexts
+    ctx = ome._stream_contexts[id(msg)]
+    assert "phase" in ctx
+    assert "memories_recalled" in ctx
+
+
+def test_chat_stream_finalize_commits_and_updates_life_state(ome_dir):
+    """Finalize does commit + bond/streak/emotion updates, just like chat()."""
+    from ome.core import Ome
+
+    ome = Ome.create(ome_dir, name="Kate")
+    before_interactions = ome.bond.total_interactions
+
+    msg = "I love building distributed databases"
+    ome.chat_stream_prepare(msg)
+    result = ome.chat_stream_finalize(msg, "That sounds fascinating!")
+
+    assert result["reply"]
+    assert "mood" in result
+    assert "bond_level" in result
+    # Life state advanced
+    assert ome.bond.total_interactions == before_interactions + 1
+    # Conversation got committed to memory
+    found = ome.recall("distributed databases")
+    assert any("distributed" in (r.get("content", "") or "") for r in found)
+    # Context was consumed (not leaking)
+    assert id(msg) not in ome._stream_contexts
+
+
+def test_chat_stream_finalize_handles_empty_reply(ome_dir):
+    """If the LLM stream produced nothing, finalize returns a graceful fallback."""
+    from ome.core import Ome
+
+    ome = Ome.create(ome_dir, name="Liam")
+    msg = "hello"
+    ome.chat_stream_prepare(msg)
+    result = ome.chat_stream_finalize(msg, "")
+
+    assert result["reply"]
+    assert "抱歉" in result["reply"] or "connected" in result["reply"].lower()
+
+
+def test_chat_stream_finalize_without_prepare_uses_degraded_path(ome_dir):
+    """finalize is robust to being called without a prior prepare (e.g. caller bug)."""
+    from ome.core import Ome
+
+    ome = Ome.create(ome_dir, name="Mia")
+    result = ome.chat_stream_finalize("orphan message", "a reply")
+    assert result["reply"]
+    assert "bond_level" in result
+
+
+def test_stream_tokens_yields_empty_when_no_llm(ome_dir):
+    """stream_tokens falls through silently when no LLM is available."""
+    from ome.core import Ome
+
+    ome = Ome.create(ome_dir, name="Nina")
+    chunks = list(ome.stream_tokens("system", "user"))
+    # Without an LLM configured, the router has no candidates → empty stream
+    assert chunks == []

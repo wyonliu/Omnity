@@ -53,6 +53,9 @@ async def register(req: RegisterRequest):
         )
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    except FileNotFoundError as e:
+        # Session-migration path with an unknown session_id
+        raise HTTPException(status_code=404, detail=str(e))
 
     token = create_token(req.user_id)
     return TokenResponse(token=token, user_id=req.user_id, name=ome.name)

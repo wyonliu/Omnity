@@ -34,7 +34,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from ome_server.routes import agents, anon, auth, chat, life, memories, prompts, skills, viral
+from ome_server.routes import agents, anon, auth, chat, contacts, life, map as map_routes, memories, prompts, skills, smartinput, viral, voice
 from ome_server.town.routes import router as town_router
 from ome_server.town.simulation import get_simulation
 
@@ -48,7 +48,11 @@ OME_DATA_ROOT = Path(os.environ.get("OME_DATA_ROOT", "~/.ome-server/data")).expa
 async def lifespan(app: FastAPI):
     """Startup / shutdown."""
     OME_DATA_ROOT.mkdir(parents=True, exist_ok=True)
-    log.info("Ome Server starting — data root: %s", OME_DATA_ROOT)
+
+    # Initialize database backend (PG if DATABASE_URL set, else SQLite)
+    from ome_server import ome_manager
+    ome_manager.startup()
+    log.info("Ome Server starting — data root: %s, pg=%s", OME_DATA_ROOT, ome_manager.USE_PG)
 
     # Initialize OmeTown simulation
     sim = get_simulation()
@@ -58,13 +62,14 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    ome_manager.shutdown()
     log.info("Ome Server shutting down")
 
 
 app = FastAPI(
     title="Ome Server",
     description="Your AI twin backend — powers the Ome App",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -87,12 +92,16 @@ app.include_router(skills.router, prefix="/api", tags=["skills"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 app.include_router(viral.router, prefix="/api/viral", tags=["viral"])
 app.include_router(prompts.router, prefix="/api", tags=["prompts"])
+app.include_router(smartinput.router, prefix="/api", tags=["smart-input"])
+app.include_router(contacts.router, prefix="/api/contacts", tags=["contacts"])
+app.include_router(voice.router, prefix="/api", tags=["voice"])
+app.include_router(map_routes.router, prefix="/api", tags=["map"])
 app.include_router(town_router)  # /api/town/* — OmeTown simulation
 
 
 @app.get("/")
 async def root():
-    return {"service": "ome-server", "version": "0.1.0", "status": "running"}
+    return {"service": "ome-server", "version": "0.2.0", "status": "running"}
 
 
 @app.get("/api/health")

@@ -1,0 +1,30 @@
+# PostgreSQL + pgvector for Ome Server enterprise mode.
+#
+# Usage:
+#   docker compose -f docker-compose.pg.yml up -d
+#   export DATABASE_URL=postgresql://ome:ome@localhost:5433/ome
+#   ome-server  # starts in PG mode
+#
+# Run PG integration tests:
+#   DATABASE_URL=postgresql://ome:ome@localhost:5433/ome pytest tests/test_pg_store.py -v
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: ome-pg
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: ome
+      POSTGRES_USER: ome
+      POSTGRES_PASSWORD: ome
+    volumes:
+      - ome-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ome"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  ome-pg-data:

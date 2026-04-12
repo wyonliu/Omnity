@@ -15,7 +15,7 @@ import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 try:
     import yaml
@@ -379,6 +379,109 @@ class ModelRouter:
         resp = client.chat.completions.create(**req)
         text = resp.choices[0].message.content
         return text.strip() if text else None
+
+    # ── Streaming ──────────────────────────────────────────────────
+
+    def stream_llm(self, system: str, user: str, task: str = "chat",
+                   max_tokens: int = 1024,
+                   timeout: float = 60.0):
+        """Stream LLM output token-by-token. Yields text chunks as they arrive.
+
+        Tries providers in priority order; on first-token failure, falls
+        through to the next candidate. Once a provider has successfully
+        emitted any token, we commit to that provider for the rest of the
+        stream (switching mid-stream would corrupt the output).
+
+        On total failure yields nothing — callers should check whether any
+        chunks were received and fall back to non-streaming `call_llm` or
+        a static error message.
+        """
+        candidates = self._select_candidates(task)
+        if not candidates:
+            if not getattr(self, "_warned_tasks", None):
+                self._warned_tasks = set()
+            if task not in self._warned_tasks:
+                log.warning(
+                    "No available provider for stream task=%s", task,
+                )
+                self._warned_tasks.add(task)
+            return
+
+        for provider in candidates:
+            log.debug("Trying stream LLM: provider=%s task=%s", provider.name, task)
+            try:
+                if provider.type in ("openai_compatible", "ollama"):
+                    yield from self._stream_openai_compat(
+                        provider, system, user, max_tokens, timeout,
+                    )
+                    return
+                if provider.type == "anthropic":
+                    yield from self._stream_anthropic(
+                        provider, system, user, max_tokens, timeout,
+                    )
+                    return
+                log.warning("Provider %s has type %s, streaming not supported",
+                            provider.name, provider.type)
+            except Exception as e:
+                log.warning("Stream provider %s failed for task=%s: %s — trying next",
+                            provider.name, task, e)
+                continue
+
+        log.error("All %d providers failed for stream task=%s", len(candidates), task)
+
+    def _stream_openai_compat(self, provider: "ModelProvider", system: str, user: str,
+                               max_tokens: int, timeout: float):
+        try:
+            import openai
+        except ImportError:
+            log.warning("openai package not installed, cannot stream from %s", provider.name)
+            return
+
+        kwargs: dict[str, Any] = {"timeout": timeout}
+        if provider.type == "ollama":
+            kwargs["api_key"] = "ollama"
+            kwargs["base_url"] = provider.base_url or "http://localhost:11434/v1"
+        else:
+            kwargs["api_key"] = provider.api_key
+            if provider.base_url:
+                kwargs["base_url"] = provider.base_url
+
+        client = openai.OpenAI(**kwargs)
+        stream = client.chat.completions.create(
+            model=provider.model,
+            max_tokens=max_tokens,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            stream=True,
+        )
+        for event in stream:
+            try:
+                delta = event.choices[0].delta.content
+            except (AttributeError, IndexError):
+                delta = None
+            if delta:
+                yield delta
+
+    def _stream_anthropic(self, provider: "ModelProvider", system: str, user: str,
+                           max_tokens: int, timeout: float):
+        try:
+            import anthropic
+        except ImportError:
+            log.warning("anthropic package not installed, cannot stream from %s", provider.name)
+            return
+
+        client = anthropic.Anthropic(api_key=provider.api_key, timeout=timeout)
+        with client.messages.stream(
+            model=provider.model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        ) as stream:
+            for text in stream.text_stream:
+                if text:
+                    yield text
 
     def _call_anthropic(self, provider: ModelProvider, system: str, user: str,
                         max_tokens: int, json_mode: bool,

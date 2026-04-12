@@ -18,7 +18,7 @@ from mindos.store import Memory, MemoryStore, Triple
 
 _LOCALE_HINTS: dict[str, str] = {
     "zh": "\n\nIMPORTANT: All output (facts, summaries, triples) MUST be in Chinese (中文).",
-    "en": "",  # English is the default prompt language
+    "en": "\n\nIMPORTANT: All output (facts, summaries, triples) MUST be in English.",
     "ja": "\n\nIMPORTANT: All output (facts, summaries, triples) MUST be in Japanese (日本語).",
     "ko": "\n\nIMPORTANT: All output (facts, summaries, triples) MUST be in Korean (한국어).",
 }

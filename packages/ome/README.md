@@ -220,11 +220,27 @@ async def proactive():
     return [{"name": e.event_name, "message": e.message} for e in events]
 ```
 
+## Enterprise: PostgreSQL Multi-Tenant (v0.7.1+)
+
+For production deployments, inject a PostgreSQL store:
+
+```python
+# Default: SQLite (local, zero config)
+ome = Ome.create(path="~/.ome", name="Alice")
+
+# Enterprise: PostgreSQL + RLS (via ome-server)
+ome = Ome.create(path="~/.ome", name="Alice", store=pg_memory_store)
+ome = Ome.load("~/.ome", store=pg_memory_store)
+```
+
+The `ome-server` package provides `PgMemoryStore` with Row-Level Security for zero-trust tenant isolation. See `ome-server/db/` for the full enterprise stack.
+
 ## Privacy
 
-- All data lives locally in `~/.ome/` (SQLite via Mindos)
+- All data lives locally in `~/.ome/` (SQLite via Mindos) by default
 - No cloud, no accounts, no telemetry
 - `ome forget "pattern"` permanently erases data
+- Enterprise PG mode: your own database, RLS isolation per tenant
 
 ## Part of Omnity
 

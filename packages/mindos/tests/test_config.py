@@ -260,6 +260,73 @@ class TestConfigLoad:
             assert "custom" in names
 
 
+class TestStreamLLM:
+    """ModelRouter.stream_llm — TRUE token-by-token streaming added in v0.8."""
+
+    def test_stream_no_providers_yields_nothing(self):
+        cfg = MindosConfig.from_dict({
+            "models": [{"name": "x", "type": "openai_compatible", "model": "x",
+                        "priority": 1, "for": ["chat"],
+                        "api_key_env": "NONEXISTENT_KEY_XYZ"}],
+        })
+        router = ModelRouter(cfg)
+        with patch.object(ModelProvider, 'available',
+                          new_callable=lambda: property(lambda self: False)):
+            chunks = list(router.stream_llm(system="s", user="u", task="chat"))
+        assert chunks == []
+
+    def test_stream_provider_fallthrough(self):
+        cfg = MindosConfig.from_dict({
+            "models": [
+                {"name": "fail", "type": "openai_compatible", "model": "f",
+                 "priority": 1, "for": [], "api_key_env": ""},
+                {"name": "ok", "type": "openai_compatible", "model": "o",
+                 "priority": 2, "for": [], "api_key_env": ""},
+            ],
+        })
+        router = ModelRouter(cfg)
+        calls: list[str] = []
+
+        def stream_impl(provider, system, user, max_tokens, timeout):
+            calls.append(provider.name)
+            if provider.name == "fail":
+                raise ConnectionError("simulated")
+            yield "hel"
+            yield "lo"
+
+        router._stream_openai_compat = stream_impl
+        with patch.object(ModelProvider, 'available',
+                          new_callable=lambda: property(lambda self: True)):
+            chunks = list(router.stream_llm(system="s", user="u", task="chat"))
+        assert chunks == ["hel", "lo"]
+        assert calls == ["fail", "ok"]
+
+    def test_stream_commits_to_first_successful_provider(self):
+        """Once streaming starts, we do not switch providers mid-stream."""
+        cfg = MindosConfig.from_dict({
+            "models": [
+                {"name": "p1", "type": "openai_compatible", "model": "p1",
+                 "priority": 1, "for": [], "api_key_env": ""},
+                {"name": "p2", "type": "openai_compatible", "model": "p2",
+                 "priority": 2, "for": [], "api_key_env": ""},
+            ],
+        })
+        router = ModelRouter(cfg)
+        calls: list[str] = []
+
+        def stream_impl(provider, system, user, max_tokens, timeout):
+            calls.append(provider.name)
+            yield "first"
+            yield "only"
+
+        router._stream_openai_compat = stream_impl
+        with patch.object(ModelProvider, 'available',
+                          new_callable=lambda: property(lambda self: True)):
+            chunks = list(router.stream_llm(system="s", user="u", task="chat"))
+        assert chunks == ["first", "only"]
+        assert calls == ["p1"]  # did NOT try p2
+
+
 class TestWarningOncePerTask:
     """Issue #2: 'No available provider' warning should only fire once per task."""
 
