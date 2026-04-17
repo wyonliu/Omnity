@@ -79,6 +79,17 @@ CREATE TABLE IF NOT EXISTS soul_state (
     value TEXT
 );
 
+CREATE TABLE IF NOT EXISTS evo_log (
+    id          TEXT PRIMARY KEY,
+    event_type  TEXT NOT NULL,
+    layer       TEXT,
+    summary     TEXT,
+    details     TEXT,
+    created_at  REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_evo_type ON evo_log(event_type);
+CREATE INDEX IF NOT EXISTS idx_evo_created ON evo_log(created_at);
+
 CREATE INDEX IF NOT EXISTS idx_mem_type ON memories(type);
 CREATE INDEX IF NOT EXISTS idx_mem_source ON memories(source);
 CREATE INDEX IF NOT EXISTS idx_mem_created ON memories(created_at);
@@ -181,6 +192,18 @@ class MemoryStore:
         # Ensure soul_state table exists (for emotion persistence)
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS soul_state (key TEXT PRIMARY KEY, value TEXT)"
+        )
+        # Ensure evo_log table exists (added v0.7.2 — backfill for older DBs)
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS evo_log ("
+            "id TEXT PRIMARY KEY, event_type TEXT NOT NULL, layer TEXT, "
+            "summary TEXT, details TEXT, created_at REAL NOT NULL)"
+        )
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_evo_type ON evo_log(event_type)"
+        )
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_evo_created ON evo_log(created_at)"
         )
         # Sync journal
         self._conn.executescript(_SYNC_SCHEMA)
@@ -398,25 +421,56 @@ class MemoryStore:
         return self._row_to_memory(row)
 
     def search_text(self, query: str, limit: int = 20) -> list[Memory]:
-        """Full-text search via FTS5, with LIKE fallback."""
-        if self._fts_available and query.strip():
+        """Full-text search via FTS5, with LIKE fallback.
+
+        Query handling: if the query contains whitespace, each whitespace-separated
+        token is matched as an independent phrase with OR semantics (so
+        "龙湖千丁 CTO 职责" returns memories containing any of those tokens, not
+        only those containing the exact 5-character phrase). Single-token queries
+        use a straight phrase match.
+        """
+        import re as _re
+        q_raw = (query or "").strip()
+        if self._fts_available and q_raw:
             try:
-                # FTS5 match query — escape special chars
-                safe_q = query.replace('"', '""')
+                # Tokenize on whitespace; keep tokens with len >= 2 (FTS5 trigram
+                # tokenizer needs at least 2-char tokens to be useful for CJK)
+                tokens = [t for t in _re.split(r'\s+', q_raw) if len(t) >= 2]
+                if len(tokens) > 1:
+                    fts_query = " OR ".join(f'"{t.replace(chr(34), chr(34)*2)}"' for t in tokens)
+                else:
+                    safe_q = q_raw.replace('"', '""')
+                    fts_query = f'"{safe_q}"'
                 rows = self._conn.execute(
                     "SELECT m.* FROM memories m "
                     "JOIN memories_fts f ON m.rowid = f.rowid "
                     "WHERE memories_fts MATCH ? "
                     "ORDER BY rank LIMIT ?",
-                    (f'"{safe_q}"', limit),
+                    (fts_query, limit),
                 ).fetchall()
                 if rows:
                     return [self._row_to_memory(r) for r in rows]
             except Exception:
                 pass  # Fall through to LIKE
+        # LIKE fallback: also split, union results
+        if q_raw and ' ' in q_raw:
+            seen: dict[str, Any] = {}
+            for tok in q_raw.split():
+                if len(tok) < 2:
+                    continue
+                for r in self._conn.execute(
+                    "SELECT * FROM memories WHERE content LIKE ? "
+                    "ORDER BY accessed_at DESC LIMIT ?",
+                    (f"%{tok}%", limit),
+                ).fetchall():
+                    if r["id"] not in seen:
+                        seen[r["id"]] = r
+                if len(seen) >= limit:
+                    break
+            return [self._row_to_memory(r) for r in list(seen.values())[:limit]]
         rows = self._conn.execute(
             "SELECT * FROM memories WHERE content LIKE ? ORDER BY accessed_at DESC LIMIT ?",
-            (f"%{query}%", limit),
+            (f"%{q_raw}%", limit),
         ).fetchall()
         return [self._row_to_memory(r) for r in rows]
 
@@ -515,6 +569,78 @@ class MemoryStore:
             "SELECT * FROM personality_history ORDER BY created_at ASC"
         ).fetchall()
         return [dict(r) for r in rows]
+
+    # -- evo_log (progressive life history) -----------------------------------
+
+    def record_evo(self, event_type: str, summary: str = "",
+                   layer: str = "", details: Optional[dict] = None) -> str:
+        """Record a single evolution event. Returns the event id.
+
+        Event type should be one of ``reflect_cycle``, ``identity_change``,
+        ``contradiction``, ``insight``, ``constitution_violation``,
+        ``growth_gate``, ``maturity_change``, ``importance_triggered``,
+        ``skill_forged``, or a custom domain string.
+        """
+        eid = uuid.uuid4().hex[:12]
+        self._conn.execute(
+            "INSERT INTO evo_log (id, event_type, layer, summary, details, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (eid, event_type, layer, summary,
+             json.dumps(details or {}, ensure_ascii=False),
+             time.time()),
+        )
+        self._conn.commit()
+        return eid
+
+    def evo_timeline(self, limit: int = 100,
+                     event_types: Optional[list[str]] = None,
+                     since: Optional[float] = None) -> list[dict]:
+        """Read the evolution timeline (newest first)."""
+        sql = "SELECT * FROM evo_log"
+        params: list[Any] = []
+        clauses: list[str] = []
+        if event_types:
+            placeholders = ",".join("?" * len(event_types))
+            clauses.append(f"event_type IN ({placeholders})")
+            params.extend(event_types)
+        if since is not None:
+            clauses.append("created_at >= ?")
+            params.append(since)
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        rows = self._conn.execute(sql, params).fetchall()
+        out: list[dict] = []
+        for r in rows:
+            try:
+                details = json.loads(r["details"] or "{}")
+            except json.JSONDecodeError:
+                details = {}
+            out.append({
+                "id": r["id"], "event_type": r["event_type"],
+                "layer": r["layer"], "summary": r["summary"],
+                "details": details, "created_at": r["created_at"],
+            })
+        return out
+
+    def evo_stats(self) -> dict[str, Any]:
+        """Return counts per event_type + first/last timestamps."""
+        total = self._conn.execute("SELECT COUNT(*) FROM evo_log").fetchone()[0]
+        by_type: dict[str, int] = {}
+        for row in self._conn.execute(
+            "SELECT event_type, COUNT(*) AS c FROM evo_log GROUP BY event_type"
+        ).fetchall():
+            by_type[row["event_type"]] = row["c"]
+        bounds = self._conn.execute(
+            "SELECT MIN(created_at) AS first, MAX(created_at) AS last FROM evo_log"
+        ).fetchone()
+        return {
+            "total": total,
+            "by_type": by_type,
+            "first_at": bounds["first"] if bounds else None,
+            "last_at": bounds["last"] if bounds else None,
+        }
 
     # -- forget (hard delete) --------------------------------------------------
 

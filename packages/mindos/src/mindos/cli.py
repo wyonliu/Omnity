@@ -391,6 +391,117 @@ def cmd_serve(args: argparse.Namespace) -> None:
 # Main
 # ---------------------------------------------------------------------------
 
+def cmd_skills(args: argparse.Namespace) -> None:
+    m = _get_mindos(args.path)
+    forge = m.skills
+    action = args.action
+
+    if action == "list":
+        items = forge.list()
+        if not items:
+            print("(no skills installed — `mindos skills import <path>` to add one)")
+            return
+        print(f"Installed skills: {len(items)}")
+        for s in items:
+            print(f"  {s['id']:40s}  v{s['version']}  {s['name']}")
+            if s.get("description"):
+                print(f"    {s['description']}")
+        return
+
+    if action == "import":
+        if not args.target:
+            print("Error: `mindos skills import <path-or-zip>` requires a source")
+            sys.exit(2)
+        sid = forge.import_skill(args.target)
+        print(f"✔ Imported: {sid}")
+        return
+
+    if action == "export":
+        if not args.target:
+            print("Error: `mindos skills export <skill_id> --out <path>` requires skill_id")
+            sys.exit(2)
+        out = args.out or f"./{args.target}.zip"
+        path = forge.export_skill(args.target, out)
+        print(f"✔ Exported: {path}")
+        return
+
+    if action == "delete":
+        if not args.target:
+            print("Error: `mindos skills delete <skill_id>` requires skill_id")
+            sys.exit(2)
+        ok = forge.delete(args.target)
+        print("✔ Deleted" if ok else "(not found)")
+        return
+
+    if action == "match":
+        ctx = args.context or args.target
+        if not ctx:
+            print("Error: `mindos skills match <context>` requires a context string")
+            sys.exit(2)
+        hits = forge.match(ctx, top_k=5)
+        if not hits:
+            print("(no matching skills)")
+            return
+        for s in hits:
+            print(f"  {s.id:40s}  {s.name}")
+            if s.description:
+                print(f"    {s.description}")
+
+
+def cmd_evo(args: argparse.Namespace) -> None:
+    import time as _t
+    m = _get_mindos(args.path)
+    if getattr(args, "stats", False):
+        st = m.evo_stats()
+        print(f"total evolution events: {st['total']}")
+        if st.get("first_at"):
+            print(f"  first:  {_t.strftime('%Y-%m-%d %H:%M:%S', _t.localtime(st['first_at']))}")
+            print(f"  latest: {_t.strftime('%Y-%m-%d %H:%M:%S', _t.localtime(st['last_at']))}")
+        if st["by_type"]:
+            print("  by type:")
+            for k, v in sorted(st["by_type"].items(), key=lambda kv: -kv[1]):
+                print(f"    {k:28s} {v}")
+        return
+
+    types = [t.strip() for t in (args.type or "").split(",") if t.strip()] or None
+    rows = m.evo_timeline(limit=args.limit, event_types=types)
+    if not rows:
+        print("(no evolution events yet — commit / reflect / forge_skill to populate)")
+        return
+    for r in rows:
+        ts = _t.strftime("%Y-%m-%d %H:%M:%S", _t.localtime(r["created_at"]))
+        layer = f"[{r['layer']}]" if r["layer"] else ""
+        print(f"{ts}  {r['event_type']:22s} {layer} {r['summary']}")
+
+
+def cmd_dump(args: argparse.Namespace) -> None:
+    m = _get_mindos(args.path)
+    result = m.export_md(args.out_dir, max_memories=args.max_memories,
+                         min_confidence=args.min_confidence)
+    print(f"Exported to: {result['out_dir']}")
+    for f in result["files"]:
+        print(f"  {f}")
+    print(f"Memories: {result.get('memories', 0)}  "
+          f"Facts: {result.get('facts', 0)}  "
+          f"Triples: {result.get('triples', 0)}")
+    print("\nTip: `git init && git add . && git commit -m 'day 1 of my AI'`")
+
+
+def cmd_load(args: argparse.Namespace) -> None:
+    m = _get_mindos(args.path)
+    result = m.import_md(args.in_dir, merge_mode=args.merge_mode)
+    if result.get("identity_updated"):
+        print("✔ IDENTITY.md applied")
+    print(f"✔ Memories imported: {result.get('memories_imported', 0)}")
+    print(f"✔ Facts imported:    {result.get('facts_imported', 0)}")
+    print(f"✔ Triples imported:  {result.get('triples_imported', 0)}")
+    errs = result.get("errors", [])
+    if errs:
+        print("\nErrors:")
+        for e in errs:
+            print(f"  ! {e}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="mindos",
@@ -441,6 +552,53 @@ def main() -> None:
     p_mem.add_argument("--stats", action="store_true", help="Show memory statistics")
     p_mem.add_argument("--consolidate", action="store_true", help="Merge similar memories")
 
+    # dump (MemoryDoc export)
+    p_dump = sub.add_parser(
+        "dump",
+        help="Export soul to human-readable markdown (IDENTITY.md / MEMORY.md / ...)",
+        parents=[path_parent],
+    )
+    p_dump.add_argument("out_dir", nargs="?", default="./mindos-doc",
+                        help="Output directory (default: ./mindos-doc)")
+    p_dump.add_argument("--max-memories", type=int, default=500,
+                        help="Cap memories written to MEMORY.md/FACTS.md (default 500)")
+    p_dump.add_argument("--min-confidence", type=float, default=0.0,
+                        help="Drop memories below this confidence (default 0)")
+
+    # load (MemoryDoc import)
+    p_load = sub.add_parser(
+        "load",
+        help="Restore soul from a directory produced by `mindos dump`",
+        parents=[path_parent],
+    )
+    p_load.add_argument("in_dir", help="Directory containing IDENTITY.md / MEMORY.md / ...")
+    p_load.add_argument("--merge-mode", default="upsert",
+                        choices=["upsert", "append"],
+                        help="upsert: replace by ID (default). append: always new IDs.")
+
+    # skills — SkillForge management
+    p_skills = sub.add_parser(
+        "skills",
+        help="List / import / export / delete skills (agentskills.io compatible)",
+        parents=[path_parent],
+    )
+    p_skills.add_argument("action", nargs="?", default="list",
+                          choices=["list", "import", "export", "delete", "match"],
+                          help="Action (default: list)")
+    p_skills.add_argument("target", nargs="?", default="",
+                          help="skill_id (for export/delete/match) or source (for import)")
+    p_skills.add_argument("--out", default="", help="Output path (for export)")
+    p_skills.add_argument("--context", default="",
+                          help="Context string for `match` (alternative to positional)")
+
+    # evo — evolution timeline
+    p_evo = sub.add_parser("evo", help="Show evolution timeline / stats", parents=[path_parent])
+    p_evo.add_argument("--limit", type=int, default=30, help="Max rows (default: 30)")
+    p_evo.add_argument("--type", default="",
+                       help="Filter by comma-separated event_type(s)")
+    p_evo.add_argument("--stats", action="store_true",
+                       help="Show aggregate counts instead of a timeline")
+
     # quickstart
     sub.add_parser("quickstart", help="Interactive guided setup (start here!)", parents=[path_parent])
 
@@ -471,6 +629,8 @@ def main() -> None:
         "init": cmd_init, "quickstart": cmd_quickstart, "status": cmd_status,
         "recall": cmd_recall, "commit": cmd_commit, "forget": cmd_forget,
         "memories": cmd_memories, "sync": cmd_sync, "serve": cmd_serve,
+        "dump": cmd_dump, "load": cmd_load, "skills": cmd_skills,
+        "evo": cmd_evo,
     }
     cmds[args.command](args)
 

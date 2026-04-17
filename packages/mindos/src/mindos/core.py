@@ -82,6 +82,10 @@ class Mindos:
         self._scheduler = None  # Lazy init
         self._setup_writeback()
 
+        # EvoLog — bind late so any new event subscribers (layers / ome) are live.
+        from mindos.evolog import EvoLogger
+        self.evolog = EvoLogger(self)
+
     @classmethod
     def load(cls, path: str | Path = "~/.mindos",
              store: Optional["MemoryStore"] = None) -> "Mindos":
@@ -333,6 +337,56 @@ class Mindos:
             ]
 
         return ome
+
+    # -- SkillForge (auto-distilled reusable skills) --------------------------
+
+    @property
+    def skills(self) -> Any:
+        """Lazy-instantiated :class:`~mindos.skillforge.SkillForge`."""
+        if getattr(self, "_skills", None) is None:
+            from mindos.skillforge import SkillForge
+            self._skills = SkillForge(self)
+        return self._skills
+
+    def forge_skill(self, trace: dict[str, Any]) -> Optional[str]:
+        """Distill a task trace into a SKILL.md. Returns skill_id or None."""
+        return self.skills.forge(trace)
+
+    # -- EvoLog (progressive life history) ------------------------------------
+
+    def evo_timeline(self, limit: int = 100,
+                     event_types: Optional[list[str]] = None,
+                     since: Optional[float] = None) -> list[dict[str, Any]]:
+        """Return the evolution timeline (newest first)."""
+        return self.evolog.timeline(limit=limit, event_types=event_types,
+                                    since=since)
+
+    def evo_stats(self) -> dict[str, Any]:
+        """Counts per evolution event type + first/last timestamps."""
+        return self.evolog.stats()
+
+    def record_evo(self, event_type: str, summary: str = "",
+                   layer: str = "", details: Optional[dict] = None) -> str:
+        """Manually record an evolution event. Returns the new event id."""
+        return self.evolog.record(event_type=event_type, summary=summary,
+                                  layer=layer, details=details)
+
+    # -- MemoryDoc (human-readable export/import) -----------------------------
+
+    def export_md(self, out_dir: str | Path, max_memories: int = 500,
+                  min_confidence: float = 0.0) -> dict[str, Any]:
+        """Dump the five-layer brain to IDENTITY.md / MEMORY.md / FACTS.md /
+        SOUL.md / KG.json. Commit the folder to git to version-control your AI.
+        """
+        from mindos.memorydoc import export_md as _export_md
+        return _export_md(self, out_dir, max_memories=max_memories,
+                          min_confidence=min_confidence)
+
+    def import_md(self, in_dir: str | Path,
+                  merge_mode: str = "upsert") -> dict[str, Any]:
+        """Restore a Mindos from a directory produced by :meth:`export_md`."""
+        from mindos.memorydoc import import_md as _import_md
+        return _import_md(self, in_dir, merge_mode=merge_mode)
 
     # -- identity management ---------------------------------------------------
 

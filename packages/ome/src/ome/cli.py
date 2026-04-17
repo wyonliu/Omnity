@@ -463,6 +463,91 @@ def cmd_export(args):
             print(text)
 
 
+def cmd_migrate(args):
+    """Import history from another AI persona store into this Ome."""
+    from ome.migrate import migrate, SUPPORTED
+    ome = _get_ome(args.path)
+    if args.source not in SUPPORTED:
+        print(f"  Unknown source {args.source!r}. Supported: {', '.join(SUPPORTED)}")
+        return
+    try:
+        report = migrate(ome, args.source, args.file,
+                         dry_run=args.dry_run,
+                         batch_size=args.batch_size,
+                         max_records=args.max_records)
+    except FileNotFoundError as e:
+        print(f"  {e}")
+        return
+
+    tag = "(dry-run)" if args.dry_run else ""
+    print(f"\n  Migration from {report.source} {tag}")
+    print(f"  {'─' * 40}")
+    print(f"    conversations : {report.conversations}")
+    print(f"    total records : {report.total_records}")
+    print(f"    committed     : {report.committed}")
+    print(f"    skipped       : {report.skipped}")
+    if report.errors:
+        print(f"    errors        : {len(report.errors)}")
+        for err in report.errors[:5]:
+            print(f"      ! {err}")
+    print()
+
+
+def cmd_gateway(args):
+    """Run an OmeGate adapter or manage user bindings."""
+    from ome.gateway import BindingRegistry, GatewayRunner, TelegramAdapter
+
+    registry = BindingRegistry(args.registry)
+
+    if args.gw_action == "bindings":
+        rows = registry.list()
+        if not rows:
+            print("  No bindings yet.")
+            return
+        print(f"\n  OmeGate bindings ({len(rows)})")
+        print(f"  {'─' * 40}")
+        for plat, uid, path in rows:
+            print(f"    {plat:10s} {uid:20s} → {path}")
+        print()
+        return
+
+    if args.gw_action == "bind":
+        if not (args.platform and args.user_id):
+            print("  Usage: ome gateway bind --platform telegram --user-id 12345 --path ~/.ome")
+            return
+        registry.bind(args.platform, args.user_id, args.path)
+        print(f"  Bound {args.platform}:{args.user_id} → {args.path}")
+        return
+
+    if args.gw_action == "unbind":
+        if not (args.platform and args.user_id):
+            print("  Usage: ome gateway unbind --platform telegram --user-id 12345")
+            return
+        ok = registry.unbind(args.platform, args.user_id)
+        print("  Unbound." if ok else "  Not bound.")
+        return
+
+    if args.gw_action == "telegram":
+        token = args.token or os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        if not token:
+            print("  Telegram token required (--token or TELEGRAM_BOT_TOKEN env var).")
+            return
+        runner = GatewayRunner(registry=registry,
+                               default_ome_path=args.path,
+                               allow_auto_bind=args.auto_bind)
+        tg = TelegramAdapter(token=token, poll_timeout=args.poll_timeout)
+        runner.attach(tg)
+        print(f"  Telegram gateway started (auto_bind={args.auto_bind}). Ctrl-C to stop.")
+        try:
+            runner.run(tg)
+        except KeyboardInterrupt:
+            runner.stop_all()
+            print("\n  Stopped.")
+        return
+
+    print("  Usage: ome gateway {telegram|bind|unbind|bindings}")
+
+
 def cmd_serve(args):
     """Start Ome as MCP server (for Claude/Cursor) or HTTP server."""
     path = Path(args.path).expanduser()
@@ -563,6 +648,40 @@ def main():
     p_export.add_argument("-o", "--output", help="Output file path")
     _add_path(p_export)
 
+    # migrate
+    p_migrate = sub.add_parser("migrate",
+                               help="Import history from ChatGPT / Claude / Hermes / JSONL")
+    p_migrate.add_argument("--from", dest="source", required=True,
+                           help="Source: chatgpt | claude | hermes | jsonl | mindos | chat")
+    p_migrate.add_argument("file", help="Path to the export file or directory")
+    p_migrate.add_argument("--dry-run", action="store_true",
+                           help="Parse only; do not commit")
+    p_migrate.add_argument("--batch-size", type=int, default=25)
+    p_migrate.add_argument("--max-records", type=int, default=0,
+                           help="Stop after this many records (0 = unlimited)")
+    _add_path(p_migrate)
+
+    # gateway
+    p_gw = sub.add_parser("gateway",
+                          help="OmeGate: multi-platform bridges (Telegram, …)")
+    p_gw.add_argument("gw_action",
+                      choices=["telegram", "bind", "unbind", "bindings"],
+                      help="What to do")
+    p_gw.add_argument("--token", default="",
+                      help="Telegram bot token (or TELEGRAM_BOT_TOKEN env var)")
+    p_gw.add_argument("--registry",
+                      default="~/.ome/gateway/bindings.json",
+                      help="Path to the bindings file")
+    p_gw.add_argument("--platform", default="",
+                      help="Platform for bind/unbind (e.g. telegram)")
+    p_gw.add_argument("--user-id", dest="user_id", default="",
+                      help="Platform user_id for bind/unbind")
+    p_gw.add_argument("--auto-bind", action="store_true",
+                      help="Auto-bind unseen users to the default Ome")
+    p_gw.add_argument("--poll-timeout", type=int, default=25,
+                      help="Telegram long-poll timeout seconds")
+    _add_path(p_gw)
+
     # serve
     p_serve = sub.add_parser("serve", help="Start MCP/HTTP server")
     p_serve.add_argument("--mcp", action="store_true",
@@ -587,6 +706,8 @@ def main():
         "skill": cmd_skill,
         "identity": cmd_identity,
         "export": cmd_export,
+        "migrate": cmd_migrate,
+        "gateway": cmd_gateway,
         "serve": cmd_serve,
     }
 

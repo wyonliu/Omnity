@@ -73,32 +73,57 @@ class Hippocampus:
                query_vec: Any = None, mem_type: Optional[str] = None) -> list[Memory]:
         """Retrieve memories ranked by relevance.
 
-        1. Vector search (if embedding available) — gets cosine similarity scores
-        2. Keyword fallback (phrase, then first token, then recent)
-        3. Re-rank by composite relevance_score (semantic + recency + importance + frequency)
+        Hybrid retrieval:
+        1. Vector search (if embedding available) — cosine similarity scores
+        2. Text search (FTS5 OR-over-tokens) — keyword hits merged in
+        3. For keyword-only hits, synthesize a semantic_score from token-overlap
+           so they compete fairly with vector hits
+        4. Re-rank by composite relevance_score (semantic + recency + importance + frequency)
         """
-        scored: dict[str, float] = {}  # memory_id -> vector cosine score
-        results: list[Memory] = []
+        import re as _re
+        scored: dict[str, float] = {}  # memory_id -> semantic score proxy [0, 1]
+        candidates: dict[str, Memory] = {}
+        q_raw = (query or "").strip()
 
+        # 1. Vector search
         if query_vec is not None:
-            pairs = self.store.search_vector(query_vec, top_k=top_k * 2, return_scores=True)
-            if pairs:
-                results = [mem for mem, _ in pairs]
-                scored = {mem.id: score for mem, score in pairs}
+            pairs = self.store.search_vector(query_vec, top_k=top_k * 3, return_scores=True)
+            for mem, score in pairs:
+                candidates[mem.id] = mem
+                scored[mem.id] = max(scored.get(mem.id, 0.0), float(score))
 
-        if not results and query.strip():
-            q = query.strip()
-            results = self.store.search_text(q[:64], limit=top_k * 2)
-            if not results and " " in q:
-                for token in q.split()[:3]:
-                    results = self.store.search_text(token, limit=top_k)
-                    if results:
+        # 2. Text search (always run, not just as fallback)
+        if q_raw:
+            tokens = [t for t in _re.split(r'\s+', q_raw) if len(t) >= 2]
+            text_hits = self.store.search_text(q_raw[:128], limit=top_k * 3)
+            # If the multi-token OR query returned nothing, try single tokens
+            if not text_hits and len(tokens) > 1:
+                for tok in tokens[:3]:
+                    text_hits = self.store.search_text(tok, limit=top_k * 2)
+                    if text_hits:
                         break
+            for mem in text_hits:
+                if mem.id not in candidates:
+                    candidates[mem.id] = mem
+                # Synthesize a semantic-proxy score from token-overlap so
+                # keyword-only hits can compete with vector hits
+                content = mem.content or ""
+                if tokens:
+                    hit_count = sum(1 for t in tokens if t in content)
+                    overlap = hit_count / len(tokens)
+                else:
+                    overlap = 1.0 if q_raw and q_raw in content else 0.3
+                # Base 0.3 for a text hit, +0.5 scaled by overlap; cap at 0.9
+                text_proxy = min(0.3 + 0.5 * overlap, 0.9)
+                scored[mem.id] = max(scored.get(mem.id, 0.0), text_proxy)
 
+        results = list(candidates.values())
+
+        # 3. Recent fallback if nothing matched
         if not results and self.store.count() > 0:
             results = self.store.list_recent(limit=top_k, mem_type=mem_type)
 
-        # Re-rank with composite scoring
+        # 4. Re-rank with composite scoring
         now = time.time()
         results.sort(
             key=lambda m: relevance_score(m, now, vector_score=scored.get(m.id, 0.0)),
