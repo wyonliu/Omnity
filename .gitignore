@@ -32,3 +32,9 @@ Omnity-千空进化-战略提案.md
 what-is-soap.md
 packages/mindos/dist/
 mem_log*.md
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
