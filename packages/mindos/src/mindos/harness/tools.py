@@ -88,8 +88,9 @@ class ToolRegistry:
     def load_from_skillforge(self, skillforge: Any) -> int:
         """Register every skill from a SkillForge (or compatible) as a tool.
 
-        SkillForge.list_skills() yields `Skill` objects with at minimum:
-            .id, .name, .description, .trigger_keywords, .steps
+        Handles both shapes the real SkillForge ships with:
+          - ``list()``        → ``list[dict]`` with keys ``id/name/description/…``
+          - ``list_skills()`` → ``list[Skill]`` objects with attrs (tests only)
         """
         lister = getattr(skillforge, "list_skills", None) or \
                  getattr(skillforge, "list", None)
@@ -98,11 +99,12 @@ class ToolRegistry:
             return 0
         count = 0
         for skill in lister() or []:
-            name = getattr(skill, "name", None) or getattr(skill, "id", None)
+            name = _skill_field(skill, "name") or _skill_field(skill, "id")
             if not name:
                 continue
-            desc = getattr(skill, "description", "") or _describe_skill(skill)
-            schema = getattr(skill, "input_schema", None) or {
+            sid = _skill_field(skill, "id") or name
+            desc = _skill_field(skill, "description") or _describe_skill(skill)
+            schema = _skill_field(skill, "input_schema") or {
                 "type": "object",
                 "properties": {
                     "input": {
@@ -116,8 +118,8 @@ class ToolRegistry:
                 name=name,
                 description=desc,
                 input_schema=schema,
-                handler=_skill_handler(skillforge, skill),
-                source=f"skill:{getattr(skill, 'id', name)}",
+                handler=_skill_handler(skillforge, sid, name),
+                source=f"skill:{sid}",
             )
             count += 1
         return count
@@ -172,9 +174,16 @@ def _safe_tool_name(name: str) -> str:
     return (cleaned or "tool")[:128]
 
 
+def _skill_field(skill: Any, key: str, default: Any = None) -> Any:
+    """Read a field off either a dict or an object uniformly."""
+    if isinstance(skill, dict):
+        return skill.get(key, default)
+    return getattr(skill, key, default)
+
+
 def _describe_skill(skill: Any) -> str:
-    kws = getattr(skill, "trigger_keywords", None) or []
-    steps = getattr(skill, "steps", None) or []
+    kws = _skill_field(skill, "trigger_keywords") or []
+    steps = _skill_field(skill, "steps") or []
     bits = []
     if kws:
         bits.append(f"Triggers: {', '.join(list(kws)[:6])}")
@@ -183,7 +192,7 @@ def _describe_skill(skill: Any) -> str:
     return " · ".join(bits) or "Forged skill."
 
 
-def _skill_handler(skillforge: Any, skill: Any) -> Callable[[dict], Any]:
+def _skill_handler(skillforge: Any, sid: str, sname: str) -> Callable[[dict], Any]:
     """Default handler: hand the skill + input back for the caller to execute.
 
     W1 only *advertises* skills — the actual run logic (running the steps,
@@ -191,9 +200,6 @@ def _skill_handler(skillforge: Any, skill: Any) -> Callable[[dict], Any]:
     itself. Here we just return a structured description so the model can
     see it took effect.
     """
-    sid = getattr(skill, "id", "")
-    sname = getattr(skill, "name", "")
-
     def _run(arguments: dict) -> dict:
         runner = getattr(skillforge, "run_skill", None)
         if callable(runner):

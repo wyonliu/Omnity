@@ -72,6 +72,54 @@ curl localhost:3456/api/recall  -d '{"query": "Rust"}'
 curl localhost:3456/api/status
 ```
 
+## Personal Harness Runtime (v0.9 · W1)
+
+*"Agent = Model + Harness."* Memory, skills, and identity become useful only when wired into a harness that talks to a real model, runs tools, and survives failures. `mindos.harness` is that wiring.
+
+```python
+from mindos.harness import HarnessEngine, ToolRegistry
+from mindos.harness.models.claude import ClaudeBackend  # or KimiBackend, StubBackend
+
+# 1. Snapshot a soul to disk (file-first context — Google Context Repos / Letta)
+m.export_md("./snapshot")   # writes IDENTITY.md + MEMORY.md + FACTS.md + SOUL.md
+
+# 2. Expose forged skills as tools the model can call
+reg = ToolRegistry()
+reg.load_from_skillforge(m.skills)
+
+# 3. Run one turn with an explicit 1h prompt-cache TTL
+engine = HarnessEngine(
+    context_source="./snapshot",
+    model=ClaudeBackend(model="claude-opus-4-6", cache_ttl="1h"),
+    tools=reg,
+    max_steps=20,
+)
+result = engine.run("帮我起草今天的 standup")
+print(result.response, result.tokens, result.context_files)
+```
+
+**What you get for free**
+
+- **File-first context** — the harness reads `IDENTITY.md → MEMORY.md → FACTS.md → Journal/` directly and applies a char budget with layered truncation (IDENTITY is non-negotiable).
+- **Explicit prompt-cache TTL** — Anthropic silently flipped the default from `1h` back to `5m` on 2026-03-06 (20-32% cost inflation for long-lived agents). `ClaudeBackend` defaults to `ttl="1h"` and attaches `cache_control` to both the system block and the last tool block. Every `CompletionResult` surfaces `cache_ttl_used` so you can audit it.
+- **Fail-soft tool dispatch** — tool errors become `tool_result` blocks the model can recover from, not exceptions that kill the turn.
+- **Pluggable backends** — `ClaudeBackend` (Messages API), `KimiBackend` (K2 Thinking, OpenAI-compat, up to 200-300 tool calls per turn), `StubBackend` (deterministic, offline, for tests).
+- **Cognition-safe by default** — single agent. Agent Teams are gated behind an explicit `agent_team=` flag (W4) so you don't accidentally ship the multi-agent failure mode Cognition documented in 2025-06.
+
+**CLI**
+
+```bash
+# Offline demo (no API key required)
+mindos harness run "你好" --backend stub --source ./snapshot
+
+# Production
+mindos harness run "draft the standup"           \
+  --backend claude --model claude-opus-4-6       \
+  --source ./snapshot --cache-ttl 1h --max-steps 20 --json
+```
+
+See `examples/harness_day2_demo.py` for a runnable end-to-end story (identity → export → forge skill → harness run → EvoLog breadcrumb), zero network required.
+
 ## API Overview
 
 | Class / Module | What it does |
