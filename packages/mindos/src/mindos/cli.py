@@ -474,6 +474,63 @@ def cmd_evo(args: argparse.Namespace) -> None:
         print(f"{ts}  {r['event_type']:22s} {layer} {r['summary']}")
 
 
+def cmd_harness(args: argparse.Namespace) -> None:
+    """Run one turn through the Personal Harness Runtime.
+
+    `mindos harness run "..."` — reads MemoryDoc markdown at --source, builds
+    a file-first context, and calls the chosen backend (claude / kimi / stub).
+    """
+    from mindos.harness import HarnessEngine, StubBackend, ToolRegistry
+    from mindos.harness.models.claude import ClaudeBackend
+    from mindos.harness.models.kimi import KimiBackend
+
+    source = Path(args.source).expanduser().resolve() if args.source \
+        else Path(args.path).expanduser().resolve() / "snapshot"
+    if not source.exists():
+        print(f"error: context source not found: {source}", file=sys.stderr)
+        print("hint: `mindos dump --out <dir>` first, or pass --source <dir>",
+              file=sys.stderr)
+        sys.exit(2)
+
+    if args.backend == "stub":
+        model = StubBackend()
+    elif args.backend == "claude":
+        model = ClaudeBackend(model=args.model or "claude-opus-4-6")
+    elif args.backend == "kimi":
+        model = KimiBackend(model=args.model or "kimi-k2-thinking")
+    else:
+        print(f"error: unknown backend: {args.backend}", file=sys.stderr)
+        sys.exit(2)
+
+    engine = HarnessEngine(
+        context_source=source,
+        model=model,
+        tools=ToolRegistry(),
+        max_steps=args.max_steps,
+        cache_ttl=args.cache_ttl or None,
+    )
+    message = args.message if args.message else sys.stdin.read().strip()
+    if not message:
+        print("error: nothing to send (pass a message or pipe to stdin)",
+              file=sys.stderr)
+        sys.exit(2)
+
+    result = engine.run(message)
+    if args.json:
+        import json as _json
+        print(_json.dumps(result.summary(), ensure_ascii=False, indent=2))
+    else:
+        print(result.response)
+        print(f"\n-- {result.model} | steps={result.steps} | "
+              f"cache_ttl={result.cache_ttl_used} | "
+              f"tokens: in={result.tokens.input} out={result.tokens.output} "
+              f"cache_r={result.tokens.cached_read} "
+              f"cache_w={result.tokens.cached_write} | "
+              f"ctx={len(result.context_files)} file(s)"
+              f"{' [TRUNCATED]' if result.truncated_context else ''} | "
+              f"stop={result.stop_reason}", file=sys.stderr)
+
+
 def cmd_dump(args: argparse.Namespace) -> None:
     m = _get_mindos(args.path)
     result = m.export_md(args.out_dir, max_memories=args.max_memories,
@@ -599,6 +656,32 @@ def main() -> None:
     p_evo.add_argument("--stats", action="store_true",
                        help="Show aggregate counts instead of a timeline")
 
+    # harness — Personal Harness Runtime (W1 skeleton)
+    p_harness = sub.add_parser(
+        "harness", help="Run the Personal Harness Runtime (one turn)",
+        parents=[path_parent],
+    )
+    p_harness.add_argument("action", choices=["run"],
+                           help="Sub-action (currently only: run)")
+    p_harness.add_argument("message", nargs="?", default="",
+                           help="Prompt to send (or pipe via stdin)")
+    p_harness.add_argument("--source", default="",
+                           help="MemoryDoc directory (default: <path>/snapshot)")
+    p_harness.add_argument("--backend", default="stub",
+                           choices=["stub", "claude", "kimi"],
+                           help="Model backend (default: stub — offline)")
+    p_harness.add_argument("--model", default="",
+                           help="Model id override")
+    p_harness.add_argument("--cache-ttl", default="",
+                           dest="cache_ttl", choices=["", "none", "5m", "1h"],
+                           help="Explicit prompt-cache TTL. "
+                                "Default 1h (beats 2026-03-06 regression)")
+    p_harness.add_argument("--max-steps", type=int, default=20,
+                           dest="max_steps",
+                           help="Cap on tool-loop iterations")
+    p_harness.add_argument("--json", action="store_true",
+                           help="Emit machine-readable summary on stdout")
+
     # quickstart
     sub.add_parser("quickstart", help="Interactive guided setup (start here!)", parents=[path_parent])
 
@@ -630,7 +713,7 @@ def main() -> None:
         "recall": cmd_recall, "commit": cmd_commit, "forget": cmd_forget,
         "memories": cmd_memories, "sync": cmd_sync, "serve": cmd_serve,
         "dump": cmd_dump, "load": cmd_load, "skills": cmd_skills,
-        "evo": cmd_evo,
+        "evo": cmd_evo, "harness": cmd_harness,
     }
     cmds[args.command](args)
 
