@@ -120,6 +120,118 @@ mindos harness run "draft the standup"           \
 
 See `examples/harness_day2_demo.py` for a runnable end-to-end story (identity → export → forge skill → harness run → EvoLog breadcrumb), zero network required.
 
+### W2 — Skills Registry + `skills.sh` packages
+
+Built-in tools (`recall`, `commit`, `read_file`, `write_file`) land in the
+registry in one call. File IO is jailed to an explicit sandbox root; no path
+can escape via `..`.
+
+```python
+from mindos.harness import register_builtins, load_skill_dir, shipped_skills_dir
+
+register_builtins(reg, mindos=m, sandbox_root="./workspace")
+load_skill_dir(reg, shipped_skills_dir())  # advertises tdd-ship, personal-cache-audit
+```
+
+Skill packages follow the `agentskills.io` / Vercel `skills.sh` convention: a
+directory (or `.zip`) containing `SKILL.md` with frontmatter (name, description,
+version, tools). Loads are advertisement-only by default — the runtime handler
+is opt-in via `handler=`.
+
+### W3 — MCP Apps (SEP-1865) upgrade
+
+`mindos.harness.mcp_apps` implements the 2026-03-15 spec:
+
+- `initialize_response(...)` advertises `ui` / `elicitation` / `resource_templates`
+  plus a `legacy` fallback path for 2024-11-05 clients.
+- `UIComponent` yields `ui://{id}` resources, rejects both `html` + `iframe_url`,
+  and enforces HTTPS iframe URLs.
+- `elicitation_request` / `parse_elicitation_response` handle enum/required
+  validation in one round-trip.
+- `ResourceTemplate.expand(**params)` substitutes `{param}` tokens with URL
+  quoting and rejects missing or stray keys.
+
+Also in W3: `ContextLoader` (a `runtime_checkable` Protocol) lets PG+RLS
+backends plug straight into `ContextBuilder` without dumping markdown to disk.
+`_PathLoader` is the default filesystem implementation; soft-skips read errors
+so the turn survives transient IO.
+
+### W4 — Agent Teams (opt-in multi-agent)
+
+Single agent is still the default. Opt in with `agent_team=[...]`:
+
+```python
+result = HarnessEngine(
+    context_source=snap, model=ClaudeBackend(),
+    tools=reg,
+).run(
+    "ship the overnight sync PR",
+    agent_team=["code-reviewer", "release-notes-writer"],
+)
+for o in result.sub_agent_delegations:
+    print(o.name, o.text)
+```
+
+Dispatch is **sequential with shared context** (per Cognition 2025-06): the
+lead system prompt is stapled to each sub-agent, sub-agents have no tools, and
+any sub-agent exception is absorbed as an error on its `SubAgentOutput`
+without aborting the run. Results fold back into the lead's system prompt, not
+the user turn, so the model sees them as prior context rather than a fresh
+question.
+
+### W5 — Overnight Soul Sync
+
+```python
+from mindos.harness.overnight import OvernightSoulSync, OvernightConfig
+
+sync = OvernightSoulSync(m, config=OvernightConfig(
+    consolidate_threshold=0.92,
+    merge_facts_threshold=0.97,
+    compress_older_than_days=30,
+    archive_inactive_days=90,
+    enable_reflection=False,   # opt-in
+))
+report = sync.run()            # or run(dry_run=True) for a preview
+print(report.totals(), report.evo_log_id)
+```
+
+Orchestrates `consolidate → merge_facts → compress_episodes → archive_stale
+→ reflect` with per-step fail-soft timing, a single `overnight_sync` EvoLog
+row at the end, `only={...}` allow-list, and `on_event=` hooks for a
+start/finish breadcrumb. Stores that implement only a subset of the steps
+(e.g. PG+RLS mid-migration) soft-skip the missing methods instead of
+crashing.
+
+### W6 — OmeBench public benchmark driver
+
+```python
+from mindos.harness.omebench import OmeBench
+from mindos.harness.models.base import StubBackend
+
+bench = OmeBench(
+    corpus_path="packages/mindos/omebench/sample_corpus",
+    questions_path="packages/mindos/omebench/sample_questions.jsonl",
+    model=StubBackend(reply_fn=my_oracle),
+)
+report = bench.run()
+print(report.summary())
+```
+
+Or run from the shell:
+
+```bash
+python -m mindos.harness.omebench.cli \
+    --corpus    packages/mindos/omebench/sample_corpus \
+    --questions packages/mindos/omebench/sample_questions.jsonl \
+    --backend   stub --verbose
+```
+
+Scoring is rule-based by default (`expected_contains` / `expected_any` /
+`expected_regex` / `forbid_contains`) so public numbers are reproducible
+without an LLM-judge. The v0 public board uses an authored corpus (53
+interviews + a year of Journal + strategy notes) — until that lands every
+number in this tree is from sample fixtures only and is **not** citable.
+
 ## API Overview
 
 | Class / Module | What it does |

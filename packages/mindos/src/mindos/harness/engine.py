@@ -27,6 +27,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
+from mindos.harness.agent_team import (
+    TeamResult,
+    dispatch_team,
+    normalize_team,
+)
 from mindos.harness.context import AssembledContext, ContextBuilder
 from mindos.harness.models.base import (
     CompletionResult,
@@ -52,7 +57,8 @@ class HarnessResult:
     truncated_context: bool = False
     stop_reason: str = "end_turn"
 
-    # Reserved, disabled by default — Agent Team (W4)
+    # Agent Team delegations (W4). Populated only if `run(..., agent_team=...)`
+    # was set on this call; empty in single-agent mode (the default).
     sub_agent_delegations: list = field(default_factory=list)
 
     def summary(self) -> dict:
@@ -106,14 +112,25 @@ class HarnessEngine:
         agent_team: Any = None,
         extra_system: Optional[str] = None,
     ) -> HarnessResult:
-        if agent_team is not None:
-            raise NotImplementedError(
-                "agent_team= is gated until W4. Default single-agent only "
-                "(Cognition 2025-06 principle still applies to general tasks).",
-            )
-
         ctx = self.context_builder.build(user_message)
         system = _merge_system(ctx, extra_system)
+
+        # --- Opt-in Agent Team delegation (W4) -------------------------
+        # Runs BEFORE the lead's tool loop, one-shot, shared context. Every
+        # sub-agent sees the same system prompt the lead is about to use.
+        # Their outputs get folded into an "extra_system" block so the lead
+        # can reason over them as a single-agent normally would.
+        team_block: Optional[str] = None
+        team_result: Optional[TeamResult] = None
+        if agent_team:
+            roles = normalize_team(agent_team, default_model=self.model)
+            team_result = dispatch_team(
+                roles=roles,
+                lead_system=system,
+                lead_user_message=ctx.user_message,
+                default_model=self.model,
+            )
+            team_block = team_result.as_tool_result_block()
 
         messages: list[dict] = [{
             "role": "user",
@@ -125,6 +142,17 @@ class HarnessEngine:
             truncated_context=ctx.truncated,
             cache_ttl_used=self.cache_ttl or self.model.default_cache_ttl,
         )
+
+        if team_result is not None:
+            result.sub_agent_delegations = list(team_result.outputs)
+            # Fold the sub-agent report into the system prompt so the lead
+            # conditions on it. We deliberately don't inject as a user turn —
+            # Cognition's warning is about *shared* context, and the system
+            # block is the safest place for that.
+            system = f"{system}\n\n{team_block}".strip()
+            # Roll sub-agent token costs into the result totals.
+            for o in team_result.outputs:
+                result.tokens.add(o.tokens)
 
         tool_schema = self.tools.as_anthropic_schema() if len(self.tools) else None
 

@@ -22,8 +22,19 @@ Design rules (ratified 2026-04-19):
 from __future__ import annotations
 
 from mindos.harness.engine import HarnessEngine, HarnessResult
-from mindos.harness.context import ContextBuilder, AssembledContext
+from mindos.harness.context import AssembledContext, ContextBuilder, ContextLoader
 from mindos.harness.tools import ToolRegistry, ToolCall, ToolSpec
+from mindos.harness.builtins import register_builtins
+from mindos.harness.overnight import (
+    OvernightConfig,
+    OvernightReport,
+    OvernightSoulSync,
+)
+from mindos.harness.skills_package import (
+    load_skill_package,
+    load_skill_dir,
+    shipped_skills_dir,
+)
 from mindos.harness.models.base import (
     ModelBackend,
     CompletionResult,
@@ -36,9 +47,17 @@ __all__ = [
     "HarnessResult",
     "ContextBuilder",
     "AssembledContext",
+    "ContextLoader",
     "ToolRegistry",
     "ToolCall",
     "ToolSpec",
+    "register_builtins",
+    "OvernightSoulSync",
+    "OvernightConfig",
+    "OvernightReport",
+    "load_skill_package",
+    "load_skill_dir",
+    "shipped_skills_dir",
     "ModelBackend",
     "CompletionResult",
     "TokenStats",

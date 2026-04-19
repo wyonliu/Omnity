@@ -1,0 +1,5 @@
+{"id": "q1", "category": "single-hop", "question": "Who does Alice report to?", "expected_contains": ["Bob"], "forbid_contains": ["unknown", "don't know"], "notes": "Direct fact from facts/people.md"}
+{"id": "q2", "category": "temporal", "question": "On what date did Bob approve the v0.9 roadmap?", "expected_contains": ["2026-04-02"], "notes": "Exact date appears in both facts and Bob's interview"}
+{"id": "q3", "category": "multi-hop", "question": "What is Bob's backup plan if the harness project slips past Q2?", "expected_contains": ["skills.sh"], "expected_any": ["separate", "public library", "spin"], "notes": "Requires reading Bob's interview + the 2026-04-10 journal entry"}
+{"id": "q4", "category": "forbid", "question": "What is Alice's favourite tool?", "expected_contains": ["ripgrep"], "forbid_contains": ["emacs", "vim", "grep "], "notes": "Forbidden substrings cover common wrong answers"}
+{"id": "q5", "category": "single-hop", "question": "How many teams does Bob manage, and which ones?", "expected_any": ["three", "3"], "expected_contains": ["harness", "infra", "ingest"], "notes": "Counts + set of team names"}

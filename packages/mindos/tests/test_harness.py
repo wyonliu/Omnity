@@ -466,18 +466,19 @@ def test_engine_respects_max_steps():
     print("  PASSED")
 
 
-def test_engine_agent_team_gated():
+def test_engine_agent_team_bad_shape_rejected():
+    """agent_team was gated in W1, opened in W4 — bad shapes still rejected."""
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         _fake_memorydoc(root)
-        eng = HarnessEngine(context_source=root, model=StubBackend())
+        eng = HarnessEngine(context_source=root, model=StubBackend(reply="ok"))
         try:
             eng.run("x", agent_team=object())
-        except NotImplementedError as e:
-            assert "W4" in str(e)
+        except ValueError as e:
+            assert "list" in str(e)
             print("  PASSED")
             return
-        raise AssertionError("expected NotImplementedError")
+        raise AssertionError("expected ValueError for non-list agent_team")
 
 
 def test_engine_extra_system_merges_into_prompt():
